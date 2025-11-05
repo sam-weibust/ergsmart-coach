@@ -1,1 +1,10 @@
 project_id = "lezqonvzqwpdpmyvpuvd"
+
+[functions.generate-workout]
+verify_jwt = true
+
+[functions.generate-strength]
+verify_jwt = true
+
+[functions.generate-meals]
+verify_jwt = true

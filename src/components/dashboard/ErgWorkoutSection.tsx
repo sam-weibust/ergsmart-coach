@@ -1,0 +1,182 @@
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Plus } from "lucide-react";
+
+interface ErgWorkoutSectionProps {
+  profile: any;
+  fullView?: boolean;
+}
+
+const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [workout, setWorkout] = useState({
+    workout_type: "steady_state",
+    distance: "",
+    duration: "",
+    avg_split: "",
+    avg_heart_rate: "",
+    calories: "",
+    notes: "",
+  });
+
+  const handleSave = async () => {
+    if (!profile) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("erg_workouts").insert({
+        user_id: profile.id,
+        workout_type: workout.workout_type,
+        distance: workout.distance ? parseInt(workout.distance) : null,
+        duration: workout.duration || null,
+        avg_split: workout.avg_split || null,
+        avg_heart_rate: workout.avg_heart_rate ? parseInt(workout.avg_heart_rate) : null,
+        calories: workout.calories ? parseInt(workout.calories) : null,
+        notes: workout.notes || null,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Workout logged!",
+        description: "Your erg workout has been saved.",
+      });
+
+      setWorkout({
+        workout_type: "steady_state",
+        distance: "",
+        duration: "",
+        avg_split: "",
+        avg_heart_rate: "",
+        calories: "",
+        notes: "",
+      });
+    } catch (error) {
+      console.error("Error saving workout:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save workout. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Plus className="h-5 w-5" />
+          Log Erg Workout
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="workout_type">Workout Type</Label>
+          <Select
+            value={workout.workout_type}
+            onValueChange={(value) => setWorkout({ ...workout, workout_type: value })}
+          >
+            <SelectTrigger id="workout_type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="steady_state">Steady State</SelectItem>
+              <SelectItem value="intervals">Intervals</SelectItem>
+              <SelectItem value="sprint">Sprint</SelectItem>
+              <SelectItem value="test">Test (2K/5K/6K)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="distance">Distance (m)</Label>
+            <Input
+              id="distance"
+              type="number"
+              placeholder="5000"
+              value={workout.distance}
+              onChange={(e) => setWorkout({ ...workout, distance: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="duration">Duration (MM:SS)</Label>
+            <Input
+              id="duration"
+              placeholder="20:00"
+              value={workout.duration}
+              onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="avg_split">Avg Split (/500m)</Label>
+            <Input
+              id="avg_split"
+              placeholder="2:00.0"
+              value={workout.avg_split}
+              onChange={(e) => setWorkout({ ...workout, avg_split: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="avg_heart_rate">Avg HR (bpm)</Label>
+            <Input
+              id="avg_heart_rate"
+              type="number"
+              placeholder="150"
+              value={workout.avg_heart_rate}
+              onChange={(e) => setWorkout({ ...workout, avg_heart_rate: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="calories">Calories</Label>
+            <Input
+              id="calories"
+              type="number"
+              placeholder="500"
+              value={workout.calories}
+              onChange={(e) => setWorkout({ ...workout, calories: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            placeholder="How did the workout feel?"
+            value={workout.notes}
+            onChange={(e) => setWorkout({ ...workout, notes: e.target.value })}
+            className="min-h-20"
+          />
+        </div>
+
+        <Button onClick={handleSave} disabled={loading} className="w-full">
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Log Workout"
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default ErgWorkoutSection;

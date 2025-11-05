@@ -14,6 +14,142 @@ export type Database = {
   }
   public: {
     Tables: {
+      erg_workouts: {
+        Row: {
+          avg_heart_rate: number | null
+          avg_split: unknown
+          calories: number | null
+          created_at: string | null
+          distance: number | null
+          duration: unknown
+          id: string
+          notes: string | null
+          user_id: string
+          workout_date: string
+          workout_type: string
+        }
+        Insert: {
+          avg_heart_rate?: number | null
+          avg_split?: unknown
+          calories?: number | null
+          created_at?: string | null
+          distance?: number | null
+          duration?: unknown
+          id?: string
+          notes?: string | null
+          user_id: string
+          workout_date?: string
+          workout_type: string
+        }
+        Update: {
+          avg_heart_rate?: number | null
+          avg_split?: unknown
+          calories?: number | null
+          created_at?: string | null
+          distance?: number | null
+          duration?: unknown
+          id?: string
+          notes?: string | null
+          user_id?: string
+          workout_date?: string
+          workout_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erg_workouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          created_at: string | null
+          friend_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          friend_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          friend_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_friend_id_fkey"
+            columns: ["friend_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_plans: {
+        Row: {
+          calories: number | null
+          carbs: number | null
+          created_at: string | null
+          description: string
+          fats: number | null
+          id: string
+          meal_date: string
+          meal_type: string
+          protein: number | null
+          user_id: string
+        }
+        Insert: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string | null
+          description: string
+          fats?: number | null
+          id?: string
+          meal_date?: string
+          meal_type: string
+          protein?: number | null
+          user_id: string
+        }
+        Update: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string | null
+          description?: string
+          fats?: number | null
+          id?: string
+          meal_date?: string
+          meal_type?: string
+          protein?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -50,6 +186,121 @@ export type Database = {
         }
         Relationships: []
       }
+      strength_workouts: {
+        Row: {
+          created_at: string | null
+          exercise: string
+          id: string
+          notes: string | null
+          reps: number
+          sets: number
+          user_id: string
+          weight: number
+          workout_date: string
+        }
+        Insert: {
+          created_at?: string | null
+          exercise: string
+          id?: string
+          notes?: string | null
+          reps: number
+          sets: number
+          user_id: string
+          weight: number
+          workout_date?: string
+        }
+        Update: {
+          created_at?: string | null
+          exercise?: string
+          id?: string
+          notes?: string | null
+          reps?: number
+          sets?: number
+          user_id?: string
+          weight?: number
+          workout_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strength_workouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_goals: {
+        Row: {
+          created_at: string | null
+          current_2k_time: unknown
+          current_5k_time: unknown
+          current_6k_time: unknown
+          goal_2k_time: unknown
+          goal_5k_time: unknown
+          goal_6k_time: unknown
+          id: string
+          notes: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          current_2k_time?: unknown
+          current_5k_time?: unknown
+          current_6k_time?: unknown
+          goal_2k_time?: unknown
+          goal_5k_time?: unknown
+          goal_6k_time?: unknown
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          current_2k_time?: unknown
+          current_5k_time?: unknown
+          current_6k_time?: unknown
+          goal_2k_time?: unknown
+          goal_5k_time?: unknown
+          goal_6k_time?: unknown
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_goals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       workout_plans: {
         Row: {
           created_at: string | null
@@ -77,15 +328,77 @@ export type Database = {
         }
         Relationships: []
       }
+      workout_shares: {
+        Row: {
+          created_at: string | null
+          erg_workout_id: string | null
+          id: string
+          shared_by: string
+          shared_with: string
+          strength_workout_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          erg_workout_id?: string | null
+          id?: string
+          shared_by: string
+          shared_with: string
+          strength_workout_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          erg_workout_id?: string | null
+          id?: string
+          shared_by?: string
+          shared_with?: string
+          strength_workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_shares_erg_workout_id_fkey"
+            columns: ["erg_workout_id"]
+            isOneToOne: false
+            referencedRelation: "erg_workouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_shares_shared_by_fkey"
+            columns: ["shared_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_shares_shared_with_fkey"
+            columns: ["shared_with"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_shares_strength_workout_id_fkey"
+            columns: ["strength_workout_id"]
+            isOneToOne: false
+            referencedRelation: "strength_workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "coach" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -212,6 +525,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "coach", "admin"],
+    },
   },
 } as const
