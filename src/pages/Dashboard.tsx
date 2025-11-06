@@ -3,13 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { LogOut, Target, Dumbbell, UtensilsCrossed, Users, History } from "lucide-react";
+import { LogOut, Target, Dumbbell, UtensilsCrossed, Users, History, Calendar } from "lucide-react";
 import GoalsSection from "@/components/dashboard/GoalsSection";
 import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
 import StrengthWorkoutSection from "@/components/dashboard/StrengthWorkoutSection";
 import MealPlanSection from "@/components/dashboard/MealPlanSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
 import HistorySection from "@/components/dashboard/HistorySection";
+import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ const Dashboard = () => {
 
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="today" className="space-y-8">
-          <TabsList className="grid grid-cols-4 lg:grid-cols-6 gap-2 bg-card/50 backdrop-blur-sm p-2">
+          <TabsList className="grid grid-cols-4 lg:grid-cols-7 gap-2 bg-card/50 backdrop-blur-sm p-2">
             <TabsTrigger value="today" className="flex items-center gap-2">
               <Target className="h-4 w-4" />
               <span className="hidden sm:inline">Today</span>
@@ -73,6 +74,10 @@ const Dashboard = () => {
             <TabsTrigger value="goals" className="flex items-center gap-2">
               <Target className="h-4 w-4" />
               <span className="hidden sm:inline">Goals</span>
+            </TabsTrigger>
+            <TabsTrigger value="plans" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Plans</span>
             </TabsTrigger>
             <TabsTrigger value="erg" className="flex items-center gap-2">
               <Dumbbell className="h-4 w-4" />
@@ -106,6 +111,10 @@ const Dashboard = () => {
 
           <TabsContent value="goals">
             <GoalsSection profile={profile} />
+          </TabsContent>
+
+          <TabsContent value="plans">
+            <WorkoutPlanSection />
           </TabsContent>
 
           <TabsContent value="erg">

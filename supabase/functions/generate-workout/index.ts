@@ -12,46 +12,56 @@ serve(async (req) => {
   }
 
   try {
-    const { experience, goals, lastWorkouts, weight, height } = await req.json();
+    const { weeks, weight, height, experience, goals } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const systemPrompt = `You are an expert rowing coach with decades of experience training athletes at all levels. 
-You specialize in creating personalized, science-based training plans that optimize performance while preventing injury.
-Your plans consider the athlete's experience level, goals, previous workouts, and physical characteristics.
+    const systemPrompt = `You are an expert rowing coach and strength & conditioning specialist. 
+You create periodized training programs that balance erg workouts and strength training.
+Generate a ${weeks}-week training plan with 7 days per week, where each day has exactly 1 erg workout and 1 strength workout.
 
-Generate a detailed rowing workout plan in JSON format with the following structure:
+Return in JSON format:
 {
-  "title": "Week Training Plan",
-  "description": "Brief overview of the plan",
-  "workouts": [
+  "plan": [
     {
-      "day": "Monday",
-      "type": "Endurance/Intervals/Strength",
-      "duration": "45-60 min",
-      "intensity": "Low/Medium/High",
-      "details": "Detailed workout description with stroke rate, split times, rest intervals",
-      "focus": "What this workout targets"
+      "week": 1,
+      "days": [
+        {
+          "day": 1,
+          "ergWorkout": {
+            "type": "Steady State/Intervals/Sprint/Recovery",
+            "duration": "30min",
+            "distance": 6000,
+            "targetSplit": "2:05/500m",
+            "notes": "Focus on technique"
+          },
+          "strengthWorkout": {
+            "exercise": "Deadlift",
+            "sets": 4,
+            "reps": 6,
+            "weight": "80kg",
+            "notes": "Focus on posterior chain"
+          }
+        }
+      ]
     }
-  ],
-  "tips": ["Training tip 1", "Training tip 2"],
-  "nutritionAdvice": "Brief nutrition guidance for this plan",
-  "recoveryNotes": "Recovery and injury prevention advice"
+  ]
 }`;
 
-    const userPrompt = `Create a personalized rowing training plan for:
-- Experience Level: ${experience}
-- Goals: ${goals}
-- Recent Workouts: ${lastWorkouts || "No recent workout data"}
+    const userPrompt = `Create a ${weeks}-week rowing training plan for:
 - Weight: ${weight}kg, Height: ${height}cm
+- Experience: ${experience}
+- Goals: ${goals}
 
-Focus on progressive overload, variety, and proper recovery. Include specific metrics like stroke rate, split times, and distance.`;
+Each week should have 7 days. Each day must include:
+1. One erg workout (vary between steady state, intervals, sprints, and recovery)
+2. One strength exercise (rotate through major movements: deadlift, squat, bench press, rows, overhead press, pull-ups, etc.)
 
-    console.log("Calling Lovable AI for workout generation...");
-    
+Ensure progressive overload and periodization. Include rest/recovery days with lighter workouts.`;
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -90,34 +100,10 @@ Focus on progressive overload, variety, and proper recovery. Include specific me
     }
 
     const data = await response.json();
-    const workoutPlan = JSON.parse(data.choices[0].message.content);
-    
-    console.log("Workout plan generated successfully");
-
-    // Save to database if user is authenticated
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey, {
-        global: { headers: { Authorization: authHeader } }
-      });
-
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        await supabase.from("workout_plans").insert({
-          user_id: user.id,
-          title: workoutPlan.title,
-          description: workoutPlan.description,
-          workout_data: workoutPlan
-        });
-        console.log("Workout plan saved to database");
-      }
-    }
+    const plan = JSON.parse(data.choices[0].message.content);
 
     return new Response(
-      JSON.stringify({ workoutPlan }),
+      JSON.stringify({ plan: plan.plan }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
