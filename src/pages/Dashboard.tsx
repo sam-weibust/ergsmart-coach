@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LogOut, Calendar, User } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
+import { ProfileSection } from "@/components/dashboard/ProfileSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -50,7 +52,26 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <WorkoutPlanSection />
+        <Tabs defaultValue="plans" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="plans" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Training Plans
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Profile
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="plans">
+            <WorkoutPlanSection />
+          </TabsContent>
+
+          <TabsContent value="profile">
+            <ProfileSection />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
