@@ -178,7 +178,7 @@ export const WorkoutPlanSection = () => {
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-4 max-h-[500px] overflow-y-auto">
-                      {(plan.workout_data as any[]).map((week: any) => (
+                      {Array.isArray(plan.workout_data) ? (plan.workout_data as any[]).map((week: any) => (
                         <div key={week.week} className="space-y-2">
                           <div className="flex items-center gap-2">
                             <h4 className="font-semibold">Week {week.week}</h4>
@@ -229,7 +229,9 @@ export const WorkoutPlanSection = () => {
                             ))}
                           </div>
                         </div>
-                      ))}
+                      )) : (
+                        <div className="text-muted-foreground">Invalid workout data format</div>
+                      )}
                       <Button
                         variant="destructive"
                         size="sm"
