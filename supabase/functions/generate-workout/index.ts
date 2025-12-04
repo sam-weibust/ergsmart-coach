@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,38 +11,46 @@ serve(async (req) => {
   }
 
   try {
-    const { weeks, weight, height, experience, goals } = await req.json();
+    const { months, weight, height, experience, goals } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const systemPrompt = `You are an expert rowing coach and strength & conditioning specialist. 
-You create periodized training programs that balance erg workouts and strength training.
-Generate a ${weeks}-week training plan with 7 days per week, where each day has exactly 1 erg workout and 1 strength workout.
+    const systemPrompt = `You are an expert rowing coach creating periodized training programs.
+Training zones for rowing:
+- UT2 (Utilization Training 2): Low intensity, long duration. Split: +20-25 seconds above race pace. Rate: 18-20 spm. Duration: 60-90 min.
+- UT1 (Utilization Training 1): Moderate intensity. Split: +15-18 seconds above race pace. Rate: 20-24 spm. Duration: 40-60 min.
+- TR (Transportable): Threshold work. Split: +8-12 seconds above race pace. Rate: 24-28 spm. Duration: 20-30 min.
+- AT (Anaerobic Threshold): High intensity intervals. Split: +3-6 seconds above race pace. Rate: 28-32 spm.
+
+Generate a ${months}-month training plan with weekly schedules. Each week has 6 training days and 1 rest day.
 
 Return in JSON format:
 {
   "plan": [
     {
       "week": 1,
+      "phase": "Base Building",
       "days": [
         {
           "day": 1,
           "ergWorkout": {
-            "type": "Steady State/Intervals/Sprint/Recovery",
-            "duration": "30min",
-            "distance": 6000,
-            "targetSplit": "2:05/500m",
+            "zone": "UT2",
+            "description": "Steady state endurance",
+            "duration": "60min",
+            "distance": 12000,
+            "targetSplit": "2:10/500m",
+            "rate": "18-20 spm",
             "notes": "Focus on technique"
           },
           "strengthWorkout": {
             "exercise": "Deadlift",
             "sets": 4,
             "reps": 6,
-            "weight": "80kg",
-            "notes": "Focus on posterior chain"
+            "weight": "moderate",
+            "notes": "Focus on form"
           }
         }
       ]
@@ -51,16 +58,21 @@ Return in JSON format:
   ]
 }`;
 
-    const userPrompt = `Create a ${weeks}-week rowing training plan for:
+    const userPrompt = `Create a ${months}-month rowing training plan for:
 - Weight: ${weight}kg, Height: ${height}cm
 - Experience: ${experience}
 - Goals: ${goals}
 
-Each week should have 7 days. Each day must include:
-1. One erg workout (vary between steady state, intervals, sprints, and recovery)
-2. One strength exercise (rotate through major movements: deadlift, squat, bench press, rows, overhead press, pull-ups, etc.)
+Structure the plan in phases:
+- Months 1-2: Base Building (mostly UT2, some UT1)
+- Months 3-4: Aerobic Development (mix of UT1, UT2, some TR)
+- Months 5+: Race Preparation (more TR, AT work while maintaining base)
 
-Ensure progressive overload and periodization. Include rest/recovery days with lighter workouts.`;
+Each week should have 6 training days with:
+1. One erg workout using proper training zones (UT2, UT1, TR, AT) with specific splits, rates, distance OR time
+2. One strength exercise (rotate through: deadlift, squat, bench press, rows, pull-ups, leg press, etc.)
+
+Include progressive overload. Vary workout types throughout each week. Include recovery weeks every 3-4 weeks.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
