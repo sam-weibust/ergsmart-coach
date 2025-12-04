@@ -5,11 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
+const getZoneColor = (zone: string) => {
+  switch (zone?.toUpperCase()) {
+    case "UT2": return "bg-green-500/20 text-green-700 border-green-500/30";
+    case "UT1": return "bg-blue-500/20 text-blue-700 border-blue-500/30";
+    case "TR": return "bg-yellow-500/20 text-yellow-700 border-yellow-500/30";
+    case "AT": return "bg-red-500/20 text-red-700 border-red-500/30";
+    default: return "bg-muted text-muted-foreground";
+  }
+};
+
 export const WorkoutPlanSection = () => {
-  const [weeks, setWeeks] = useState<string>("4");
+  const [months, setMonths] = useState<string>("3");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -55,7 +66,7 @@ export const WorkoutPlanSection = () => {
 
       const { data, error } = await supabase.functions.invoke("generate-workout", {
         body: {
-          weeks: parseInt(weeks),
+          months: parseInt(months),
           weight: profile.weight,
           height: profile.height,
           experience: profile.experience_level || "intermediate",
@@ -64,6 +75,7 @@ export const WorkoutPlanSection = () => {
       });
 
       if (error) throw error;
+      if (data.error) throw new Error(data.error);
       return data;
     },
     onSuccess: async (data) => {
@@ -72,7 +84,7 @@ export const WorkoutPlanSection = () => {
 
       const { error } = await supabase.from("workout_plans").insert({
         user_id: user.id,
-        title: `${weeks}-Week Training Plan`,
+        title: `${months}-Month Training Plan`,
         description: `Generated plan for ${profile?.goals || "general fitness"}`,
         workout_data: data.plan,
       });
@@ -81,7 +93,7 @@ export const WorkoutPlanSection = () => {
 
       toast({
         title: "Workout Plan Generated",
-        description: `Your ${weeks}-week plan is ready!`,
+        description: `Your ${months}-month plan is ready!`,
       });
       queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
     },
@@ -113,20 +125,27 @@ export const WorkoutPlanSection = () => {
       <Card>
         <CardHeader>
           <CardTitle>Generate Training Plan</CardTitle>
-          <CardDescription>Create a periodized workout schedule</CardDescription>
+          <CardDescription>
+            Create a periodized rowing program with UT2, UT1, TR, and AT training zones
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline" className={getZoneColor("UT2")}>UT2: Base endurance</Badge>
+            <Badge variant="outline" className={getZoneColor("UT1")}>UT1: Aerobic development</Badge>
+            <Badge variant="outline" className={getZoneColor("TR")}>TR: Threshold</Badge>
+            <Badge variant="outline" className={getZoneColor("AT")}>AT: High intensity</Badge>
+          </div>
           <div className="flex gap-4">
-            <Select value={weeks} onValueChange={setWeeks}>
+            <Select value={months} onValueChange={setMonths}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="2">2 Weeks</SelectItem>
-                <SelectItem value="4">4 Weeks</SelectItem>
-                <SelectItem value="6">6 Weeks</SelectItem>
-                <SelectItem value="8">8 Weeks</SelectItem>
-                <SelectItem value="12">12 Weeks</SelectItem>
+                <SelectItem value="3">3 Months</SelectItem>
+                <SelectItem value="6">6 Months</SelectItem>
+                <SelectItem value="9">9 Months</SelectItem>
+                <SelectItem value="12">12 Months</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -158,23 +177,53 @@ export const WorkoutPlanSection = () => {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
                       {(plan.workout_data as any[]).map((week: any) => (
                         <div key={week.week} className="space-y-2">
-                          <h4 className="font-semibold">Week {week.week}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold">Week {week.week}</h4>
+                            {week.phase && (
+                              <Badge variant="outline" className="text-xs">
+                                {week.phase}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="grid gap-2">
-                            {week.days.map((day: any) => (
+                            {week.days?.map((day: any) => (
                               <div key={day.day} className="p-3 border rounded-lg space-y-2">
                                 <div className="font-medium">Day {day.day}</div>
-                                <div className="text-sm space-y-1">
-                                  <div>
-                                    <span className="font-medium">Erg:</span>{" "}
-                                    {day.ergWorkout.type} - {day.ergWorkout.duration} ({day.ergWorkout.distance}m @ {day.ergWorkout.targetSplit})
-                                  </div>
-                                  <div>
-                                    <span className="font-medium">Strength:</span>{" "}
-                                    {day.strengthWorkout.exercise} - {day.strengthWorkout.sets}x{day.strengthWorkout.reps} @ {day.strengthWorkout.weight}
-                                  </div>
+                                <div className="text-sm space-y-2">
+                                  {day.ergWorkout && (
+                                    <div className="flex flex-wrap items-start gap-2">
+                                      <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
+                                        {day.ergWorkout.zone}
+                                      </Badge>
+                                      <div className="flex-1">
+                                        <div className="font-medium">{day.ergWorkout.description}</div>
+                                        <div className="text-muted-foreground">
+                                          {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
+                                          {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
+                                          {day.ergWorkout.targetSplit && ` • ${day.ergWorkout.targetSplit}`}
+                                          {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
+                                        </div>
+                                        {day.ergWorkout.notes && (
+                                          <div className="text-xs text-muted-foreground italic">
+                                            {day.ergWorkout.notes}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {day.strengthWorkout && (
+                                    <div className="pl-2 border-l-2 border-muted">
+                                      <span className="font-medium">Strength:</span>{" "}
+                                      {day.strengthWorkout.exercise} - {day.strengthWorkout.sets}x{day.strengthWorkout.reps}
+                                      {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
+                                      {day.strengthWorkout.notes && (
+                                        <span className="text-muted-foreground"> ({day.strengthWorkout.notes})</span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             ))}
