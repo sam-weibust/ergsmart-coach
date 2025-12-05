@@ -18,61 +18,19 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const systemPrompt = `You are an expert rowing coach creating periodized training programs.
-Training zones for rowing:
-- UT2 (Utilization Training 2): Low intensity, long duration. Split: +20-25 seconds above race pace. Rate: 18-20 spm. Duration: 60-90 min.
-- UT1 (Utilization Training 1): Moderate intensity. Split: +15-18 seconds above race pace. Rate: 20-24 spm. Duration: 40-60 min.
-- TR (Transportable): Threshold work. Split: +8-12 seconds above race pace. Rate: 24-28 spm. Duration: 20-30 min.
-- AT (Anaerobic Threshold): High intensity intervals. Split: +3-6 seconds above race pace. Rate: 28-32 spm.
+    // Generate only 4 weeks at a time to avoid JSON truncation
+    const weeksToGenerate = Math.min(4, months * 4);
+    
+    const systemPrompt = `You are an expert rowing coach. Create a training plan in valid JSON only - no markdown, no extra text.
 
-Generate a ${months}-month training plan with weekly schedules. Each week has 6 training days and 1 rest day.
+Training zones: UT2 (easy, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity, 28-32spm).
 
-Return in JSON format:
-{
-  "plan": [
-    {
-      "week": 1,
-      "phase": "Base Building",
-      "days": [
-        {
-          "day": 1,
-          "ergWorkout": {
-            "zone": "UT2",
-            "description": "Steady state endurance",
-            "duration": "60min",
-            "distance": 12000,
-            "targetSplit": "2:10/500m",
-            "rate": "18-20 spm",
-            "notes": "Focus on technique"
-          },
-          "strengthWorkout": {
-            "exercise": "Deadlift",
-            "sets": 4,
-            "reps": 6,
-            "weight": "moderate",
-            "notes": "Focus on form"
-          }
-        }
-      ]
-    }
-  ]
-}`;
+Return ONLY this JSON structure (no markdown):
+{"plan":[{"week":1,"phase":"Base","days":[{"day":1,"ergWorkout":{"zone":"UT2","description":"Steady state","duration":"60min","targetSplit":"2:10","rate":"18-20","notes":"Easy pace"},"strengthWorkout":{"exercise":"Deadlift","sets":4,"reps":6,"weight":"moderate","notes":"Form focus"}}]}]}`;
 
-    const userPrompt = `Create a ${months}-month rowing training plan for:
-- Weight: ${weight}kg, Height: ${height}cm
-- Experience: ${experience}
-- Goals: ${goals}
+    const userPrompt = `Create ${weeksToGenerate} weeks of rowing training for someone ${weight}kg, ${height}cm, ${experience} level. Goal: ${goals}.
 
-Structure the plan in phases:
-- Months 1-2: Base Building (mostly UT2, some UT1)
-- Months 3-4: Aerobic Development (mix of UT1, UT2, some TR)
-- Months 5+: Race Preparation (more TR, AT work while maintaining base)
-
-Each week should have 6 training days with:
-1. One erg workout using proper training zones (UT2, UT1, TR, AT) with specific splits, rates, distance OR time
-2. One strength exercise (rotate through: deadlift, squat, bench press, rows, pull-ups, leg press, etc.)
-
-Include progressive overload. Vary workout types throughout each week. Include recovery weeks every 3-4 weeks.`;
+Generate exactly ${weeksToGenerate} weeks with 6 days each (day 7 is rest). Each day needs 1 erg workout and 1 strength exercise. Vary the zones and exercises. Return ONLY valid JSON.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
