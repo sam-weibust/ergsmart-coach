@@ -41,6 +41,23 @@ export const WorkoutPlanSection = () => {
     },
   });
 
+  const { data: userGoals } = useQuery({
+    queryKey: ["user-goals"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+  });
+
   const { data: plans } = useQuery({
     queryKey: ["workout-plans"],
     queryFn: async () => {
@@ -71,6 +88,7 @@ export const WorkoutPlanSection = () => {
           height: profile.height,
           experience: profile.experience_level || "intermediate",
           goals: profile.goals || "general fitness",
+          current2k: userGoals?.current_2k_time || null,
         },
       });
 
