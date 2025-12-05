@@ -112,7 +112,41 @@ Include progressive overload. Vary workout types throughout each week. Include r
     }
 
     const data = await response.json();
-    const plan = JSON.parse(data.choices[0].message.content);
+    const rawContent = data.choices[0].message.content;
+    
+    // Clean up the JSON response - sometimes the model adds extra text or formatting
+    let jsonContent = rawContent;
+    
+    // Remove markdown code blocks if present
+    if (jsonContent.includes("```json")) {
+      jsonContent = jsonContent.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+    } else if (jsonContent.includes("```")) {
+      jsonContent = jsonContent.replace(/```\s*/g, "");
+    }
+    
+    // Trim whitespace
+    jsonContent = jsonContent.trim();
+    
+    let plan;
+    try {
+      plan = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      console.error("Raw content (first 500 chars):", rawContent.substring(0, 500));
+      console.error("Cleaned content (first 500 chars):", jsonContent.substring(0, 500));
+      
+      // Try to extract JSON from the response
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          plan = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          throw new Error("Failed to parse AI response as JSON. Please try again.");
+        }
+      } else {
+        throw new Error("AI response did not contain valid JSON. Please try again.");
+      }
+    }
 
     return new Response(
       JSON.stringify({ plan: plan.plan }),
