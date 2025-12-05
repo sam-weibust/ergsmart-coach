@@ -18,7 +18,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const weeksToGenerate = Math.min(4, months * 4);
+    const weeksToGenerate = months * 4; // 4 weeks per month
     
     // Calculate training splits based on 2K time if provided
     let splitGuidance = "";

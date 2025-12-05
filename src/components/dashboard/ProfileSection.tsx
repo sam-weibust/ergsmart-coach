@@ -19,6 +19,7 @@ export const ProfileSection = () => {
   const [experience, setExperience] = useState("");
   const [goals, setGoals] = useState("");
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -44,6 +45,7 @@ export const ProfileSection = () => {
       setExperience(profile.experience_level || "");
       setGoals(profile.goals || "");
       setFullName(profile.full_name || "");
+      setUsername((profile as any).username || "");
     }
   }, [profile]);
 
@@ -61,8 +63,9 @@ export const ProfileSection = () => {
           experience_level: experience || null,
           goals: goals || null,
           full_name: fullName || null,
+          username: username || null,
           updated_at: new Date().toISOString(),
-        });
+        } as any);
 
       if (error) throw error;
     },
@@ -120,6 +123,17 @@ export const ProfileSection = () => {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Your name"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="unique_username"
+              />
+              <p className="text-xs text-muted-foreground">Friends can find you by this username</p>
             </div>
 
             <div className="space-y-2">
