@@ -12,7 +12,7 @@ interface FriendsSectionProps {
 
 const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const { toast } = useToast();
-  const [email, setEmail] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [friendships, setFriendships] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
 
@@ -46,19 +46,23 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   };
 
   const sendRequest = async () => {
-    if (!email || !profile) return;
+    if (!searchTerm || !profile) return;
 
     try {
-      const { data: friendProfile } = await supabase
+      // Search by email or username
+      const { data: friendProfiles } = await supabase
         .from("profiles")
-        .select("id")
-        .eq("email", email)
-        .single();
+        .select("id, email, username")
+        .or(`email.eq.${searchTerm},username.ilike.${searchTerm}`)
+        .neq("id", profile.id)
+        .limit(1);
+
+      const friendProfile = friendProfiles?.[0];
 
       if (!friendProfile) {
         toast({
           title: "User not found",
-          description: "No user found with that email.",
+          description: "No user found with that email or username.",
           variant: "destructive",
         });
         return;
@@ -77,7 +81,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         description: "Friend request has been sent.",
       });
 
-      setEmail("");
+      setSearchTerm("");
     } catch (error) {
       console.error("Error sending request:", error);
       toast({
@@ -133,13 +137,16 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="Enter email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter email or username"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && sendRequest()}
             />
             <Button onClick={sendRequest}>Send Request</Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Search by email address or username to add friends or coaches.
+          </p>
         </CardContent>
       </Card>
 
