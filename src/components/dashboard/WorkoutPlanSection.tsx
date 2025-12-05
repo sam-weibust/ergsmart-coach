@@ -34,7 +34,7 @@ export const WorkoutPlanSection = () => {
         .from("profiles")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return data;
@@ -120,6 +120,8 @@ export const WorkoutPlanSection = () => {
     },
   });
 
+  const isProfileComplete = profile?.weight && profile?.height;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -130,6 +132,11 @@ export const WorkoutPlanSection = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!isProfileComplete && (
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-700 dark:text-yellow-400">
+              Please complete your profile (weight and height) in the Profile tab before generating a plan.
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 text-xs">
             <Badge variant="outline" className={getZoneColor("UT2")}>UT2: Base endurance</Badge>
             <Badge variant="outline" className={getZoneColor("UT1")}>UT1: Aerobic development</Badge>
@@ -150,7 +157,7 @@ export const WorkoutPlanSection = () => {
             </Select>
             <Button
               onClick={() => generatePlan.mutate()}
-              disabled={generatePlan.isPending}
+              disabled={generatePlan.isPending || !isProfileComplete}
             >
               {generatePlan.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Generate Plan
