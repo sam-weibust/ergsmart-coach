@@ -20,9 +20,22 @@ serve(async (req) => {
 
     const weeksToGenerate = Math.min(4, months * 4);
     
-    const systemPrompt = `You are an expert rowing coach creating training plans. ALWAYS respond in English only. Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm). Format splits as "X:XX/500m" (e.g., "2:05/500m").`;
+    const systemPrompt = `You are an expert rowing coach. You MUST respond ONLY in English. Never use any other language.
 
-    const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan in English for someone weighing ${weight}kg, ${height}cm tall, with ${experience} experience level. Their goals: ${goals}. Each week should have 6 training days with 1 erg workout and 1 strength exercise per day. All text must be in English. Format target splits as time per 500m (e.g., "2:05/500m").`;
+Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).
+
+Split format: "2:05/500m" style.
+
+Strength exercises must be common English names like: Deadlift, Squat, Bench Press, Barbell Row, Pull-ups, Leg Press, Lunges, Romanian Deadlift, Overhead Press, Lat Pulldown.`;
+
+    const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan for:
+- Weight: ${weight}kg, Height: ${height}cm
+- Experience: ${experience}
+- Goals: ${goals}
+
+IMPORTANT: ALL text MUST be in English. Use English exercise names (Deadlift, Squat, Bench Press, etc). Use English descriptions. Format splits as "2:05/500m".
+
+Each week needs 6 training days, each with 1 erg workout and 1 strength exercise.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
