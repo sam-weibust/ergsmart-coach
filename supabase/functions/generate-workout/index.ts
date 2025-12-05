@@ -20,9 +20,9 @@ serve(async (req) => {
 
     const weeksToGenerate = Math.min(4, months * 4);
     
-    const systemPrompt = `You are an expert rowing coach creating training plans. Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).`;
+    const systemPrompt = `You are an expert rowing coach creating training plans. ALWAYS respond in English only. Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm). Format splits as "X:XX/500m" (e.g., "2:05/500m").`;
 
-    const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan for someone weighing ${weight}kg, ${height}cm tall, with ${experience} experience level. Their goals: ${goals}. Each week should have 6 training days with 1 erg workout and 1 strength exercise per day.`;
+    const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan in English for someone weighing ${weight}kg, ${height}cm tall, with ${experience} experience level. Their goals: ${goals}. Each week should have 6 training days with 1 erg workout and 1 strength exercise per day. All text must be in English. Format target splits as time per 500m (e.g., "2:05/500m").`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
