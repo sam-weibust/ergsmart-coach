@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { months, weight, height, experience, goals } = await req.json();
+    const { months, weight, height, experience, goals, current2k } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -20,9 +20,44 @@ serve(async (req) => {
 
     const weeksToGenerate = Math.min(4, months * 4);
     
+    // Calculate training splits based on 2K time if provided
+    let splitGuidance = "";
+    if (current2k) {
+      // Parse time format like "7:00" or "00:07:00" to seconds
+      const parts = current2k.toString().split(":").map(Number);
+      let totalSeconds = 0;
+      if (parts.length === 3) {
+        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else if (parts.length === 2) {
+        totalSeconds = parts[0] * 60 + parts[1];
+      }
+      
+      if (totalSeconds > 0) {
+        const pace500m = totalSeconds / 4; // 2K = 4 x 500m
+        const ut2Split = pace500m + 22; // +20-25 sec
+        const ut1Split = pace500m + 16; // +15-18 sec
+        const trSplit = pace500m + 10;  // +8-12 sec
+        const atSplit = pace500m + 4;   // +3-6 sec
+        
+        const formatSplit = (secs: number) => {
+          const mins = Math.floor(secs / 60);
+          const remainingSecs = Math.round(secs % 60);
+          return `${mins}:${remainingSecs.toString().padStart(2, "0")}/500m`;
+        };
+        
+        splitGuidance = `
+Based on current 2K time of ${current2k}, use these target splits:
+- UT2: ${formatSplit(ut2Split)}
+- UT1: ${formatSplit(ut1Split)}
+- TR: ${formatSplit(trSplit)}
+- AT: ${formatSplit(atSplit)}`;
+      }
+    }
+    
     const systemPrompt = `You are an expert rowing coach. You MUST respond ONLY in English. Never use any other language.
 
 Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).
+${splitGuidance}
 
 Split format: "2:05/500m" style.
 
@@ -32,8 +67,10 @@ Strength exercises must be common English names like: Deadlift, Squat, Bench Pre
 - Weight: ${weight}kg, Height: ${height}cm
 - Experience: ${experience}
 - Goals: ${goals}
+${current2k ? `- Current 2K time: ${current2k}` : ""}
 
 IMPORTANT: ALL text MUST be in English. Use English exercise names (Deadlift, Squat, Bench Press, etc). Use English descriptions. Format splits as "2:05/500m".
+${splitGuidance ? "Use the calculated target splits for each training zone." : ""}
 
 Each week needs 6 training days, each with 1 erg workout and 1 strength exercise.`;
 
