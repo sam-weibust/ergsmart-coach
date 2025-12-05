@@ -18,19 +18,11 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    // Generate only 4 weeks at a time to avoid JSON truncation
     const weeksToGenerate = Math.min(4, months * 4);
     
-    const systemPrompt = `You are an expert rowing coach. Create a training plan in valid JSON only - no markdown, no extra text.
+    const systemPrompt = `You are an expert rowing coach creating training plans. Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).`;
 
-Training zones: UT2 (easy, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity, 28-32spm).
-
-Return ONLY this JSON structure (no markdown):
-{"plan":[{"week":1,"phase":"Base","days":[{"day":1,"ergWorkout":{"zone":"UT2","description":"Steady state","duration":"60min","targetSplit":"2:10","rate":"18-20","notes":"Easy pace"},"strengthWorkout":{"exercise":"Deadlift","sets":4,"reps":6,"weight":"moderate","notes":"Form focus"}}]}]}`;
-
-    const userPrompt = `Create ${weeksToGenerate} weeks of rowing training for someone ${weight}kg, ${height}cm, ${experience} level. Goal: ${goals}.
-
-Generate exactly ${weeksToGenerate} weeks with 6 days each (day 7 is rest). Each day needs 1 erg workout and 1 strength exercise. Vary the zones and exercises. Return ONLY valid JSON.`;
+    const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan for someone weighing ${weight}kg, ${height}cm tall, with ${experience} experience level. Their goals: ${goals}. Each week should have 6 training days with 1 erg workout and 1 strength exercise per day.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -44,7 +36,64 @@ Generate exactly ${weeksToGenerate} weeks with 6 days each (day 7 is rest). Each
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        response_format: { type: "json_object" }
+        tools: [{
+          type: "function",
+          function: {
+            name: "create_training_plan",
+            description: "Create a structured rowing training plan",
+            parameters: {
+              type: "object",
+              properties: {
+                plan: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      week: { type: "number" },
+                      phase: { type: "string" },
+                      days: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            day: { type: "number" },
+                            ergWorkout: {
+                              type: "object",
+                              properties: {
+                                zone: { type: "string" },
+                                description: { type: "string" },
+                                duration: { type: "string" },
+                                targetSplit: { type: "string" },
+                                rate: { type: "string" },
+                                notes: { type: "string" }
+                              },
+                              required: ["zone", "description", "duration", "rate"]
+                            },
+                            strengthWorkout: {
+                              type: "object",
+                              properties: {
+                                exercise: { type: "string" },
+                                sets: { type: "number" },
+                                reps: { type: "number" },
+                                weight: { type: "string" },
+                                notes: { type: "string" }
+                              },
+                              required: ["exercise", "sets", "reps"]
+                            }
+                          },
+                          required: ["day", "ergWorkout", "strengthWorkout"]
+                        }
+                      }
+                    },
+                    required: ["week", "phase", "days"]
+                  }
+                }
+              },
+              required: ["plan"]
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "create_training_plan" } }
       }),
     });
 
@@ -70,44 +119,19 @@ Generate exactly ${weeksToGenerate} weeks with 6 days each (day 7 is rest). Each
     }
 
     const data = await response.json();
-    const rawContent = data.choices[0].message.content;
+    console.log("AI response structure:", JSON.stringify(data).substring(0, 500));
     
-    // Clean up the JSON response - sometimes the model adds extra text or formatting
-    let jsonContent = rawContent;
-    
-    // Remove markdown code blocks if present
-    if (jsonContent.includes("```json")) {
-      jsonContent = jsonContent.replace(/```json\s*/g, "").replace(/```\s*/g, "");
-    } else if (jsonContent.includes("```")) {
-      jsonContent = jsonContent.replace(/```\s*/g, "");
+    // Extract from tool call response
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) {
+      console.error("No tool call in response:", JSON.stringify(data));
+      throw new Error("AI did not return expected format. Please try again.");
     }
     
-    // Trim whitespace
-    jsonContent = jsonContent.trim();
+    const planData = JSON.parse(toolCall.function.arguments);
     
-    let plan;
-    try {
-      plan = JSON.parse(jsonContent);
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
-      console.error("Raw content (first 500 chars):", rawContent.substring(0, 500));
-      console.error("Cleaned content (first 500 chars):", jsonContent.substring(0, 500));
-      
-      // Try to extract JSON from the response
-      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          plan = JSON.parse(jsonMatch[0]);
-        } catch (e) {
-          throw new Error("Failed to parse AI response as JSON. Please try again.");
-        }
-      } else {
-        throw new Error("AI response did not contain valid JSON. Please try again.");
-      }
-    }
-
     return new Response(
-      JSON.stringify({ plan: plan.plan }),
+      JSON.stringify({ plan: planData.plan }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
