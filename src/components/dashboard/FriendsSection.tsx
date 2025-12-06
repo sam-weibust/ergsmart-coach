@@ -3,8 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Check, X, Users } from "lucide-react";
+import { UserPlus, Check, X, Users, Eye, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface FriendsSectionProps {
   profile: any;
@@ -26,7 +36,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
     const { data } = await supabase
       .from("friendships")
-      .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email)")
+      .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
       .eq("user_id", profile.id)
       .eq("status", "accepted");
 
@@ -45,11 +55,56 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     setRequests(data || []);
   };
 
+  // Fetch friend's workout plans (shared with you)
+  const { data: friendPlans } = useQuery({
+    queryKey: ["friend-plans", friendships],
+    queryFn: async () => {
+      if (!friendships.length) return {};
+      
+      const friendIds = friendships.map(f => f.friend.id);
+      
+      const { data } = await supabase
+        .from("workout_plans")
+        .select("*")
+        .in("user_id", friendIds);
+
+      // Group by user_id
+      const grouped: Record<string, any[]> = {};
+      data?.forEach(plan => {
+        if (!grouped[plan.user_id]) grouped[plan.user_id] = [];
+        grouped[plan.user_id].push(plan);
+      });
+      
+      return grouped;
+    },
+    enabled: friendships.length > 0,
+  });
+
+  // Fetch friend's goals for comparison
+  const { data: friendGoals } = useQuery({
+    queryKey: ["friend-goals", friendships],
+    queryFn: async () => {
+      if (!friendships.length) return {};
+      
+      const friendIds = friendships.map(f => f.friend.id);
+      
+      const { data } = await supabase
+        .from("user_goals")
+        .select("*")
+        .in("user_id", friendIds);
+
+      return data?.reduce((acc: any, goal: any) => {
+        acc[goal.user_id] = goal;
+        return acc;
+      }, {}) || {};
+    },
+    enabled: friendships.length > 0,
+  });
+
   const sendRequest = async () => {
     if (!searchTerm || !profile) return;
 
     try {
-      // Search by email or username
       const { data: friendProfiles } = await supabase
         .from("profiles")
         .select("id, email, username")
@@ -125,6 +180,12 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     }
   };
 
+  const formatTime = (interval: any) => {
+    if (!interval) return null;
+    if (typeof interval === "string") return interval;
+    return interval;
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -198,14 +259,101 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
               No friends or coaches yet. Add some above!
             </p>
           ) : (
-            <div className="space-y-2">
-              {friendships.map((friendship) => (
-                <div key={friendship.id} className="p-3 border rounded-lg">
-                  <p className="font-semibold">{friendship.friend.full_name || "User"}</p>
-                  <p className="text-sm text-muted-foreground">{friendship.friend.email}</p>
-                </div>
-              ))}
-            </div>
+            <Accordion type="single" collapsible>
+              {friendships.map((friendship) => {
+                const goals = friendGoals?.[friendship.friend.id];
+                const plans = friendPlans?.[friendship.friend.id] || [];
+                
+                return (
+                  <AccordionItem key={friendship.id} value={friendship.id}>
+                    <AccordionTrigger>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold">{friendship.friend.full_name || friendship.friend.username || "User"}</span>
+                        {goals?.current_2k_time && (
+                          <Badge variant="outline" className="text-xs flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            2K: {formatTime(goals.current_2k_time)}
+                          </Badge>
+                        )}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">{friendship.friend.email}</p>
+                      
+                      {/* Performance Comparison */}
+                      {goals && (
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            Times
+                          </h4>
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">2K:</span>{" "}
+                              {formatTime(goals.current_2k_time) || "Not set"}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">5K:</span>{" "}
+                              {formatTime(goals.current_5k_time) || "Not set"}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">6K:</span>{" "}
+                              {formatTime(goals.current_6k_time) || "Not set"}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Their Plans */}
+                      {plans.length > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <Eye className="h-4 w-4" />
+                            Their Plans
+                          </h4>
+                          <div className="space-y-2">
+                            {plans.map((plan: any) => (
+                              <Dialog key={plan.id}>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" className="w-full justify-between">
+                                    <span>{plan.title}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(plan.created_at).toLocaleDateString()}
+                                    </span>
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>{plan.title}</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4">
+                                    {Array.isArray(plan.workout_data) ? (plan.workout_data as any[]).slice(0, 4).map((week: any) => (
+                                      <div key={week.week} className="space-y-2">
+                                        <h4 className="font-semibold">Week {week.week} - {week.phase}</h4>
+                                        <div className="grid gap-2">
+                                          {week.days?.slice(0, 3).map((day: any) => (
+                                            <div key={day.day} className="p-2 border rounded text-sm">
+                                              <span className="font-medium">Day {day.day}:</span>{" "}
+                                              {day.ergWorkout?.zone} - {day.ergWorkout?.description}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )) : (
+                                      <p className="text-muted-foreground">No workout data</p>
+                                    )}
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           )}
         </CardContent>
       </Card>

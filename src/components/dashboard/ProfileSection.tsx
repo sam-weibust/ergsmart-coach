@@ -20,6 +20,7 @@ export const ProfileSection = () => {
   const [goals, setGoals] = useState("");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
+  const [userType, setUserType] = useState("rower");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -46,6 +47,7 @@ export const ProfileSection = () => {
       setGoals(profile.goals || "");
       setFullName(profile.full_name || "");
       setUsername((profile as any).username || "");
+      setUserType((profile as any).user_type || "rower");
     }
   }, [profile]);
 
@@ -64,6 +66,7 @@ export const ProfileSection = () => {
           goals: goals || null,
           full_name: fullName || null,
           username: username || null,
+          user_type: userType,
           updated_at: new Date().toISOString(),
         } as any);
 
@@ -115,6 +118,22 @@ export const ProfileSection = () => {
           className="space-y-4"
         >
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="userType">I am a...</Label>
+              <Select value={userType} onValueChange={setUserType}>
+                <SelectTrigger id="userType">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rower">Rower / Athlete</SelectItem>
+                  <SelectItem value="coach">Coach</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {userType === "coach" ? "Coaches can create teams and share plans" : "Rowers get personalized training plans"}
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
               <Input
