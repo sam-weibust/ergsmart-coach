@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Share2, Dumbbell, Utensils } from "lucide-react";
 
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
@@ -21,6 +22,7 @@ const getZoneColor = (zone: string) => {
 
 export const WorkoutPlanSection = () => {
   const [months, setMonths] = useState<string>("3");
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -67,11 +69,43 @@ export const WorkoutPlanSection = () => {
       const { data, error } = await supabase
         .from("workout_plans")
         .select("*")
-        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Get friends for sharing
+  const { data: friends } = useQuery({
+    queryKey: ["friends-for-sharing"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await supabase
+        .from("friendships")
+        .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email)")
+        .eq("user_id", user.id)
+        .eq("status", "accepted");
+
+      return data || [];
+    },
+  });
+
+  // Get teams for sharing (coaches only)
+  const { data: teams } = useQuery({
+    queryKey: ["teams-for-sharing"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("coach_id", user.id);
+
+      return data || [];
     },
   });
 
@@ -138,7 +172,31 @@ export const WorkoutPlanSection = () => {
     },
   });
 
+  const sharePlan = useMutation({
+    mutationFn: async ({ planId, userId, teamId }: { planId: string; userId?: string; teamId?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase.from("plan_shares").insert({
+        plan_id: planId,
+        shared_by: user.id,
+        shared_with_user: userId || null,
+        shared_with_team: teamId || null,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Plan shared!" });
+      setSelectedPlanId(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error sharing", description: error.message, variant: "destructive" });
+    },
+  });
+
   const isProfileComplete = profile?.weight && profile?.height;
+  const isCoach = (profile as any)?.user_type === "coach";
 
   return (
     <div className="space-y-6">
@@ -146,7 +204,7 @@ export const WorkoutPlanSection = () => {
         <CardHeader>
           <CardTitle>Generate Training Plan</CardTitle>
           <CardDescription>
-            Create a periodized rowing program with UT2, UT1, TR, and AT training zones
+            Create a periodized rowing program with progressive speed training, full strength workouts, and meal plans
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -202,7 +260,7 @@ export const WorkoutPlanSection = () => {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto">
                       {Array.isArray(plan.workout_data) ? (plan.workout_data as any[]).map((week: any) => (
                         <div key={week.week} className="space-y-2">
                           <div className="flex items-center gap-2">
@@ -213,43 +271,95 @@ export const WorkoutPlanSection = () => {
                               </Badge>
                             )}
                           </div>
-                          <div className="grid gap-2">
+                          <div className="grid gap-3">
                             {week.days?.map((day: any) => (
-                              <div key={day.day} className="p-3 border rounded-lg space-y-2">
-                                <div className="font-medium">Day {day.day}</div>
-                                <div className="text-sm space-y-2">
-                                  {day.ergWorkout && (
-                                    <div className="flex flex-wrap items-start gap-2">
-                                      <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
-                                        {day.ergWorkout.zone}
-                                      </Badge>
-                                      <div className="flex-1">
-                                        <div className="font-medium">{day.ergWorkout.description}</div>
-                                        <div className="text-muted-foreground">
-                                          {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
-                                          {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
-                                          {day.ergWorkout.targetSplit && ` • ${day.ergWorkout.targetSplit}`}
-                                          {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
-                                        </div>
-                                        {day.ergWorkout.notes && (
-                                          <div className="text-xs text-muted-foreground italic">
-                                            {day.ergWorkout.notes}
-                                          </div>
-                                        )}
+                              <div key={day.day} className="p-4 border rounded-lg space-y-3">
+                                <div className="font-medium text-lg">Day {day.day}</div>
+                                
+                                {/* Erg Workout */}
+                                {day.ergWorkout && (
+                                  <div className="flex flex-wrap items-start gap-2">
+                                    <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
+                                      {day.ergWorkout.zone}
+                                    </Badge>
+                                    <div className="flex-1">
+                                      <div className="font-medium">{day.ergWorkout.description}</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
+                                        {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
+                                        {day.ergWorkout.targetSplit && ` • Target: ${day.ergWorkout.targetSplit}`}
+                                        {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
                                       </div>
-                                    </div>
-                                  )}
-                                  {day.strengthWorkout && (
-                                    <div className="pl-2 border-l-2 border-muted">
-                                      <span className="font-medium">Strength:</span>{" "}
-                                      {day.strengthWorkout.exercise} - {day.strengthWorkout.sets}x{day.strengthWorkout.reps}
-                                      {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
-                                      {day.strengthWorkout.notes && (
-                                        <span className="text-muted-foreground"> ({day.strengthWorkout.notes})</span>
+                                      {day.ergWorkout.notes && (
+                                        <div className="text-xs text-muted-foreground italic mt-1">
+                                          {day.ergWorkout.notes}
+                                        </div>
                                       )}
                                     </div>
-                                  )}
-                                </div>
+                                  </div>
+                                )}
+                                
+                                {/* Full Strength Workout */}
+                                {day.strengthWorkout && (
+                                  <div className="border-l-2 border-primary/30 pl-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Dumbbell className="h-4 w-4 text-primary" />
+                                      <span className="font-medium">Strength: {day.strengthWorkout.focus || "Full Body"}</span>
+                                    </div>
+                                    {Array.isArray(day.strengthWorkout.exercises) ? (
+                                      <div className="grid gap-1 text-sm">
+                                        {day.strengthWorkout.exercises.map((ex: any, idx: number) => (
+                                          <div key={idx} className="flex justify-between">
+                                            <span>{ex.exercise}</span>
+                                            <span className="text-muted-foreground">
+                                              {ex.sets}x{ex.reps}
+                                              {ex.weight && ` @ ${ex.weight}`}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-sm">
+                                        {day.strengthWorkout.exercise} - {day.strengthWorkout.sets}x{day.strengthWorkout.reps}
+                                        {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Meal Plan */}
+                                {day.mealPlan && (
+                                  <div className="border-l-2 border-secondary/30 pl-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Utensils className="h-4 w-4 text-secondary" />
+                                      <span className="font-medium">Meal Plan</span>
+                                      {day.mealPlan.totalCalories && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {day.mealPlan.totalCalories} cal
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="grid gap-1 text-sm">
+                                      {day.mealPlan.breakfast && (
+                                        <div><span className="font-medium">Breakfast:</span> {day.mealPlan.breakfast}</div>
+                                      )}
+                                      {day.mealPlan.lunch && (
+                                        <div><span className="font-medium">Lunch:</span> {day.mealPlan.lunch}</div>
+                                      )}
+                                      {day.mealPlan.dinner && (
+                                        <div><span className="font-medium">Dinner:</span> {day.mealPlan.dinner}</div>
+                                      )}
+                                      {day.mealPlan.snacks && (
+                                        <div><span className="font-medium">Snacks:</span> {day.mealPlan.snacks}</div>
+                                      )}
+                                      {day.mealPlan.macros && (
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          Macros: {day.mealPlan.macros}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -257,13 +367,73 @@ export const WorkoutPlanSection = () => {
                       )) : (
                         <div className="text-muted-foreground">Invalid workout data format</div>
                       )}
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deletePlan.mutate(plan.id)}
-                      >
-                        Delete Plan
-                      </Button>
+                      
+                      <div className="flex gap-2 pt-4 border-t">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={() => setSelectedPlanId(plan.id)}>
+                              <Share2 className="h-4 w-4 mr-2" />
+                              Share Plan
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Share Training Plan</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              {friends && friends.length > 0 && (
+                                <div>
+                                  <h4 className="font-medium mb-2">Share with Friend</h4>
+                                  <div className="space-y-2">
+                                    {friends.map((f: any) => (
+                                      <Button
+                                        key={f.id}
+                                        variant="outline"
+                                        className="w-full justify-start"
+                                        onClick={() => sharePlan.mutate({ planId: plan.id, userId: f.friend.id })}
+                                      >
+                                        {f.friend.full_name || f.friend.email}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {isCoach && teams && teams.length > 0 && (
+                                <div>
+                                  <h4 className="font-medium mb-2">Share with Team</h4>
+                                  <div className="space-y-2">
+                                    {teams.map((team: any) => (
+                                      <Button
+                                        key={team.id}
+                                        variant="outline"
+                                        className="w-full justify-start"
+                                        onClick={() => sharePlan.mutate({ planId: plan.id, teamId: team.id })}
+                                      >
+                                        {team.name}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {(!friends?.length && !teams?.length) && (
+                                <p className="text-muted-foreground text-center py-4">
+                                  Add friends or create teams to share plans
+                                </p>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                        
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deletePlan.mutate(plan.id)}
+                        >
+                          Delete Plan
+                        </Button>
+                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

@@ -22,6 +22,7 @@ serve(async (req) => {
     
     // Calculate training splits based on 2K time if provided
     let splitGuidance = "";
+    let progressionGuidance = "";
     if (current2k) {
       // Parse time format like "7:00" or "00:07:00" to seconds
       const parts = current2k.toString().split(":").map(Number);
@@ -46,22 +47,36 @@ serve(async (req) => {
         };
         
         splitGuidance = `
-Based on current 2K time of ${current2k}, use these target splits:
+Based on current 2K time of ${current2k}, use these STARTING target splits (Week 1):
 - UT2: ${formatSplit(ut2Split)}
 - UT1: ${formatSplit(ut1Split)}
 - TR: ${formatSplit(trSplit)}
 - AT: ${formatSplit(atSplit)}`;
+
+        // Progressive speed increase: ~0.5-1 second faster per week for AT/TR zones
+        progressionGuidance = `
+CRITICAL PROGRESSIVE SPEED TRAINING:
+- Each week, target splits should get FASTER to build speed and endurance for a faster 2K.
+- Week-over-week progression: decrease target splits by 0.5-1 second per week for AT and TR zones.
+- UT2 and UT1 can remain more stable but should still see slight improvements every 2-3 weeks.
+- By the final week, AT splits should be ${formatSplit(atSplit - (weeksToGenerate * 0.5))} to ${formatSplit(atSplit - (weeksToGenerate * 0.8))}.
+- Include recovery/deload weeks every 4th week where intensity reduces before building again.`;
       }
     }
     
-    const systemPrompt = `You are an expert rowing coach. You MUST respond ONLY in English. Never use any other language.
+    const systemPrompt = `You are an expert rowing coach creating periodized training plans. You MUST respond ONLY in English. Never use any other language.
 
 Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).
 ${splitGuidance}
+${progressionGuidance}
 
 Split format: "2:05/500m" style.
 
-Strength exercises must be common English names like: Deadlift, Squat, Bench Press, Barbell Row, Pull-ups, Leg Press, Lunges, Romanian Deadlift, Overhead Press, Lat Pulldown.`;
+IMPORTANT: Splits must get progressively FASTER each week to build speed for 2K improvement. This is a periodized plan building toward peak performance.
+
+Strength exercises: Include FULL strength workouts with 4-6 exercises per day, not just one. Use common English names like: Deadlift, Squat, Bench Press, Barbell Row, Pull-ups, Leg Press, Lunges, Romanian Deadlift, Overhead Press, Lat Pulldown, Plank, Russian Twists, Hanging Leg Raises, Calf Raises, Hip Thrusts.
+
+Meal plans: Include a full day's nutrition for each training day with breakfast, lunch, dinner, and snacks optimized for rowing performance.`;
 
     const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan for:
 - Weight: ${weight}kg, Height: ${height}cm
@@ -69,10 +84,17 @@ Strength exercises must be common English names like: Deadlift, Squat, Bench Pre
 - Goals: ${goals}
 ${current2k ? `- Current 2K time: ${current2k}` : ""}
 
-IMPORTANT: ALL text MUST be in English. Use English exercise names (Deadlift, Squat, Bench Press, etc). Use English descriptions. Format splits as "2:05/500m".
-${splitGuidance ? "Use the calculated target splits for each training zone." : ""}
+CRITICAL REQUIREMENTS:
+1. ALL text MUST be in English. Use English exercise names. Format splits as "2:05/500m".
+2. PROGRESSIVE SPLITS: Each week's erg workout splits must be FASTER than the previous week to build speed for 2K improvement.
+3. FULL STRENGTH WORKOUTS: Each day needs a complete strength workout with 4-6 exercises (not just one).
+4. MEAL PLANS: Include a complete daily meal plan with breakfast, lunch, dinner, and snacks.
+5. PERIODIZATION: Include base, build, peak, and taper phases with appropriate recovery weeks.
 
-Each week needs 6 training days, each with 1 erg workout and 1 strength exercise.`;
+Each week needs 6 training days with:
+- 1 erg workout (with progressively faster splits week-over-week)
+- 1 FULL strength workout (4-6 exercises with sets, reps, and weights)
+- 1 complete meal plan for the day`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -90,7 +112,7 @@ Each week needs 6 training days, each with 1 erg workout and 1 strength exercise
           type: "function",
           function: {
             name: "create_training_plan",
-            description: "Create a structured rowing training plan",
+            description: "Create a structured rowing training plan with progressive speed training",
             parameters: {
               type: "object",
               properties: {
@@ -117,21 +139,43 @@ Each week needs 6 training days, each with 1 erg workout and 1 strength exercise
                                 rate: { type: "string" },
                                 notes: { type: "string" }
                               },
-                              required: ["zone", "description", "duration", "rate"]
+                              required: ["zone", "description", "duration", "rate", "targetSplit"]
                             },
                             strengthWorkout: {
                               type: "object",
                               properties: {
-                                exercise: { type: "string" },
-                                sets: { type: "number" },
-                                reps: { type: "number" },
-                                weight: { type: "string" },
-                                notes: { type: "string" }
+                                exercises: {
+                                  type: "array",
+                                  items: {
+                                    type: "object",
+                                    properties: {
+                                      exercise: { type: "string" },
+                                      sets: { type: "number" },
+                                      reps: { type: "number" },
+                                      weight: { type: "string" },
+                                      notes: { type: "string" }
+                                    },
+                                    required: ["exercise", "sets", "reps"]
+                                  }
+                                },
+                                focus: { type: "string" }
                               },
-                              required: ["exercise", "sets", "reps"]
+                              required: ["exercises", "focus"]
+                            },
+                            mealPlan: {
+                              type: "object",
+                              properties: {
+                                breakfast: { type: "string" },
+                                lunch: { type: "string" },
+                                dinner: { type: "string" },
+                                snacks: { type: "string" },
+                                totalCalories: { type: "number" },
+                                macros: { type: "string" }
+                              },
+                              required: ["breakfast", "lunch", "dinner"]
                             }
                           },
-                          required: ["day", "ergWorkout", "strengthWorkout"]
+                          required: ["day", "ergWorkout", "strengthWorkout", "mealPlan"]
                         }
                       }
                     },

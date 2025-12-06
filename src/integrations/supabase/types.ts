@@ -150,6 +150,62 @@ export type Database = {
           },
         ]
       }
+      plan_shares: {
+        Row: {
+          created_at: string | null
+          id: string
+          plan_id: string
+          shared_by: string
+          shared_with_team: string | null
+          shared_with_user: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          plan_id: string
+          shared_by: string
+          shared_with_team?: string | null
+          shared_with_user?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          plan_id?: string
+          shared_by?: string
+          shared_with_team?: string | null
+          shared_with_user?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_shares_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "workout_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_shares_shared_by_fkey"
+            columns: ["shared_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_shares_shared_with_team_fkey"
+            columns: ["shared_with_team"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_shares_shared_with_user_fkey"
+            columns: ["shared_with_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -160,6 +216,7 @@ export type Database = {
           height: number | null
           id: string
           updated_at: string | null
+          user_type: string | null
           username: string | null
           weight: number | null
         }
@@ -172,6 +229,7 @@ export type Database = {
           height?: number | null
           id: string
           updated_at?: string | null
+          user_type?: string | null
           username?: string | null
           weight?: number | null
         }
@@ -184,6 +242,7 @@ export type Database = {
           height?: number | null
           id?: string
           updated_at?: string | null
+          user_type?: string | null
           username?: string | null
           weight?: number | null
         }
@@ -227,6 +286,74 @@ export type Database = {
           {
             foreignKeyName: "strength_workouts_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          joined_at: string | null
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string | null
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string | null
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          coach_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_coach_id_fkey"
+            columns: ["coach_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
