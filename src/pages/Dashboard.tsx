@@ -4,14 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Users, Bluetooth, History, UsersRound } from "lucide-react";
+import { LogOut, Calendar, User, Users, Bluetooth, History, UsersRound, MessageCircle } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
 import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
-import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
+import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -66,72 +66,77 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile-optimized header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src={crewsyncLogo} alt="CrewSync" className="h-10 rounded-md" />
+        <div className="container mx-auto px-3 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <img src={crewsyncLogo} alt="CrewSync" className="h-8 w-8 rounded-md" />
+            <span className="font-semibold text-lg hidden sm:inline">CrewSync</span>
           </div>
           <Button onClick={handleLogout} variant="outline" size="sm">
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
+            <LogOut className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Logout</span>
           </Button>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="plans" className="space-y-6">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="plans" className="flex items-center gap-2">
+      <main className="container mx-auto px-3 py-4 pb-20 md:pb-8">
+        <Tabs defaultValue="plans" className="space-y-4">
+          {/* Mobile-friendly tabs - scrollable horizontally on mobile */}
+          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+            <TabsTrigger value="plans" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <Calendar className="h-4 w-4" />
-              Training Plans
+              <span className="hidden sm:inline">Training</span>
+              <span className="sm:hidden">Plans</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
+            <TabsTrigger value="history" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <History className="h-4 w-4" />
-              History
+              <span>History</span>
             </TabsTrigger>
-            <TabsTrigger value="profile" className="flex items-center gap-2">
+            <TabsTrigger value="profile" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <User className="h-4 w-4" />
-              Profile
+              <span>Profile</span>
             </TabsTrigger>
-            <TabsTrigger value="friends" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Friends
+            <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
+              <MessageCircle className="h-4 w-4" />
+              <span>Friends</span>
             </TabsTrigger>
             {isCoach && (
-              <TabsTrigger value="teams" className="flex items-center gap-2">
+              <TabsTrigger value="teams" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
                 <UsersRound className="h-4 w-4" />
-                Teams
+                <span>Teams</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="devices" className="flex items-center gap-2">
+            <TabsTrigger value="devices" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <Bluetooth className="h-4 w-4" />
-              Devices
+              <span className="hidden sm:inline">Devices</span>
+              <span className="sm:hidden">Sync</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="plans">
+          <TabsContent value="plans" className="mt-4">
             <WorkoutPlanSection />
           </TabsContent>
 
-          <TabsContent value="history">
+          <TabsContent value="history" className="mt-4">
             <HistorySection profile={profile} />
           </TabsContent>
 
-          <TabsContent value="profile">
+          <TabsContent value="profile" className="mt-4">
             <ProfileSection />
           </TabsContent>
 
-          <TabsContent value="friends">
+          <TabsContent value="friends" className="mt-4">
             <FriendsSection profile={profile} />
           </TabsContent>
 
           {isCoach && (
-            <TabsContent value="teams">
+            <TabsContent value="teams" className="mt-4">
               <TeamsSection profile={profile} isCoach={isCoach} />
             </TabsContent>
           )}
 
-          <TabsContent value="devices">
+          <TabsContent value="devices" className="mt-4">
             <DeviceSection />
           </TabsContent>
         </Tabs>
