@@ -12,6 +12,29 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     const { weight, height, experience, goals } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -19,9 +42,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const systemPrompt = `You are an expert strength and conditioning coach specializing in rowing performance. 
-You create periodized strength training programs that complement rowing training while preventing injury.
-Your programs focus on compound movements, posterior chain development, and rowing-specific strength.
+    const systemPrompt = `You are an expert strength and conditioning coach specializing in rowing performance.
 
 Generate 5 strength workout options in JSON format:
 {
@@ -41,7 +62,7 @@ Generate 5 strength workout options in JSON format:
 - Experience: ${experience}
 - Goals: ${goals}
 
-Focus on exercises that support rowing performance. Include recommended weight based on their stats.`;
+Focus on exercises that support rowing performance.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

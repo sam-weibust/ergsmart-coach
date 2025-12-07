@@ -309,15 +309,15 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                         <div>
                           <h4 className="font-medium mb-2 flex items-center gap-2">
                             <Eye className="h-4 w-4" />
-                            Their Plans
+                            Their Plans ({plans.length})
                           </h4>
                           <div className="space-y-2">
-                            {plans.map((plan: any) => (
+                            {plans.slice(0, 3).map((plan: any) => (
                               <Dialog key={plan.id}>
                                 <DialogTrigger asChild>
-                                  <Button variant="outline" className="w-full justify-between">
-                                    <span>{plan.title}</span>
-                                    <span className="text-xs text-muted-foreground">
+                                  <Button variant="outline" size="sm" className="w-full justify-between">
+                                    <span className="truncate">{plan.title}</span>
+                                    <span className="text-xs text-muted-foreground ml-2">
                                       {new Date(plan.created_at).toLocaleDateString()}
                                     </span>
                                   </Button>

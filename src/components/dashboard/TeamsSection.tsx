@@ -6,13 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, Trophy, Clock } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Users, UserPlus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Leaderboard } from "./Leaderboard";
+import { TeamGoals } from "./TeamGoals";
+import { MessageBoard } from "./MessageBoard";
 
 interface TeamsSectionProps {
   profile: any;
@@ -25,15 +22,13 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
 
-  // Fetch teams (coach's teams or teams user is member of)
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
     queryFn: async (): Promise<{ coached: any[]; member: any[] }> => {
       if (!profile?.id) return { coached: [], member: [] };
       
-      // Get teams where user is coach
       const { data: coachedTeams } = await supabase
         .from("teams")
         .select(`
@@ -46,7 +41,6 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
         `)
         .eq("coach_id", profile.id);
 
-      // Get teams where user is member
       const { data: memberTeams } = await supabase
         .from("team_members")
         .select(`
@@ -70,31 +64,6 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
       };
     },
     enabled: !!profile?.id,
-  });
-
-  // Fetch goals for team comparison (for coaches)
-  const { data: teamGoals } = useQuery({
-    queryKey: ["team-goals", teams?.coached],
-    queryFn: async () => {
-      if (!teams?.coached?.length) return {};
-      
-      const memberIds = teams.coached.flatMap(
-        (team: any) => team.team_members?.map((m: any) => m.user_id) || []
-      );
-      
-      if (!memberIds.length) return {};
-
-      const { data } = await supabase
-        .from("user_goals")
-        .select("*")
-        .in("user_id", memberIds);
-
-      return data?.reduce((acc: any, goal: any) => {
-        acc[goal.user_id] = goal;
-        return acc;
-      }, {}) || {};
-    },
-    enabled: isCoach && !!teams?.coached?.length,
   });
 
   const createTeam = useMutation({
@@ -122,7 +91,6 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
   const addMember = useMutation({
     mutationFn: async ({ teamId, email }: { teamId: string; email: string }) => {
-      // Find user by email or username
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("id")
@@ -170,35 +138,33 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
     },
   });
 
-  const formatTime = (interval: any) => {
-    if (!interval) return "Not set";
-    if (typeof interval === "string") return interval;
-    return interval;
+  const toggleTeam = (teamId: string) => {
+    setExpandedTeam(expandedTeam === teamId ? null : teamId);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {isCoach && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Users className="h-5 w-5" />
               Create Team
             </CardTitle>
-            <CardDescription>Form a team to track your athletes</CardDescription>
+            <CardDescription className="text-sm">Form a team to track your athletes</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <Input
               placeholder="Team name"
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
             />
             <Input
-              placeholder="Team description (optional)"
+              placeholder="Description (optional)"
               value={teamDescription}
               onChange={(e) => setTeamDescription(e.target.value)}
             />
-            <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending}>
+            <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending} className="w-full md:w-auto">
               Create Team
             </Button>
           </CardContent>
@@ -207,141 +173,156 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
       {/* Coached Teams */}
       {isCoach && teams?.coached && teams.coached.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5" />
-              My Teams
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Accordion type="single" collapsible>
-              {teams.coached.map((team: any) => (
-                <AccordionItem key={team.id} value={team.id}>
-                  <AccordionTrigger>
-                    <div className="flex items-center gap-2">
-                      <span>{team.name}</span>
-                      <Badge variant="outline">{team.team_members?.length || 0} members</Badge>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="space-y-4">
-                    {team.description && (
-                      <p className="text-sm text-muted-foreground">{team.description}</p>
-                    )}
+        <div className="space-y-4">
+          {teams.coached.map((team: any) => (
+            <Card key={team.id}>
+              <CardHeader className="pb-3">
+                <div 
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleTeam(team.id)}
+                >
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">{team.name}</CardTitle>
+                    <Badge variant="outline" className="text-xs">
+                      {team.team_members?.length || 0} members
+                    </Badge>
+                  </div>
+                  {expandedTeam === team.id ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+              </CardHeader>
+              
+              {expandedTeam === team.id && (
+                <CardContent className="space-y-4">
+                  {team.description && (
+                    <p className="text-sm text-muted-foreground">{team.description}</p>
+                  )}
 
-                    {/* Add member form */}
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add member by email or username"
-                        value={selectedTeamId === team.id ? memberEmail : ""}
-                        onChange={(e) => {
-                          setSelectedTeamId(team.id);
-                          setMemberEmail(e.target.value);
-                        }}
-                        onFocus={() => setSelectedTeamId(team.id)}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => addMember.mutate({ teamId: team.id, email: memberEmail })}
-                        disabled={addMember.isPending}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    {/* Team members with times comparison */}
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-sm">Team Members & Times</h4>
-                      {team.team_members?.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No members yet</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {team.team_members?.map((member: any) => {
-                            const goals = teamGoals?.[member.user_id];
-                            return (
-                              <div
-                                key={member.id}
-                                className="flex items-center justify-between p-3 border rounded-lg"
-                              >
-                                <div>
-                                  <p className="font-medium">
-                                    {member.profile?.full_name || member.profile?.username || "Unknown"}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
-                                  {goals && (
-                                    <div className="flex gap-2 mt-1 text-xs">
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        2K: {formatTime(goals.current_2k_time)}
-                                      </span>
-                                      {goals.current_5k_time && (
-                                        <span>5K: {formatTime(goals.current_5k_time)}</span>
-                                      )}
-                                      {goals.current_6k_time && (
-                                        <span>6K: {formatTime(goals.current_6k_time)}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => removeMember.mutate(member.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
+                  {/* Add member */}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add by email or username"
+                      value={memberEmail}
+                      onChange={(e) => setMemberEmail(e.target.value)}
+                      className="flex-1"
+                    />
                     <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteTeam.mutate(team.id)}
+                      size="icon"
+                      onClick={() => addMember.mutate({ teamId: team.id, email: memberEmail })}
+                      disabled={addMember.isPending}
                     >
-                      Delete Team
+                      <UserPlus className="h-4 w-4" />
                     </Button>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </CardContent>
-        </Card>
+                  </div>
+
+                  {/* Members list */}
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">Members</h4>
+                    {team.team_members?.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No members yet</p>
+                    ) : (
+                      <div className="grid gap-2">
+                        {team.team_members?.map((member: any) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between p-2 border rounded-lg text-sm"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                {member.profile?.full_name || member.profile?.username || "Unknown"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => removeMember.mutate(member.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Leaderboard, Goals, Messages */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Leaderboard teamId={team.id} teamName={team.name} />
+                    <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
+                  </div>
+                  
+                  <MessageBoard
+                    teamId={team.id}
+                    currentUserId={profile.id}
+                    title={`${team.name} Chat`}
+                  />
+
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteTeam.mutate(team.id)}
+                    className="w-full md:w-auto"
+                  >
+                    Delete Team
+                  </Button>
+                </CardContent>
+              )}
+            </Card>
+          ))}
+        </div>
       )}
 
       {/* Teams user is member of */}
       {teams?.member && teams.member.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              My Teams (as Member)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {teams.member.map((team: any) => (
-                <div key={team.id} className="p-4 border rounded-lg">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{team.name}</h3>
-                      {team.description && (
-                        <p className="text-sm text-muted-foreground">{team.description}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Coach: {team.coach?.full_name || team.coach?.email}
-                      </p>
-                    </div>
-                    <Badge variant="outline">{team.team_members?.length || 0} members</Badge>
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg">My Teams</h3>
+          {teams.member.map((team: any) => (
+            <Card key={team.id}>
+              <CardHeader className="pb-3">
+                <div 
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleTeam(team.id)}
+                >
+                  <div>
+                    <CardTitle className="text-base">{team.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Coach: {team.coach?.full_name || team.coach?.email}
+                    </p>
                   </div>
+                  {expandedTeam === team.id ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              
+              {expandedTeam === team.id && (
+                <CardContent className="space-y-4">
+                  {team.description && (
+                    <p className="text-sm text-muted-foreground">{team.description}</p>
+                  )}
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Leaderboard teamId={team.id} teamName={team.name} />
+                    <TeamGoals teamId={team.id} isCoach={false} currentUserId={profile.id} />
+                  </div>
+                  
+                  <MessageBoard
+                    teamId={team.id}
+                    currentUserId={profile.id}
+                    title={`${team.name} Chat`}
+                  />
+                </CardContent>
+              )}
+            </Card>
+          ))}
+        </div>
       )}
 
       {(!teams?.coached?.length && !teams?.member?.length) && (

@@ -1,4 +1,6 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +13,33 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.log("No auth header provided");
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.log("Auth error:", authError);
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
+    console.log("Authenticated user:", user.id);
+
     const { months, weight, height, experience, goals, current2k } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -18,13 +47,11 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const weeksToGenerate = months * 4; // 4 weeks per month
+    const weeksToGenerate = months * 4;
     
-    // Calculate training splits based on 2K time if provided
     let splitGuidance = "";
     let progressionGuidance = "";
     if (current2k) {
-      // Parse time format like "7:00" or "00:07:00" to seconds
       const parts = current2k.toString().split(":").map(Number);
       let totalSeconds = 0;
       if (parts.length === 3) {
@@ -34,11 +61,11 @@ serve(async (req) => {
       }
       
       if (totalSeconds > 0) {
-        const pace500m = totalSeconds / 4; // 2K = 4 x 500m
-        const ut2Split = pace500m + 22; // +20-25 sec
-        const ut1Split = pace500m + 16; // +15-18 sec
-        const trSplit = pace500m + 10;  // +8-12 sec
-        const atSplit = pace500m + 4;   // +3-6 sec
+        const pace500m = totalSeconds / 4;
+        const ut2Split = pace500m + 22;
+        const ut1Split = pace500m + 16;
+        const trSplit = pace500m + 10;
+        const atSplit = pace500m + 4;
         
         const formatSplit = (secs: number) => {
           const mins = Math.floor(secs / 60);
@@ -53,7 +80,6 @@ Based on current 2K time of ${current2k}, use these STARTING target splits (Week
 - TR: ${formatSplit(trSplit)}
 - AT: ${formatSplit(atSplit)}`;
 
-        // Progressive speed increase: ~0.5-1 second faster per week for AT/TR zones
         progressionGuidance = `
 CRITICAL PROGRESSIVE SPEED TRAINING:
 - Each week, target splits should get FASTER to build speed and endurance for a faster 2K.
@@ -64,7 +90,7 @@ CRITICAL PROGRESSIVE SPEED TRAINING:
       }
     }
     
-    const systemPrompt = `You are an expert rowing coach creating periodized training plans. You MUST respond ONLY in English. Never use any other language.
+    const systemPrompt = `You are an expert rowing coach creating periodized training plans. You MUST respond ONLY in English.
 
 Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).
 ${splitGuidance}
@@ -72,11 +98,11 @@ ${progressionGuidance}
 
 Split format: "2:05/500m" style.
 
-IMPORTANT: Splits must get progressively FASTER each week to build speed for 2K improvement. This is a periodized plan building toward peak performance.
+IMPORTANT: Splits must get progressively FASTER each week to build speed for 2K improvement.
 
-Strength exercises: Include FULL strength workouts with 4-6 exercises per day, not just one. Use common English names like: Deadlift, Squat, Bench Press, Barbell Row, Pull-ups, Leg Press, Lunges, Romanian Deadlift, Overhead Press, Lat Pulldown, Plank, Russian Twists, Hanging Leg Raises, Calf Raises, Hip Thrusts.
+Strength exercises: Include FULL strength workouts with 4-6 exercises per day using common English names.
 
-Meal plans: Include a full day's nutrition for each training day with breakfast, lunch, dinner, and snacks optimized for rowing performance.`;
+Meal plans: Include a full day's nutrition for each training day with breakfast, lunch, dinner, and snacks.`;
 
     const userPrompt = `Create a ${weeksToGenerate}-week rowing training plan for:
 - Weight: ${weight}kg, Height: ${height}cm
@@ -85,16 +111,16 @@ Meal plans: Include a full day's nutrition for each training day with breakfast,
 ${current2k ? `- Current 2K time: ${current2k}` : ""}
 
 CRITICAL REQUIREMENTS:
-1. ALL text MUST be in English. Use English exercise names. Format splits as "2:05/500m".
-2. PROGRESSIVE SPLITS: Each week's erg workout splits must be FASTER than the previous week to build speed for 2K improvement.
-3. FULL STRENGTH WORKOUTS: Each day needs a complete strength workout with 4-6 exercises (not just one).
-4. MEAL PLANS: Include a complete daily meal plan with breakfast, lunch, dinner, and snacks.
-5. PERIODIZATION: Include base, build, peak, and taper phases with appropriate recovery weeks.
+1. ALL text MUST be in English. Format splits as "2:05/500m".
+2. PROGRESSIVE SPLITS: Each week's erg workout splits must be FASTER than the previous week.
+3. FULL STRENGTH WORKOUTS: Each day needs 4-6 exercises.
+4. MEAL PLANS: Include breakfast, lunch, dinner, and snacks.
+5. PERIODIZATION: Include base, build, peak, and taper phases.
 
 Each week needs 6 training days with:
-- 1 erg workout (with progressively faster splits week-over-week)
-- 1 FULL strength workout (4-6 exercises with sets, reps, and weights)
-- 1 complete meal plan for the day`;
+- 1 erg workout (with progressively faster splits)
+- 1 FULL strength workout (4-6 exercises)
+- 1 complete meal plan`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -213,9 +239,8 @@ Each week needs 6 training days with:
     }
 
     const data = await response.json();
-    console.log("AI response structure:", JSON.stringify(data).substring(0, 500));
+    console.log("AI response received successfully");
     
-    // Extract from tool call response
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
       console.error("No tool call in response:", JSON.stringify(data));
