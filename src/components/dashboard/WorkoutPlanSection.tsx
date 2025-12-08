@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Share2, Dumbbell, Utensils } from "lucide-react";
 
@@ -60,7 +61,7 @@ export const WorkoutPlanSection = () => {
     },
   });
 
-  const { data: plans } = useQuery({
+  const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["workout-plans"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -69,6 +70,7 @@ export const WorkoutPlanSection = () => {
       const { data, error } = await supabase
         .from("workout_plans")
         .select("*")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -242,7 +244,27 @@ export const WorkoutPlanSection = () => {
         </CardContent>
       </Card>
 
-      {plans && plans.length > 0 && (
+      {/* Loading Skeleton */}
+      {plansLoading && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Training Plans</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[1, 2].map((i) => (
+              <div key={i} className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {!plansLoading && plans && plans.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Your Training Plans</CardTitle>
