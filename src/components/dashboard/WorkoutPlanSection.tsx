@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Share2, Dumbbell, Utensils } from "lucide-react";
+import { Loader2, Share2, Dumbbell, Utensils, ChevronDown, ChevronUp } from "lucide-react";
 
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
@@ -24,8 +24,33 @@ const getZoneColor = (zone: string) => {
 export const WorkoutPlanSection = () => {
   const [months, setMonths] = useState<string>("3");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [expandedWeeks, setExpandedWeeks] = useState<Record<string, string[]>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const toggleAllWeeks = (planId: string, weeks: any[]) => {
+    const weekIds = weeks.map((_, idx) => `week-${idx}`);
+    const currentExpanded = expandedWeeks[planId] || [];
+    
+    if (currentExpanded.length === weekIds.length) {
+      // Collapse all
+      setExpandedWeeks(prev => ({ ...prev, [planId]: [] }));
+    } else {
+      // Expand all
+      setExpandedWeeks(prev => ({ ...prev, [planId]: weekIds }));
+    }
+  };
+
+  const handleWeekChange = (planId: string, value: string) => {
+    setExpandedWeeks(prev => {
+      const current = prev[planId] || [];
+      if (current.includes(value)) {
+        return { ...prev, [planId]: current.filter(v => v !== value) };
+      } else {
+        return { ...prev, [planId]: [...current, value] };
+      }
+    });
+  };
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -271,131 +296,171 @@ export const WorkoutPlanSection = () => {
           </CardHeader>
           <CardContent>
             <Accordion type="single" collapsible className="w-full">
-              {plans.map((plan) => (
-                <AccordionItem key={plan.id} value={plan.id}>
-                  <AccordionTrigger>
-                    <div className="flex justify-between w-full pr-4">
-                      <span>{plan.title}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(plan.created_at!).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                      {Array.isArray(plan.workout_data) && plan.workout_data.length > 0 ? (plan.workout_data as any[]).map((week: any, weekIdx: number) => (
-                        <div key={week?.week ?? weekIdx} className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold">Week {week?.week ?? weekIdx + 1}</h4>
-                            {week?.phase && (
-                              <Badge variant="outline" className="text-xs">
-                                {week.phase}
-                              </Badge>
-                            )}
+              {plans.map((plan) => {
+                const workoutWeeks = Array.isArray(plan.workout_data) ? plan.workout_data as any[] : [];
+                const planExpandedWeeks = expandedWeeks[plan.id] || [];
+                const allExpanded = workoutWeeks.length > 0 && planExpandedWeeks.length === workoutWeeks.length;
+                
+                return (
+                  <AccordionItem key={plan.id} value={plan.id}>
+                    <AccordionTrigger>
+                      <div className="flex justify-between w-full pr-4">
+                        <span>{plan.title}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(plan.created_at!).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                        {workoutWeeks.length > 0 && (
+                          <div className="flex justify-end mb-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleAllWeeks(plan.id, workoutWeeks)}
+                            >
+                              {allExpanded ? (
+                                <>
+                                  <ChevronUp className="h-4 w-4 mr-1" />
+                                  Collapse All Weeks
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-4 w-4 mr-1" />
+                                  Expand All Weeks
+                                </>
+                              )}
+                            </Button>
                           </div>
-                          <div className="grid gap-3">
-                            {Array.isArray(week?.days) ? week.days.map((day: any, dayIdx: number) => (
-                              <div key={day?.day ?? dayIdx} className="p-4 border rounded-lg space-y-3">
-                                <div className="font-medium text-lg">Day {day?.day ?? dayIdx + 1}</div>
-                                
-                                {/* Erg Workout */}
-                                {day?.ergWorkout && (
-                                  <div className="flex flex-wrap items-start gap-2">
-                                    <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
-                                      {day.ergWorkout.zone || "Erg"}
-                                    </Badge>
-                                    <div className="flex-1">
-                                      <div className="font-medium">{day.ergWorkout.description || "Workout"}</div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
-                                        {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
-                                        {day.ergWorkout.targetSplit && ` • Target: ${day.ergWorkout.targetSplit}`}
-                                        {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
-                                      </div>
-                                      {day.ergWorkout.notes && (
-                                        <div className="text-xs text-muted-foreground italic mt-1">
-                                          {day.ergWorkout.notes}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Full Strength Workout */}
-                                {day?.strengthWorkout && (
-                                  <div className="border-l-2 border-primary/30 pl-3">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Dumbbell className="h-4 w-4 text-primary" />
-                                      <span className="font-medium">Strength: {day.strengthWorkout.focus || "Full Body"}</span>
-                                    </div>
-                                    {Array.isArray(day.strengthWorkout.exercises) && day.strengthWorkout.exercises.length > 0 ? (
-                                      <div className="grid gap-1 text-sm">
-                                        {day.strengthWorkout.exercises.map((ex: any, idx: number) => (
-                                          <div key={idx} className="flex justify-between">
-                                            <span>{ex?.exercise || "Exercise"}</span>
-                                            <span className="text-muted-foreground">
-                                              {ex?.sets ?? 0}x{ex?.reps ?? 0}
-                                              {ex?.weight && ` @ ${ex.weight}`}
-                                              {ex?.notes && ` (${ex.notes})`}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : day.strengthWorkout.exercise ? (
-                                      <span className="text-sm">
-                                        {day.strengthWorkout.exercise} - {day.strengthWorkout.sets ?? 0}x{day.strengthWorkout.reps ?? 0}
-                                        {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
-                                      </span>
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">No exercises listed</span>
+                        )}
+                        
+                        {workoutWeeks.length > 0 ? (
+                          <Accordion 
+                            type="multiple" 
+                            value={planExpandedWeeks}
+                            onValueChange={(values) => setExpandedWeeks(prev => ({ ...prev, [plan.id]: values }))}
+                            className="w-full"
+                          >
+                            {workoutWeeks.map((week: any, weekIdx: number) => (
+                              <AccordionItem key={weekIdx} value={`week-${weekIdx}`}>
+                                <AccordionTrigger className="hover:no-underline">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold">Week {week?.week ?? weekIdx + 1}</h4>
+                                    {week?.phase && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {week.phase}
+                                      </Badge>
                                     )}
                                   </div>
-                                )}
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="grid gap-3">
+                                    {Array.isArray(week?.days) ? week.days.map((day: any, dayIdx: number) => (
+                                      <div key={day?.day ?? dayIdx} className="p-4 border rounded-lg space-y-3">
+                                        <div className="font-medium text-lg">Day {day?.day ?? dayIdx + 1}</div>
+                                        
+                                        {/* Erg Workout */}
+                                        {day?.ergWorkout && (
+                                          <div className="flex flex-wrap items-start gap-2">
+                                            <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
+                                              {day.ergWorkout.zone || "Erg"}
+                                            </Badge>
+                                            <div className="flex-1">
+                                              <div className="font-medium">{day.ergWorkout.description || "Workout"}</div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
+                                                {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
+                                                {day.ergWorkout.targetSplit && ` • Target: ${day.ergWorkout.targetSplit}`}
+                                                {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
+                                              </div>
+                                              {day.ergWorkout.notes && (
+                                                <div className="text-xs text-muted-foreground italic mt-1">
+                                                  {day.ergWorkout.notes}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Full Strength Workout */}
+                                        {day?.strengthWorkout && (
+                                          <div className="border-l-2 border-primary/30 pl-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <Dumbbell className="h-4 w-4 text-primary" />
+                                              <span className="font-medium">Strength: {day.strengthWorkout.focus || "Full Body"}</span>
+                                            </div>
+                                            {Array.isArray(day.strengthWorkout.exercises) && day.strengthWorkout.exercises.length > 0 ? (
+                                              <div className="grid gap-1 text-sm">
+                                                {day.strengthWorkout.exercises.map((ex: any, idx: number) => (
+                                                  <div key={idx} className="flex justify-between">
+                                                    <span>{ex?.exercise || "Exercise"}</span>
+                                                    <span className="text-muted-foreground">
+                                                      {ex?.sets ?? 0}x{ex?.reps ?? 0}
+                                                      {ex?.weight && ` @ ${ex.weight}`}
+                                                      {ex?.notes && ` (${ex.notes})`}
+                                                    </span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            ) : day.strengthWorkout.exercise ? (
+                                              <span className="text-sm">
+                                                {day.strengthWorkout.exercise} - {day.strengthWorkout.sets ?? 0}x{day.strengthWorkout.reps ?? 0}
+                                                {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
+                                              </span>
+                                            ) : (
+                                              <span className="text-sm text-muted-foreground">No exercises listed</span>
+                                            )}
+                                          </div>
+                                        )}
 
-                                {/* Meal Plan */}
-                                {day?.mealPlan && (
-                                  <div className="border-l-2 border-secondary/30 pl-3">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Utensils className="h-4 w-4 text-secondary" />
-                                      <span className="font-medium">Meal Plan</span>
-                                      {day.mealPlan.totalCalories && (
-                                        <Badge variant="secondary" className="text-xs">
-                                          {day.mealPlan.totalCalories} cal
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <div className="grid gap-1 text-sm">
-                                      {day.mealPlan.breakfast && (
-                                        <div><span className="font-medium">Breakfast:</span> {day.mealPlan.breakfast}</div>
-                                      )}
-                                      {day.mealPlan.lunch && (
-                                        <div><span className="font-medium">Lunch:</span> {day.mealPlan.lunch}</div>
-                                      )}
-                                      {day.mealPlan.dinner && (
-                                        <div><span className="font-medium">Dinner:</span> {day.mealPlan.dinner}</div>
-                                      )}
-                                      {day.mealPlan.snacks && (
-                                        <div><span className="font-medium">Snacks:</span> {day.mealPlan.snacks}</div>
-                                      )}
-                                      {day.mealPlan.macros && (
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          Macros: {day.mealPlan.macros}
-                                        </div>
-                                      )}
-                                    </div>
+                                        {/* Meal Plan */}
+                                        {day?.mealPlan && (
+                                          <div className="border-l-2 border-secondary/30 pl-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <Utensils className="h-4 w-4 text-secondary" />
+                                              <span className="font-medium">Meal Plan</span>
+                                              {day.mealPlan.totalCalories && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                  {day.mealPlan.totalCalories} cal
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className="grid gap-1 text-sm">
+                                              {day.mealPlan.breakfast && (
+                                                <div><span className="font-medium">Breakfast:</span> {day.mealPlan.breakfast}</div>
+                                              )}
+                                              {day.mealPlan.lunch && (
+                                                <div><span className="font-medium">Lunch:</span> {day.mealPlan.lunch}</div>
+                                              )}
+                                              {day.mealPlan.dinner && (
+                                                <div><span className="font-medium">Dinner:</span> {day.mealPlan.dinner}</div>
+                                              )}
+                                              {day.mealPlan.snacks && (
+                                                <div><span className="font-medium">Snacks:</span> {day.mealPlan.snacks}</div>
+                                              )}
+                                              {day.mealPlan.macros && (
+                                                <div className="text-xs text-muted-foreground mt-1">
+                                                  Macros: {day.mealPlan.macros}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )) : (
+                                      <div className="text-muted-foreground text-sm">No days in this week</div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                            )) : (
-                              <div className="text-muted-foreground text-sm">No days in this week</div>
-                            )}
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                          </Accordion>
+                        ) : (
+                          <div className="text-muted-foreground p-4 text-center">
+                            {plan.workout_data ? "Unable to display workout data" : "No workout data available"}
                           </div>
-                        </div>
-                      )) : (
-                        <div className="text-muted-foreground p-4 text-center">
-                          {plan.workout_data ? "Unable to display workout data" : "No workout data available"}
-                        </div>
-                      )}
+                        )}
                       
                       <div className="flex gap-2 pt-4 border-t">
                         <Dialog>
@@ -466,7 +531,8 @@ export const WorkoutPlanSection = () => {
                     </div>
                   </AccordionContent>
                 </AccordionItem>
-              ))}
+              );
+              })}
             </Accordion>
           </CardContent>
         </Card>
