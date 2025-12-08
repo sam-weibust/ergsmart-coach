@@ -261,29 +261,29 @@ export const WorkoutPlanSection = () => {
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                      {Array.isArray(plan.workout_data) ? (plan.workout_data as any[]).map((week: any) => (
-                        <div key={week.week} className="space-y-2">
+                      {Array.isArray(plan.workout_data) && plan.workout_data.length > 0 ? (plan.workout_data as any[]).map((week: any, weekIdx: number) => (
+                        <div key={week?.week ?? weekIdx} className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <h4 className="font-semibold">Week {week.week}</h4>
-                            {week.phase && (
+                            <h4 className="font-semibold">Week {week?.week ?? weekIdx + 1}</h4>
+                            {week?.phase && (
                               <Badge variant="outline" className="text-xs">
                                 {week.phase}
                               </Badge>
                             )}
                           </div>
                           <div className="grid gap-3">
-                            {week.days?.map((day: any) => (
-                              <div key={day.day} className="p-4 border rounded-lg space-y-3">
-                                <div className="font-medium text-lg">Day {day.day}</div>
+                            {Array.isArray(week?.days) ? week.days.map((day: any, dayIdx: number) => (
+                              <div key={day?.day ?? dayIdx} className="p-4 border rounded-lg space-y-3">
+                                <div className="font-medium text-lg">Day {day?.day ?? dayIdx + 1}</div>
                                 
                                 {/* Erg Workout */}
-                                {day.ergWorkout && (
+                                {day?.ergWorkout && (
                                   <div className="flex flex-wrap items-start gap-2">
                                     <Badge variant="outline" className={getZoneColor(day.ergWorkout.zone)}>
-                                      {day.ergWorkout.zone}
+                                      {day.ergWorkout.zone || "Erg"}
                                     </Badge>
                                     <div className="flex-1">
-                                      <div className="font-medium">{day.ergWorkout.description}</div>
+                                      <div className="font-medium">{day.ergWorkout.description || "Workout"}</div>
                                       <div className="text-sm text-muted-foreground">
                                         {day.ergWorkout.duration && `${day.ergWorkout.duration}`}
                                         {day.ergWorkout.distance && ` • ${day.ergWorkout.distance}m`}
@@ -300,35 +300,38 @@ export const WorkoutPlanSection = () => {
                                 )}
                                 
                                 {/* Full Strength Workout */}
-                                {day.strengthWorkout && (
+                                {day?.strengthWorkout && (
                                   <div className="border-l-2 border-primary/30 pl-3">
                                     <div className="flex items-center gap-2 mb-2">
                                       <Dumbbell className="h-4 w-4 text-primary" />
                                       <span className="font-medium">Strength: {day.strengthWorkout.focus || "Full Body"}</span>
                                     </div>
-                                    {Array.isArray(day.strengthWorkout.exercises) ? (
+                                    {Array.isArray(day.strengthWorkout.exercises) && day.strengthWorkout.exercises.length > 0 ? (
                                       <div className="grid gap-1 text-sm">
                                         {day.strengthWorkout.exercises.map((ex: any, idx: number) => (
                                           <div key={idx} className="flex justify-between">
-                                            <span>{ex.exercise}</span>
+                                            <span>{ex?.exercise || "Exercise"}</span>
                                             <span className="text-muted-foreground">
-                                              {ex.sets}x{ex.reps}
-                                              {ex.weight && ` @ ${ex.weight}`}
+                                              {ex?.sets ?? 0}x{ex?.reps ?? 0}
+                                              {ex?.weight && ` @ ${ex.weight}`}
+                                              {ex?.notes && ` (${ex.notes})`}
                                             </span>
                                           </div>
                                         ))}
                                       </div>
-                                    ) : (
+                                    ) : day.strengthWorkout.exercise ? (
                                       <span className="text-sm">
-                                        {day.strengthWorkout.exercise} - {day.strengthWorkout.sets}x{day.strengthWorkout.reps}
+                                        {day.strengthWorkout.exercise} - {day.strengthWorkout.sets ?? 0}x{day.strengthWorkout.reps ?? 0}
                                         {day.strengthWorkout.weight && ` @ ${day.strengthWorkout.weight}`}
                                       </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">No exercises listed</span>
                                     )}
                                   </div>
                                 )}
 
                                 {/* Meal Plan */}
-                                {day.mealPlan && (
+                                {day?.mealPlan && (
                                   <div className="border-l-2 border-secondary/30 pl-3">
                                     <div className="flex items-center gap-2 mb-2">
                                       <Utensils className="h-4 w-4 text-secondary" />
@@ -361,11 +364,15 @@ export const WorkoutPlanSection = () => {
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            )) : (
+                              <div className="text-muted-foreground text-sm">No days in this week</div>
+                            )}
                           </div>
                         </div>
                       )) : (
-                        <div className="text-muted-foreground">Invalid workout data format</div>
+                        <div className="text-muted-foreground p-4 text-center">
+                          {plan.workout_data ? "Unable to display workout data" : "No workout data available"}
+                        </div>
                       )}
                       
                       <div className="flex gap-2 pt-4 border-t">
