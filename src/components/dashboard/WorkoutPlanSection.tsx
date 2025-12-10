@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Share2, Dumbbell, Utensils, ChevronDown, ChevronUp } from "lucide-react";
+import { SpreadsheetUpload } from "./SpreadsheetUpload";
 
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
@@ -268,6 +269,9 @@ export const WorkoutPlanSection = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Spreadsheet upload for coaches */}
+      {isCoach && <SpreadsheetUpload />}
 
       {/* Loading Skeleton */}
       {plansLoading && (
