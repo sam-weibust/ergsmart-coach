@@ -11,6 +11,7 @@ import FriendsSection from "@/components/dashboard/FriendsSection";
 import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
 const Dashboard = () => {
@@ -73,10 +74,13 @@ const Dashboard = () => {
             <img src={crewsyncLogo} alt="CrewSync" className="h-8 w-8 rounded-md" />
             <span className="font-semibold text-lg hidden sm:inline">CrewSync</span>
           </div>
-          <Button onClick={handleLogout} variant="outline" size="sm">
-            <LogOut className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Logout</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Button onClick={handleLogout} variant="outline" size="sm">
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
+          </div>
         </div>
       </header>
 

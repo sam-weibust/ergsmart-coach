@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, User } from "lucide-react";
+import { NotificationSettings } from "./NotificationSettings";
 
 export const ProfileSection = () => {
   const { toast } = useToast();
@@ -99,121 +100,125 @@ export const ProfileSection = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <User className="h-5 w-5" />
-          Profile Settings
-        </CardTitle>
-        <CardDescription>
-          Set your details for personalized workout plans
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            updateProfile.mutate();
-          }}
-          className="space-y-4"
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="userType">I am a...</Label>
-              <Select value={userType} onValueChange={setUserType}>
-                <SelectTrigger id="userType">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rower">Rower / Athlete</SelectItem>
-                  <SelectItem value="coach">Coach</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {userType === "coach" ? "Coaches can create teams and share plans" : "Rowers get personalized training plans"}
-              </p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Profile Settings
+          </CardTitle>
+          <CardDescription>
+            Set your details for personalized workout plans
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateProfile.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="userType">I am a...</Label>
+                <Select value={userType} onValueChange={setUserType}>
+                  <SelectTrigger id="userType">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rower">Rower / Athlete</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {userType === "coach" ? "Coaches can create teams and share plans" : "Rowers get personalized training plans"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="unique_username"
+                />
+                <p className="text-xs text-muted-foreground">Friends can find you by this username</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="experience">Experience Level</Label>
+                <Select value={experience} onValueChange={setExperience}>
+                  <SelectTrigger id="experience">
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="beginner">Beginner (0-1 years)</SelectItem>
+                    <SelectItem value="intermediate">Intermediate (1-3 years)</SelectItem>
+                    <SelectItem value="advanced">Advanced (3-5 years)</SelectItem>
+                    <SelectItem value="elite">Elite (5+ years)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="weight">Weight (kg)</Label>
+                <Input
+                  id="weight"
+                  type="number"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="75"
+                  min="30"
+                  max="200"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="height">Height (cm)</Label>
+                <Input
+                  id="height"
+                  type="number"
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                  placeholder="180"
+                  min="100"
+                  max="250"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Your name"
+              <Label htmlFor="goals">Training Goals</Label>
+              <Textarea
+                id="goals"
+                value={goals}
+                onChange={(e) => setGoals(e.target.value)}
+                placeholder="e.g., Improve 2k time to sub-7:00, build endurance for head races, prepare for spring racing season..."
+                rows={3}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="unique_username"
-              />
-              <p className="text-xs text-muted-foreground">Friends can find you by this username</p>
-            </div>
+            <Button type="submit" disabled={updateProfile.isPending}>
+              {updateProfile.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Profile
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="experience">Experience Level</Label>
-              <Select value={experience} onValueChange={setExperience}>
-                <SelectTrigger id="experience">
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="beginner">Beginner (0-1 years)</SelectItem>
-                  <SelectItem value="intermediate">Intermediate (1-3 years)</SelectItem>
-                  <SelectItem value="advanced">Advanced (3-5 years)</SelectItem>
-                  <SelectItem value="elite">Elite (5+ years)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="weight">Weight (kg)</Label>
-              <Input
-                id="weight"
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                placeholder="75"
-                min="30"
-                max="200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="height">Height (cm)</Label>
-              <Input
-                id="height"
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                placeholder="180"
-                min="100"
-                max="250"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="goals">Training Goals</Label>
-            <Textarea
-              id="goals"
-              value={goals}
-              onChange={(e) => setGoals(e.target.value)}
-              placeholder="e.g., Improve 2k time to sub-7:00, build endurance for head races, prepare for spring racing season..."
-              rows={3}
-            />
-          </div>
-
-          <Button type="submit" disabled={updateProfile.isPending}>
-            {updateProfile.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Profile
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      <NotificationSettings />
+    </div>
   );
 };
