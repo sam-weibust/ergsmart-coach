@@ -116,11 +116,16 @@ CRITICAL REQUIREMENTS:
 3. FULL STRENGTH WORKOUTS: Each day needs 4-6 exercises.
 4. MEAL PLANS: Include breakfast, lunch, dinner, and snacks.
 5. PERIODIZATION: Include base, build, peak, and taper phases.
+6. EVERY WEEK MUST HAVE EXACTLY 6 TRAINING DAYS (day 1 through day 6). This is mandatory.
 
-Each week needs 6 training days with:
+STRUCTURE: Each week MUST contain an array of 6 day objects (day: 1, day: 2, day: 3, day: 4, day: 5, day: 6).
+
+Each of the 6 training days per week needs:
 - 1 erg workout (with progressively faster splits)
 - 1 FULL strength workout (4-6 exercises)
-- 1 complete meal plan`;
+- 1 complete meal plan
+
+Generate ALL 6 days for EVERY week. Do not skip any days.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
