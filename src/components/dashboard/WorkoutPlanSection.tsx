@@ -9,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Share2, Dumbbell, Utensils, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Share2, Dumbbell, Utensils, ChevronDown, ChevronUp, FileImage, Printer } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
+import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
 
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
@@ -270,8 +271,8 @@ export const WorkoutPlanSection = () => {
         </CardContent>
       </Card>
 
-      {/* Spreadsheet upload for coaches */}
-      {isCoach && <SpreadsheetUpload />}
+      {/* Spreadsheet upload for all users */}
+      <SpreadsheetUpload />
 
       {/* Loading Skeleton */}
       {plansLoading && (
@@ -317,7 +318,43 @@ export const WorkoutPlanSection = () => {
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                        {workoutWeeks.length > 0 && (
+                        {/* Check if this is a file upload (PDF/PNG) */}
+                        {workoutWeeks.length > 0 && workoutWeeks[0]?.fileUrl && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <FileImage className="h-4 w-4" />
+                              <span>Uploaded: {workoutWeeks[0]?.fileName}</span>
+                            </div>
+                            {workoutWeeks[0]?.fileType === "pdf" ? (
+                              <iframe 
+                                src={workoutWeeks[0].fileUrl} 
+                                className="w-full h-[500px] border rounded-lg"
+                                title="Workout Plan PDF"
+                              />
+                            ) : (
+                              <img 
+                                src={workoutWeeks[0].fileUrl} 
+                                alt="Workout Plan" 
+                                className="w-full rounded-lg border"
+                              />
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(workoutWeeks[0].fileUrl, '_blank')}
+                            >
+                              <Printer className="h-4 w-4 mr-2" />
+                              Open in New Tab / Print
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Show printable weekly grid view for structured data */}
+                        {workoutWeeks.length > 0 && !workoutWeeks[0]?.fileUrl && (
+                          <PrintableWeeklyPlan weeks={workoutWeeks} title={plan.title} />
+                        )}
+
+                        {workoutWeeks.length > 0 && !workoutWeeks[0]?.fileUrl && (
                           <div className="flex justify-end mb-2">
                             <Button
                               variant="outline"

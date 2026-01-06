@@ -18,11 +18,15 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
   const generateMealPlan = async () => {
     setLoading(true);
     try {
+      // Get diet goal from profile, default to maintain
+      const dietGoal = (profile as any)?.diet_goal || "maintain";
+      
       const { data, error } = await supabase.functions.invoke("generate-meals", {
         body: {
           weight: profile.weight,
           goals: profile.goals,
           trainingLoad: "moderate",
+          dietGoal: dietGoal,
         },
       });
 
@@ -77,12 +81,18 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
     }
   };
 
+  const dietGoal = (profile as any)?.diet_goal || "maintain";
+  const dietLabel = dietGoal === "cut" ? "Cut" : dietGoal === "bulk" ? "Bulk" : "Maintain";
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <UtensilsCrossed className="h-5 w-5" />
           Daily Meal Plan
+          <span className="text-xs font-normal text-muted-foreground ml-2">
+            ({dietLabel} mode)
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
