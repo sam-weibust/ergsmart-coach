@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Loader2, Download, Image, FileText } from "lucide-react";
+import type { Json } from "@/integrations/supabase/types";
 
 const parseCSV = (text: string): string[][] => {
   const lines = text.split("\n").filter(line => line.trim());
@@ -170,8 +171,10 @@ export const SpreadsheetUpload = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      
       // For CSV files, parse directly
-      if (file.name.endsWith(".csv")) {
+      if (fileExt === "csv") {
         const text = await file.text();
         const rows = parseCSV(text);
         
@@ -189,7 +192,7 @@ export const SpreadsheetUpload = () => {
           user_id: user.id,
           title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
           description: `Imported from ${file.name}`,
-          workout_data: workoutData as any,
+          workout_data: JSON.parse(JSON.stringify(workoutData)) as Json,
         }]);
         
         if (error) throw error;
@@ -197,37 +200,33 @@ export const SpreadsheetUpload = () => {
         return workoutData;
       }
       
-      // For PDF/PNG files, upload to storage and create a reference
-      const fileExt = file.name.split('.').pop()?.toLowerCase();
-      const filePath = `${user.id}/plans/${Date.now()}.${fileExt}`;
+      // For PDF/PNG files, use AI to parse the workout structure
+      const arrayBuffer = await file.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+      const mimeType = fileExt === 'pdf' ? 'application/pdf' : `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+      const imageBase64 = `data:${mimeType};base64,${base64}`;
       
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("workout-plans")
-        .upload(filePath, file);
+      // Call edge function to parse with AI
+      const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-workout-image", {
+        body: { imageBase64, fileType: fileExt },
+      });
       
-      if (uploadError) throw uploadError;
+      if (parseError) throw parseError;
+      if (parseResult.error) throw new Error(parseResult.error);
       
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from("workout-plans")
-        .getPublicUrl(filePath);
+      const workoutData = parseResult.plan;
       
-      // Store as a workout plan with file reference
-      const workoutData = [{
-        week: 1,
-        phase: "Uploaded Plan",
-        fileUrl: urlData.publicUrl,
-        fileName: file.name,
-        fileType: fileExt,
-        days: []
-      }];
+      if (!workoutData || workoutData.length === 0) {
+        throw new Error("Could not extract workout data from the image. Please try a clearer image or use CSV format.");
+      }
       
       const { error } = await supabase.from("workout_plans").insert([{
         user_id: user.id,
-        title: planTitle || `Uploaded Plan - ${new Date().toLocaleDateString()}`,
-        description: `Uploaded from ${file.name}`,
-        workout_data: workoutData as any,
+        title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
+        description: `Imported from ${file.name} (AI parsed)`,
+        workout_data: workoutData as Json,
       }]);
       
       if (error) throw error;
