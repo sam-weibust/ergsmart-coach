@@ -8,6 +8,9 @@ interface HistorySectionProps {
   profile: any;
 }
 
+// Convert kg to lbs for display
+const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
+
 const HistorySection = ({ profile }: HistorySectionProps) => {
   const [ergWorkouts, setErgWorkouts] = useState<any[]>([]);
   const [strengthWorkouts, setStrengthWorkouts] = useState<any[]>([]);
@@ -109,7 +112,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                         {new Date(workout.workout_date).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="text-lg font-bold">{workout.weight}kg</span>
+                    <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
                   </div>
                   <p className="text-sm">
                     {workout.sets} sets × {workout.reps} reps

@@ -5,42 +5,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, Loader2, Download } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2, Download, Image, FileText } from "lucide-react";
 
 interface WorkoutDay {
   day: number;
-  ergWorkout: {
-    zone: string;
-    description: string;
-    duration?: string;
-    distance?: number;
-    targetSplit?: string;
-    rate?: string;
-    notes?: string;
-  };
-  strengthWorkout: {
-    focus: string;
-    exercises: {
-      exercise: string;
-      sets: number;
-      reps: number;
-      weight?: string;
-      notes?: string;
-    }[];
-  };
-  mealPlan: {
-    breakfast: string;
-    lunch: string;
-    dinner: string;
-    snacks: string;
-    totalCalories?: number;
-    macros?: string;
-  };
+  type?: string;
+  warmup?: string;
+  workout?: string;
+  rest?: string;
+  breakup?: string;
+  rates?: string;
+  cooldown?: string;
+  notes?: string;
 }
 
 interface WorkoutWeek {
   week: number;
   phase: string;
+  startDate?: string;
   days: WorkoutDay[];
 }
 
@@ -71,23 +53,19 @@ const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
   const weeks: WorkoutWeek[] = [];
   const headers = rows[0]?.map(h => h.toLowerCase()) || [];
   
-  // Find column indices
+  // Find column indices - support the weekly grid format
   const weekIdx = headers.findIndex(h => h.includes("week"));
-  const phaseIdx = headers.findIndex(h => h.includes("phase"));
+  const phaseIdx = headers.findIndex(h => h.includes("phase") || h.includes("difficulty"));
   const dayIdx = headers.findIndex(h => h.includes("day"));
-  const zoneIdx = headers.findIndex(h => h.includes("zone"));
-  const ergDescIdx = headers.findIndex(h => h.includes("erg") && h.includes("description") || h === "erg workout");
-  const durationIdx = headers.findIndex(h => h.includes("duration"));
-  const distanceIdx = headers.findIndex(h => h.includes("distance"));
-  const splitIdx = headers.findIndex(h => h.includes("split") || h.includes("pace"));
-  const rateIdx = headers.findIndex(h => h.includes("rate") || h.includes("spm"));
-  const strengthFocusIdx = headers.findIndex(h => h.includes("strength") && h.includes("focus") || h === "strength focus");
-  const exercisesIdx = headers.findIndex(h => h.includes("exercise"));
-  const breakfastIdx = headers.findIndex(h => h.includes("breakfast"));
-  const lunchIdx = headers.findIndex(h => h.includes("lunch"));
-  const dinnerIdx = headers.findIndex(h => h.includes("dinner"));
-  const snacksIdx = headers.findIndex(h => h.includes("snack"));
-  const caloriesIdx = headers.findIndex(h => h.includes("calorie"));
+  const typeIdx = headers.findIndex(h => h === "type" || h.includes("workout type"));
+  const warmupIdx = headers.findIndex(h => h.includes("warmup") || h.includes("warm up"));
+  const workoutIdx = headers.findIndex(h => h === "workout" || h.includes("main workout"));
+  const restIdx = headers.findIndex(h => h.includes("rest"));
+  const breakupIdx = headers.findIndex(h => h.includes("breakup") || h.includes("break up"));
+  const ratesIdx = headers.findIndex(h => h.includes("rate"));
+  const cooldownIdx = headers.findIndex(h => h.includes("cooldown") || h.includes("cool down"));
+  const notesIdx = headers.findIndex(h => h.includes("note"));
+  const dateIdx = headers.findIndex(h => h.includes("date"));
   
   let currentWeek: WorkoutWeek | null = null;
   
@@ -101,45 +79,24 @@ const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
     
     if (!currentWeek || currentWeek.week !== weekNum) {
       if (currentWeek) weeks.push(currentWeek);
-      currentWeek = { week: weekNum, phase, days: [] };
+      currentWeek = { 
+        week: weekNum, 
+        phase, 
+        startDate: row[dateIdx] || undefined,
+        days: [] 
+      };
     }
-    
-    // Parse exercises (format: "Exercise 3x10 @weight; Exercise2 4x8")
-    const exercisesStr = row[exercisesIdx] || "";
-    const exercises = exercisesStr.split(";").filter(e => e.trim()).map(ex => {
-      const match = ex.trim().match(/^(.+?)\s*(\d+)x(\d+)\s*(?:@(.+))?$/);
-      if (match) {
-        return {
-          exercise: match[1].trim(),
-          sets: parseInt(match[2]),
-          reps: parseInt(match[3]),
-          weight: match[4]?.trim(),
-        };
-      }
-      return { exercise: ex.trim(), sets: 3, reps: 10 };
-    });
     
     const day: WorkoutDay = {
       day: dayNum,
-      ergWorkout: {
-        zone: row[zoneIdx] || "UT2",
-        description: row[ergDescIdx] || "Steady state",
-        duration: row[durationIdx],
-        distance: parseInt(row[distanceIdx]) || undefined,
-        targetSplit: row[splitIdx],
-        rate: row[rateIdx],
-      },
-      strengthWorkout: {
-        focus: row[strengthFocusIdx] || "Full Body",
-        exercises,
-      },
-      mealPlan: {
-        breakfast: row[breakfastIdx] || "",
-        lunch: row[lunchIdx] || "",
-        dinner: row[dinnerIdx] || "",
-        snacks: row[snacksIdx] || "",
-        totalCalories: parseInt(row[caloriesIdx]) || undefined,
-      },
+      type: row[typeIdx] || undefined,
+      warmup: row[warmupIdx] || undefined,
+      workout: row[workoutIdx] || undefined,
+      rest: row[restIdx] || undefined,
+      breakup: row[breakupIdx] || undefined,
+      rates: row[ratesIdx] || undefined,
+      cooldown: row[cooldownIdx] || undefined,
+      notes: row[notesIdx] || undefined,
     };
     
     currentWeek.days.push(day);
@@ -152,15 +109,16 @@ const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
 
 const generateTemplateCSV = (): string => {
   const headers = [
-    "Week", "Phase", "Day", "Zone", "Erg Description", "Duration", "Distance", 
-    "Target Split", "Rate", "Strength Focus", "Exercises", 
-    "Breakfast", "Lunch", "Dinner", "Snacks", "Calories"
+    "Week", "Phase", "Day", "Date", "Type", "Warmup", "Workout", "Rest", "Breakup", "Rates", "Cooldown", "Notes"
   ];
   
   const sampleRows = [
-    ["1", "Base", "1", "UT2", "Steady state rowing", "45 min", "10000", "2:10", "18-20", "Core & Legs", "Squats 3x10 @135lbs; Planks 3x60s; Leg Press 3x12 @200lbs", "Oatmeal with berries", "Grilled chicken salad", "Salmon with quinoa", "Greek yogurt, almonds", "2500"],
-    ["1", "Base", "2", "UT1", "Intervals 8x500m", "40 min", "4000", "1:55", "26-28", "Upper Body", "Bench Press 4x8 @155lbs; Rows 4x10 @135lbs; Pull-ups 3x8", "Eggs with toast", "Turkey wrap", "Steak with vegetables", "Protein shake", "2600"],
-    ["1", "Base", "3", "UT2", "Long steady piece", "60 min", "12000", "2:15", "16-18", "Full Body", "Deadlifts 3x8 @185lbs; Shoulder Press 3x10 @95lbs", "Smoothie bowl", "Tuna sandwich", "Pasta with meatballs", "Fruit and nuts", "2700"],
+    ["1", "Easy", "1", "Dec 01", "UT1", "10'", "1k@24 & 6x5'", "1.5'", "2'/2'/1'", "18/20/22", "8'", ""],
+    ["1", "Easy", "2", "Dec 02", "LIFT", "", "", "", "", "", "", "Strength day"],
+    ["1", "Easy", "3", "Dec 03", "UT2", "8'", "10x6'", "1'", "2'/2'/2'", "16/18/20", "5'", ""],
+    ["1", "Easy", "4", "Dec 04", "UT1", "10'", "8x5'", "1.5'", "3'/2'", "", "8'", ""],
+    ["1", "Easy", "5", "Dec 05", "LIFT", "", "", "Half", "Day", "", "", "Light lifting"],
+    ["2", "Med", "1", "Dec 08", "UT1", "10'", "10x5'", "1.5'", "2'/3'", "vary 18-22", "8'", ""],
   ];
   
   return [headers.join(","), ...sampleRows.map(r => r.join(","))].join("\n");
@@ -169,6 +127,7 @@ const generateTemplateCSV = (): string => {
 export const SpreadsheetUpload = () => {
   const [fileName, setFileName] = useState<string>("");
   const [planTitle, setPlanTitle] = useState<string>("");
+  const [fileType, setFileType] = useState<"csv" | "image" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -178,23 +137,63 @@ export const SpreadsheetUpload = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
-      const text = await file.text();
-      const rows = parseCSV(text);
-      
-      if (rows.length < 2) {
-        throw new Error("File must have at least a header row and one data row");
+      // For CSV files, parse directly
+      if (file.name.endsWith(".csv")) {
+        const text = await file.text();
+        const rows = parseCSV(text);
+        
+        if (rows.length < 2) {
+          throw new Error("File must have at least a header row and one data row");
+        }
+        
+        const workoutData = parseWorkoutData(rows);
+        
+        if (workoutData.length === 0) {
+          throw new Error("Could not parse any workout data from the file");
+        }
+        
+        const { error } = await supabase.from("workout_plans").insert([{
+          user_id: user.id,
+          title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
+          description: `Imported from ${file.name}`,
+          workout_data: workoutData as any,
+        }]);
+        
+        if (error) throw error;
+        
+        return workoutData;
       }
       
-      const workoutData = parseWorkoutData(rows);
+      // For PDF/PNG files, upload to storage and create a reference
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      const filePath = `${user.id}/plans/${Date.now()}.${fileExt}`;
       
-      if (workoutData.length === 0) {
-        throw new Error("Could not parse any workout data from the file");
-      }
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("workout-plans")
+        .upload(filePath, file);
+      
+      if (uploadError) throw uploadError;
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("workout-plans")
+        .getPublicUrl(filePath);
+      
+      // Store as a workout plan with file reference
+      const workoutData = [{
+        week: 1,
+        phase: "Uploaded Plan",
+        fileUrl: urlData.publicUrl,
+        fileName: file.name,
+        fileType: fileExt,
+        days: []
+      }];
       
       const { error } = await supabase.from("workout_plans").insert([{
         user_id: user.id,
-        title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
-        description: `Imported from ${file.name}`,
+        title: planTitle || `Uploaded Plan - ${new Date().toLocaleDateString()}`,
+        description: `Uploaded from ${file.name}`,
         workout_data: workoutData as any,
       }]);
       
@@ -209,6 +208,7 @@ export const SpreadsheetUpload = () => {
       });
       setFileName("");
       setPlanTitle("");
+      setFileType(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
     },
@@ -224,15 +224,17 @@ export const SpreadsheetUpload = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith(".csv")) {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (!["csv", "pdf", "png", "jpg", "jpeg"].includes(ext || "")) {
         toast({
           title: "Invalid File",
-          description: "Please upload a CSV file",
+          description: "Please upload a CSV, PDF, or image file (PNG/JPG)",
           variant: "destructive",
         });
         return;
       }
       setFileName(file.name);
+      setFileType(ext === "csv" ? "csv" : "image");
     }
   };
   
@@ -262,14 +264,22 @@ export const SpreadsheetUpload = () => {
           Import Custom Plan
         </CardTitle>
         <CardDescription>
-          Upload a CSV spreadsheet with your own workout plan
+          Upload a CSV spreadsheet, PDF, or image of your workout plan
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button variant="outline" size="sm" onClick={downloadTemplate}>
-          <Download className="h-4 w-4 mr-2" />
-          Download Template
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={downloadTemplate}>
+            <Download className="h-4 w-4 mr-2" />
+            Download CSV Template
+          </Button>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><FileSpreadsheet className="h-3 w-3" /> CSV (editable)</span>
+          <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> PDF</span>
+          <span className="flex items-center gap-1"><Image className="h-3 w-3" /> PNG/JPG</span>
+        </div>
         
         <Input
           placeholder="Plan title (optional)"
@@ -281,7 +291,7 @@ export const SpreadsheetUpload = () => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.pdf,.png,.jpg,.jpeg"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -291,7 +301,7 @@ export const SpreadsheetUpload = () => {
             className="flex-1"
           >
             <Upload className="h-4 w-4 mr-2" />
-            {fileName || "Choose CSV File"}
+            {fileName || "Choose File"}
           </Button>
           <Button
             onClick={handleUpload}
@@ -303,7 +313,9 @@ export const SpreadsheetUpload = () => {
         </div>
         
         <p className="text-xs text-muted-foreground">
-          Required columns: Week, Day, Zone, Erg Description. Optional: Phase, Duration, Distance, Split, Rate, Strength Focus, Exercises, Meals.
+          {fileType === "csv" 
+            ? "CSV columns: Week, Phase, Day, Date, Type, Warmup, Workout, Rest, Breakup, Rates, Cooldown, Notes"
+            : "PDF/PNG files will be stored as-is for viewing and printing"}
         </p>
       </CardContent>
     </Card>

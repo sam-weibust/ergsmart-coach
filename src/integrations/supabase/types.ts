@@ -289,7 +289,10 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string | null
+          diet_goal: string | null
           email: string | null
+          enable_meal_plans: boolean | null
+          enable_strength_training: boolean | null
           experience_level: string | null
           full_name: string | null
           goals: string | null
@@ -302,7 +305,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          diet_goal?: string | null
           email?: string | null
+          enable_meal_plans?: boolean | null
+          enable_strength_training?: boolean | null
           experience_level?: string | null
           full_name?: string | null
           goals?: string | null
@@ -315,7 +321,10 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          diet_goal?: string | null
           email?: string | null
+          enable_meal_plans?: boolean | null
+          enable_strength_training?: boolean | null
           experience_level?: string | null
           full_name?: string | null
           goals?: string | null
