@@ -35,11 +35,21 @@ serve(async (req) => {
       });
     }
 
-    const { weight, goals, trainingLoad } = await req.json();
+    const { weight, goals, trainingLoad, dietGoal } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
+    }
+
+    // Determine calorie adjustment based on diet goal
+    let calorieGuidance = "";
+    if (dietGoal === "cut") {
+      calorieGuidance = "Create a moderate calorie deficit (300-500 cal below maintenance) while keeping protein high to preserve muscle. Focus on lean proteins and vegetables.";
+    } else if (dietGoal === "bulk") {
+      calorieGuidance = "Create a moderate calorie surplus (300-500 cal above maintenance) with emphasis on protein and carbs for muscle growth and training fuel.";
+    } else {
+      calorieGuidance = "Maintain calorie balance for current weight while optimizing macros for athletic performance.";
     }
 
     const systemPrompt = `You are a sports nutrition expert specializing in endurance athletes and rowers.
@@ -70,6 +80,9 @@ Generate a full day meal plan in JSON format:
 - Weight: ${weight}kg
 - Goals: ${goals}
 - Training Load: ${trainingLoad}
+- Diet Goal: ${dietGoal || "maintain"}
+
+${calorieGuidance}
 
 Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals.`;
 
