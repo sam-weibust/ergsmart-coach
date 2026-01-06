@@ -7,25 +7,6 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Loader2, Download, Image, FileText } from "lucide-react";
 
-interface WorkoutDay {
-  day: number;
-  type?: string;
-  warmup?: string;
-  workout?: string;
-  rest?: string;
-  breakup?: string;
-  rates?: string;
-  cooldown?: string;
-  notes?: string;
-}
-
-interface WorkoutWeek {
-  week: number;
-  phase: string;
-  startDate?: string;
-  days: WorkoutDay[];
-}
-
 const parseCSV = (text: string): string[][] => {
   const lines = text.split("\n").filter(line => line.trim());
   return lines.map(line => {
@@ -49,8 +30,34 @@ const parseCSV = (text: string): string[][] => {
   });
 };
 
-const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
-  const weeks: WorkoutWeek[] = [];
+// Convert CSV workout data to match AI-generated plan format
+interface StandardizedDay {
+  day: number;
+  ergWorkout?: {
+    zone: string;
+    description: string;
+    duration?: string;
+    notes?: string;
+  };
+  strengthWorkout?: {
+    focus: string;
+    exercises: Array<{
+      name: string;
+      sets?: number;
+      reps?: number;
+    }>;
+    notes?: string;
+  };
+}
+
+interface StandardizedWeek {
+  week: number;
+  phase: string;
+  days: StandardizedDay[];
+}
+
+const parseWorkoutData = (rows: string[][]): StandardizedWeek[] => {
+  const weeks: StandardizedWeek[] = [];
   const headers = rows[0]?.map(h => h.toLowerCase()) || [];
   
   // Find column indices - support the weekly grid format
@@ -65,9 +72,8 @@ const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
   const ratesIdx = headers.findIndex(h => h.includes("rate"));
   const cooldownIdx = headers.findIndex(h => h.includes("cooldown") || h.includes("cool down"));
   const notesIdx = headers.findIndex(h => h.includes("note"));
-  const dateIdx = headers.findIndex(h => h.includes("date"));
   
-  let currentWeek: WorkoutWeek | null = null;
+  let currentWeek: StandardizedWeek | null = null;
   
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -82,22 +88,49 @@ const parseWorkoutData = (rows: string[][]): WorkoutWeek[] => {
       currentWeek = { 
         week: weekNum, 
         phase, 
-        startDate: row[dateIdx] || undefined,
         days: [] 
       };
     }
     
-    const day: WorkoutDay = {
-      day: dayNum,
-      type: row[typeIdx] || undefined,
-      warmup: row[warmupIdx] || undefined,
-      workout: row[workoutIdx] || undefined,
-      rest: row[restIdx] || undefined,
-      breakup: row[breakupIdx] || undefined,
-      rates: row[ratesIdx] || undefined,
-      cooldown: row[cooldownIdx] || undefined,
-      notes: row[notesIdx] || undefined,
-    };
+    const type = row[typeIdx]?.toUpperCase() || "";
+    const warmup = row[warmupIdx] || "";
+    const workout = row[workoutIdx] || "";
+    const rest = row[restIdx] || "";
+    const breakup = row[breakupIdx] || "";
+    const rates = row[ratesIdx] || "";
+    const cooldown = row[cooldownIdx] || "";
+    const notes = row[notesIdx] || "";
+    
+    // Build description from available fields
+    const workoutParts: string[] = [];
+    if (warmup) workoutParts.push(`Warmup: ${warmup}`);
+    if (workout) workoutParts.push(`Main: ${workout}`);
+    if (rest) workoutParts.push(`Rest: ${rest}`);
+    if (breakup) workoutParts.push(`Breakup: ${breakup}`);
+    if (rates) workoutParts.push(`Rates: ${rates}`);
+    if (cooldown) workoutParts.push(`Cooldown: ${cooldown}`);
+    
+    const description = workoutParts.join(" | ") || workout || "Training day";
+    
+    const day: StandardizedDay = { day: dayNum };
+    
+    // Check if this is a strength/lift day
+    if (type.includes("LIFT") || type.includes("STRENGTH")) {
+      day.strengthWorkout = {
+        focus: "Custom Strength",
+        exercises: workout ? [{ name: workout }] : [],
+        notes: notes || undefined,
+      };
+    } else {
+      // It's an erg/cardio workout
+      const zone = ["UT2", "UT1", "TR", "AT"].includes(type) ? type : "Training";
+      day.ergWorkout = {
+        zone,
+        description,
+        duration: warmup ? `Warmup: ${warmup}` : undefined,
+        notes: notes || undefined,
+      };
+    }
     
     currentWeek.days.push(day);
   }
