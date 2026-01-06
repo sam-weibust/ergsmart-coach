@@ -13,6 +13,9 @@ interface StrengthWorkoutSectionProps {
   fullView?: boolean;
 }
 
+// Convert lbs to kg for storage (database stores in kg)
+const lbsToKg = (lbs: number) => lbs / 2.20462;
+
 const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     exercise: "",
     sets: "",
     reps: "",
-    weight: "",
+    weight: "", // stored as lbs in UI
     notes: "",
   });
 
@@ -53,11 +56,13 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
   };
 
   const selectSuggestion = (suggestion: any) => {
+    // Convert kg recommendation to lbs for display
+    const weightLbs = Math.round(suggestion.recommendedWeight * 2.205);
     setWorkout({
       exercise: suggestion.exercise,
       sets: suggestion.sets.toString(),
       reps: suggestion.reps.toString(),
-      weight: suggestion.recommendedWeight.toString(),
+      weight: weightLbs.toString(),
       notes: suggestion.notes,
     });
     setSuggestions([]);
@@ -68,12 +73,15 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
 
     setLoading(true);
     try {
+      // Convert lbs to kg for storage
+      const weightKg = lbsToKg(parseFloat(workout.weight));
+      
       const { error } = await supabase.from("strength_workouts").insert({
         user_id: profile.id,
         exercise: workout.exercise,
         sets: parseInt(workout.sets),
         reps: parseInt(workout.reps),
-        weight: parseFloat(workout.weight),
+        weight: weightKg,
         notes: workout.notes || null,
       });
 
@@ -143,7 +151,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
                   <div className="text-left">
                     <div className="font-semibold">{sug.exercise}</div>
                     <div className="text-sm text-muted-foreground">
-                      {sug.sets} sets × {sug.reps} reps @ {sug.recommendedWeight}kg
+                      {sug.sets} sets × {sug.reps} reps @ {Math.round(sug.recommendedWeight * 2.205)} lbs
                     </div>
                   </div>
                 </Button>
@@ -186,12 +194,12 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="weight">Weight (kg)</Label>
+            <Label htmlFor="weight">Weight (lbs)</Label>
             <Input
               id="weight"
               type="number"
-              step="2.5"
-              placeholder="100"
+              step="5"
+              placeholder="225"
               value={workout.weight}
               onChange={(e) => setWorkout({ ...workout, weight: e.target.value })}
             />
