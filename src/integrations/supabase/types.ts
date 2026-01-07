@@ -19,12 +19,15 @@ export type Database = {
           avg_heart_rate: number | null
           avg_split: unknown
           calories: number | null
+          cooldown_duration: unknown
           created_at: string | null
           distance: number | null
           duration: unknown
           id: string
           notes: string | null
+          rest_periods: string | null
           user_id: string
+          warmup_duration: unknown
           workout_date: string
           workout_type: string
         }
@@ -32,12 +35,15 @@ export type Database = {
           avg_heart_rate?: number | null
           avg_split?: unknown
           calories?: number | null
+          cooldown_duration?: unknown
           created_at?: string | null
           distance?: number | null
           duration?: unknown
           id?: string
           notes?: string | null
+          rest_periods?: string | null
           user_id: string
+          warmup_duration?: unknown
           workout_date?: string
           workout_type: string
         }
@@ -45,12 +51,15 @@ export type Database = {
           avg_heart_rate?: number | null
           avg_split?: unknown
           calories?: number | null
+          cooldown_duration?: unknown
           created_at?: string | null
           distance?: number | null
           duration?: unknown
           id?: string
           notes?: string | null
+          rest_periods?: string | null
           user_id?: string
+          warmup_duration?: unknown
           workout_date?: string
           workout_type?: string
         }
@@ -312,6 +321,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          allergies: string[] | null
           created_at: string | null
           diet_goal: string | null
           email: string | null
@@ -328,6 +338,7 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          allergies?: string[] | null
           created_at?: string | null
           diet_goal?: string | null
           email?: string | null
@@ -344,6 +355,7 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          allergies?: string[] | null
           created_at?: string | null
           diet_goal?: string | null
           email?: string | null
@@ -398,35 +410,44 @@ export type Database = {
       }
       strength_workouts: {
         Row: {
+          cooldown_notes: string | null
           created_at: string | null
           exercise: string
           id: string
           notes: string | null
           reps: number
+          rest_between_sets: unknown
           sets: number
           user_id: string
+          warmup_notes: string | null
           weight: number
           workout_date: string
         }
         Insert: {
+          cooldown_notes?: string | null
           created_at?: string | null
           exercise: string
           id?: string
           notes?: string | null
           reps: number
+          rest_between_sets?: unknown
           sets: number
           user_id: string
+          warmup_notes?: string | null
           weight: number
           workout_date?: string
         }
         Update: {
+          cooldown_notes?: string | null
           created_at?: string | null
           exercise?: string
           id?: string
           notes?: string | null
           reps?: number
+          rest_between_sets?: unknown
           sets?: number
           user_id?: string
+          warmup_notes?: string | null
           weight?: number
           workout_date?: string
         }

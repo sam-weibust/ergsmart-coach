@@ -38,6 +38,7 @@ export const ProfileSection = () => {
   const [dietGoal, setDietGoal] = useState("maintain");
   const [enableStrengthTraining, setEnableStrengthTraining] = useState(true);
   const [enableMealPlans, setEnableMealPlans] = useState(true);
+  const [allergies, setAllergies] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -76,6 +77,7 @@ export const ProfileSection = () => {
       setDietGoal((profile as any).diet_goal || "maintain");
       setEnableStrengthTraining((profile as any).enable_strength_training !== false);
       setEnableMealPlans((profile as any).enable_meal_plans !== false);
+      setAllergies(((profile as any).allergies || []).join(", "));
     }
   }, [profile]);
 
@@ -104,6 +106,7 @@ export const ProfileSection = () => {
           diet_goal: dietGoal,
           enable_strength_training: enableStrengthTraining,
           enable_meal_plans: enableMealPlans,
+          allergies: allergies ? allergies.split(",").map(a => a.trim()).filter(Boolean) : [],
           updated_at: new Date().toISOString(),
         } as any);
 
@@ -292,23 +295,38 @@ export const ProfileSection = () => {
                 </div>
 
                 {enableMealPlans && (
-                  <div className="space-y-2 pl-4 border-l-2 border-muted">
-                    <Label htmlFor="dietGoal">Diet Goal</Label>
-                    <Select value={dietGoal} onValueChange={setDietGoal}>
-                      <SelectTrigger id="dietGoal">
-                        <SelectValue placeholder="Select goal" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cut">Cut (Lose Fat)</SelectItem>
-                        <SelectItem value="maintain">Maintain</SelectItem>
-                        <SelectItem value="bulk">Bulk (Build Muscle)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {dietGoal === "cut" && "Calorie deficit for fat loss while maintaining performance"}
-                      {dietGoal === "maintain" && "Balanced calories to maintain current weight"}
-                      {dietGoal === "bulk" && "Calorie surplus for muscle and strength gains"}
-                    </p>
+                  <div className="space-y-4 pl-4 border-l-2 border-muted">
+                    <div className="space-y-2">
+                      <Label htmlFor="dietGoal">Diet Goal</Label>
+                      <Select value={dietGoal} onValueChange={setDietGoal}>
+                        <SelectTrigger id="dietGoal">
+                          <SelectValue placeholder="Select goal" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cut">Cut (Lose Fat)</SelectItem>
+                          <SelectItem value="maintain">Maintain</SelectItem>
+                          <SelectItem value="bulk">Bulk (Build Muscle)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {dietGoal === "cut" && "Calorie deficit for fat loss while maintaining performance"}
+                        {dietGoal === "maintain" && "Balanced calories to maintain current weight"}
+                        {dietGoal === "bulk" && "Calorie surplus for muscle and strength gains"}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="allergies">Food Allergies / Restrictions</Label>
+                      <Input
+                        id="allergies"
+                        value={allergies}
+                        onChange={(e) => setAllergies(e.target.value)}
+                        placeholder="e.g., peanuts, shellfish, dairy, gluten"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Separate multiple allergies with commas
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

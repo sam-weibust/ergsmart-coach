@@ -27,6 +27,9 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     reps: "",
     weight: "", // stored as lbs in UI
     notes: "",
+    warmup_notes: "",
+    cooldown_notes: "",
+    rest_between_sets: "",
   });
 
   const getSuggestions = async () => {
@@ -64,6 +67,9 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
       reps: suggestion.reps.toString(),
       weight: weightLbs.toString(),
       notes: suggestion.notes,
+      warmup_notes: "",
+      cooldown_notes: "",
+      rest_between_sets: "",
     });
     setSuggestions([]);
   };
@@ -83,7 +89,10 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
         reps: parseInt(workout.reps),
         weight: weightKg,
         notes: workout.notes || null,
-      });
+        warmup_notes: workout.warmup_notes || null,
+        cooldown_notes: workout.cooldown_notes || null,
+        rest_between_sets: workout.rest_between_sets || null,
+      } as any);
 
       if (error) throw error;
 
@@ -98,6 +107,9 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
         reps: "",
         weight: "",
         notes: "",
+        warmup_notes: "",
+        cooldown_notes: "",
+        rest_between_sets: "",
       });
     } catch (error) {
       console.error("Error saving workout:", error);
@@ -203,6 +215,41 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
               value={workout.weight}
               onChange={(e) => setWorkout({ ...workout, weight: e.target.value })}
             />
+          </div>
+        </div>
+
+        <div className="border-t pt-4 mt-4">
+          <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="warmup_notes">Warmup</Label>
+              <Input
+                id="warmup_notes"
+                placeholder="e.g., 5 min row, dynamic stretching"
+                value={workout.warmup_notes}
+                onChange={(e) => setWorkout({ ...workout, warmup_notes: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cooldown_notes">Cooldown</Label>
+              <Input
+                id="cooldown_notes"
+                placeholder="e.g., 5 min walk, static stretching"
+                value={workout.cooldown_notes}
+                onChange={(e) => setWorkout({ ...workout, cooldown_notes: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rest_between_sets">Rest Between Sets</Label>
+              <Input
+                id="rest_between_sets"
+                placeholder="e.g., 2:00"
+                value={workout.rest_between_sets}
+                onChange={(e) => setWorkout({ ...workout, rest_between_sets: e.target.value })}
+              />
+            </div>
           </div>
         </div>
 
