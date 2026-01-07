@@ -91,11 +91,29 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
   const addMember = useMutation({
     mutationFn: async ({ teamId, email }: { teamId: string; email: string }) => {
-      const { data: userProfile } = await supabase
+      // Sanitize input to prevent injection
+      const sanitizedEmail = email.trim().replace(/['"`,()]/g, '');
+      
+      // Use separate queries instead of .or() with string concatenation
+      let userProfile = null;
+      
+      const { data: byEmail } = await supabase
         .from("profiles")
         .select("id")
-        .or(`email.eq.${email},username.ilike.${email}`)
+        .eq("email", sanitizedEmail)
         .single();
+      
+      userProfile = byEmail;
+      
+      if (!userProfile) {
+        const { data: byUsername } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("username", sanitizedEmail)
+          .single();
+        
+        userProfile = byUsername;
+      }
 
       if (!userProfile) throw new Error("User not found");
 

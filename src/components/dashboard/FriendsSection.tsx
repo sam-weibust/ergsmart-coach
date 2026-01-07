@@ -105,14 +105,29 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     if (!searchTerm || !profile) return;
 
     try {
-      const { data: friendProfiles } = await supabase
+      // Sanitize input to prevent injection
+      const sanitizedSearch = searchTerm.trim().replace(/['"`,()]/g, '');
+      
+      // Use separate queries instead of .or() with string concatenation
+      const { data: byEmail } = await supabase
         .from("profiles")
         .select("id, email, username")
-        .or(`email.eq.${searchTerm},username.ilike.${searchTerm}`)
+        .eq("email", sanitizedSearch)
         .neq("id", profile.id)
         .limit(1);
 
-      const friendProfile = friendProfiles?.[0];
+      let friendProfile = byEmail?.[0];
+      
+      if (!friendProfile) {
+        const { data: byUsername } = await supabase
+          .from("profiles")
+          .select("id, email, username")
+          .ilike("username", sanitizedSearch)
+          .neq("id", profile.id)
+          .limit(1);
+        
+        friendProfile = byUsername?.[0];
+      }
 
       if (!friendProfile) {
         toast({
