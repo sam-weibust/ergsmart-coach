@@ -742,14 +742,6 @@ export type Database = {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean
       }
-      search_users: {
-        Args: { search_query: string }
-        Returns: {
-          full_name: string
-          id: string
-          username: string
-        }[]
-      }
     }
     Enums: {
       app_role: "user" | "coach" | "admin"
