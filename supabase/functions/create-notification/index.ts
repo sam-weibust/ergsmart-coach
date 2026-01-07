@@ -55,10 +55,27 @@ serve(async (req) => {
 
     const { user_id, type, title, body, data }: NotificationRequest = await req.json();
 
-    // Input validation
-    if (!user_id || !type || !title || !body) {
+    // UUID format validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!user_id || !uuidRegex.test(user_id)) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: user_id, type, title, body" }),
+        JSON.stringify({ error: "Invalid or missing user_id format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Input validation
+    if (!type || !title || !body) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: type, title, body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const validTypes = ["workout_reminder", "friend_request", "message", "plan_shared"];
+    if (!validTypes.includes(type)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid notification type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
