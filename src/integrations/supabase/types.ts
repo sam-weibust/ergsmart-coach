@@ -64,6 +64,30 @@ export type Database = {
           },
         ]
       }
+      friend_invites: {
+        Row: {
+          created_at: string
+          id: string
+          invitee_email: string
+          inviter_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invitee_email: string
+          inviter_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invitee_email?: string
+          inviter_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       friend_messages: {
         Row: {
           content: string
@@ -741,6 +765,14 @@ export type Database = {
       is_team_member: {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean
+      }
+      search_users_for_friend_request: {
+        Args: { current_user_id: string; search_term: string }
+        Returns: {
+          email: string
+          id: string
+          username: string
+        }[]
       }
     }
     Enums: {
