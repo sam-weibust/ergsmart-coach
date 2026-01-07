@@ -30,13 +30,21 @@ export const MessageBoard = ({ teamId, friendId, currentUserId, title }: Message
           .eq("team_id", teamId)
           .order("created_at", { ascending: true });
         return data || [];
-      } else if (friendId) {
+      } else if (friendId && currentUserId) {
+        // Use filter builder methods instead of string concatenation
+        // Fetch messages where current user is sender or receiver with the friend
         const { data } = await supabase
           .from("friend_messages")
           .select("*, sender:profiles!friend_messages_sender_id_fkey(full_name, username)")
-          .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUserId})`)
+          .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
           .order("created_at", { ascending: true });
-        return data || [];
+        
+        // Filter client-side for messages between these two specific users
+        const filtered = data?.filter((msg: any) => 
+          (msg.sender_id === currentUserId && msg.receiver_id === friendId) ||
+          (msg.sender_id === friendId && msg.receiver_id === currentUserId)
+        );
+        return filtered || [];
       }
       return [];
     },
