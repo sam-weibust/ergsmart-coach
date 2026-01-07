@@ -21,16 +21,80 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Verify JWT authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("Missing or invalid authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify the token using anon key client
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error("JWT verification failed:", claimsError);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const callerUserId = claimsData.claims.sub;
+    console.log(`Authenticated user: ${callerUserId}`);
 
     const { user_id, type, title, body, data }: NotificationRequest = await req.json();
+
+    // Input validation
+    if (!user_id || !type || !title || !body) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: user_id, type, title, body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (title.length > 100 || body.length > 500) {
+      return new Response(
+        JSON.stringify({ error: "Title max 100 chars, body max 500 chars" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Authorization: users can only notify themselves or their friends
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    
+    if (callerUserId !== user_id) {
+      // Check if they are friends
+      const { data: friendship, error: friendError } = await serviceClient
+        .from("friendships")
+        .select("id")
+        .eq("status", "accepted")
+        .or(`and(user_id.eq.${callerUserId},friend_id.eq.${user_id}),and(user_id.eq.${user_id},friend_id.eq.${callerUserId})`)
+        .maybeSingle();
+
+      if (friendError || !friendship) {
+        console.error("Authorization failed - not friends:", friendError);
+        return new Response(
+          JSON.stringify({ error: "You can only send notifications to yourself or friends" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     console.log(`Creating notification for user ${user_id}: ${type} - ${title}`);
 
     // Check if user has notifications enabled
-    const { data: subscription } = await supabase
+    const { data: subscription } = await serviceClient
       .from("push_subscriptions")
       .select("*")
       .eq("user_id", user_id)
@@ -44,8 +108,8 @@ serve(async (req) => {
       );
     }
 
-    // Insert notification
-    const { error } = await supabase.from("notifications").insert({
+    // Insert notification using service client
+    const { error } = await serviceClient.from("notifications").insert({
       user_id,
       type,
       title,
