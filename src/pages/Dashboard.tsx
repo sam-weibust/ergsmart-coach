@@ -12,6 +12,7 @@ import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
 const Dashboard = () => {
@@ -75,6 +76,7 @@ const Dashboard = () => {
             <span className="font-semibold text-lg hidden sm:inline">CrewSync</span>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <NotificationBell />
             <Button onClick={handleLogout} variant="outline" size="sm">
               <LogOut className="h-4 w-4 sm:mr-2" />

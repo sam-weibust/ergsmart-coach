@@ -113,27 +113,54 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
         ) : (
           <div className="space-y-4">
             {mealPlan.meals.map((meal: any, idx: number) => (
-              <div key={idx} className="p-4 border rounded-lg space-y-2">
-                <h3 className="font-semibold text-lg">{meal.meal_type}</h3>
-                <p className="text-sm text-muted-foreground">{meal.timing}</p>
-                <p>{meal.description}</p>
-                <div className="flex gap-4 text-sm text-muted-foreground">
-                  <span>{meal.calories} cal</span>
-                  <span>P: {meal.protein}g</span>
-                  <span>C: {meal.carbs}g</span>
-                  <span>F: {meal.fats}g</span>
+              <div key={idx} className="p-4 border rounded-lg space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold text-lg">{meal.meal_type}</h3>
+                    <p className="text-sm text-muted-foreground">{meal.timing}</p>
+                  </div>
+                  <span className="text-sm font-medium bg-primary/10 text-primary px-2 py-1 rounded">
+                    {meal.calories} cal
+                  </span>
+                </div>
+                <p className="text-sm">{meal.description}</p>
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+                  <div className="text-center p-2 bg-muted rounded">
+                    <div className="text-lg font-bold text-primary">{meal.protein}g</div>
+                    <div className="text-xs text-muted-foreground">Protein</div>
+                  </div>
+                  <div className="text-center p-2 bg-muted rounded">
+                    <div className="text-lg font-bold text-secondary">{meal.carbs}g</div>
+                    <div className="text-xs text-muted-foreground">Carbs</div>
+                  </div>
+                  <div className="text-center p-2 bg-muted rounded">
+                    <div className="text-lg font-bold text-accent">{meal.fats}g</div>
+                    <div className="text-xs text-muted-foreground">Fats</div>
+                  </div>
                 </div>
               </div>
             ))}
 
             {mealPlan.dailyTotals && (
-              <div className="p-4 bg-primary/10 rounded-lg">
-                <h3 className="font-semibold mb-2">Daily Totals</h3>
-                <div className="flex gap-4 text-sm">
-                  <span>{mealPlan.dailyTotals.calories} cal</span>
-                  <span>P: {mealPlan.dailyTotals.protein}g</span>
-                  <span>C: {mealPlan.dailyTotals.carbs}g</span>
-                  <span>F: {mealPlan.dailyTotals.fats}g</span>
+              <div className="p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border">
+                <h3 className="font-semibold mb-3">Daily Totals</h3>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="p-2 bg-background rounded">
+                    <div className="text-xl font-bold">{mealPlan.dailyTotals.calories}</div>
+                    <div className="text-xs text-muted-foreground">Calories</div>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <div className="text-xl font-bold text-primary">{mealPlan.dailyTotals.protein}g</div>
+                    <div className="text-xs text-muted-foreground">Protein</div>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <div className="text-xl font-bold text-secondary">{mealPlan.dailyTotals.carbs}g</div>
+                    <div className="text-xs text-muted-foreground">Carbs</div>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <div className="text-xl font-bold text-accent">{mealPlan.dailyTotals.fats}g</div>
+                    <div className="text-xs text-muted-foreground">Fats</div>
+                  </div>
                 </div>
               </div>
             )}
