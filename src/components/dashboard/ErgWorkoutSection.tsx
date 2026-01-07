@@ -25,6 +25,9 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
     avg_heart_rate: "",
     calories: "",
     notes: "",
+    warmup_duration: "",
+    cooldown_duration: "",
+    rest_periods: "",
   });
 
   const handleSave = async () => {
@@ -41,7 +44,10 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
         avg_heart_rate: workout.avg_heart_rate ? parseInt(workout.avg_heart_rate) : null,
         calories: workout.calories ? parseInt(workout.calories) : null,
         notes: workout.notes || null,
-      });
+        warmup_duration: workout.warmup_duration || null,
+        cooldown_duration: workout.cooldown_duration || null,
+        rest_periods: workout.rest_periods || null,
+      } as any);
 
       if (error) throw error;
 
@@ -58,6 +64,9 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
         avg_heart_rate: "",
         calories: "",
         notes: "",
+        warmup_duration: "",
+        cooldown_duration: "",
+        rest_periods: "",
       });
     } catch (error) {
       console.error("Error saving workout:", error);
@@ -150,6 +159,41 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
               value={workout.calories}
               onChange={(e) => setWorkout({ ...workout, calories: e.target.value })}
             />
+          </div>
+        </div>
+
+        <div className="border-t pt-4 mt-4">
+          <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="warmup_duration">Warmup (MM:SS)</Label>
+              <Input
+                id="warmup_duration"
+                placeholder="10:00"
+                value={workout.warmup_duration}
+                onChange={(e) => setWorkout({ ...workout, warmup_duration: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cooldown_duration">Cooldown (MM:SS)</Label>
+              <Input
+                id="cooldown_duration"
+                placeholder="5:00"
+                value={workout.cooldown_duration}
+                onChange={(e) => setWorkout({ ...workout, cooldown_duration: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rest_periods">Rest Periods</Label>
+              <Input
+                id="rest_periods"
+                placeholder="e.g., 2:00 between sets"
+                value={workout.rest_periods}
+                onChange={(e) => setWorkout({ ...workout, rest_periods: e.target.value })}
+              />
+            </div>
           </div>
         </div>
 
