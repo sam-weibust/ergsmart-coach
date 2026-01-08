@@ -321,6 +321,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age: number | null
           allergies: string[] | null
           created_at: string | null
           diet_goal: string | null
@@ -330,6 +331,7 @@ export type Database = {
           experience_level: string | null
           full_name: string | null
           goals: string | null
+          health_issues: string[] | null
           height: number | null
           id: string
           updated_at: string | null
@@ -338,6 +340,7 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          age?: number | null
           allergies?: string[] | null
           created_at?: string | null
           diet_goal?: string | null
@@ -347,6 +350,7 @@ export type Database = {
           experience_level?: string | null
           full_name?: string | null
           goals?: string | null
+          health_issues?: string[] | null
           height?: number | null
           id: string
           updated_at?: string | null
@@ -355,6 +359,7 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          age?: number | null
           allergies?: string[] | null
           created_at?: string | null
           diet_goal?: string | null
@@ -364,6 +369,7 @@ export type Database = {
           experience_level?: string | null
           full_name?: string | null
           goals?: string | null
+          health_issues?: string[] | null
           height?: number | null
           id?: string
           updated_at?: string | null

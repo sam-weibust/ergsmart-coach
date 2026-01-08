@@ -152,6 +152,8 @@ export const WorkoutPlanSection = () => {
           experience: profile.experience_level || "intermediate",
           goals: profile.goals || "general fitness",
           current2k: userGoals?.current_2k_time || null,
+          age: (profile as any).age || null,
+          healthIssues: (profile as any).health_issues || [],
         },
       });
 
@@ -415,6 +417,21 @@ export const WorkoutPlanSection = () => {
                                                 {day.ergWorkout.targetSplit && ` • Target: ${day.ergWorkout.targetSplit}`}
                                                 {day.ergWorkout.rate && ` • ${day.ergWorkout.rate}`}
                                               </div>
+                                              {day.ergWorkout.warmup && (
+                                                <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                                  🔥 Warmup: {day.ergWorkout.warmup}
+                                                </div>
+                                              )}
+                                              {day.ergWorkout.restPeriods && (
+                                                <div className="text-xs text-yellow-600 dark:text-yellow-400">
+                                                  ⏱ Rest: {day.ergWorkout.restPeriods}
+                                                </div>
+                                              )}
+                                              {day.ergWorkout.cooldown && (
+                                                <div className="text-xs text-blue-600 dark:text-blue-400">
+                                                  ❄️ Cooldown: {day.ergWorkout.cooldown}
+                                                </div>
+                                              )}
                                               {day.ergWorkout.notes && (
                                                 <div className="text-xs text-muted-foreground italic mt-1">
                                                   {day.ergWorkout.notes}
@@ -431,6 +448,11 @@ export const WorkoutPlanSection = () => {
                                               <Dumbbell className="h-4 w-4 text-primary" />
                                               <span className="font-medium">Strength: {day.strengthWorkout.focus || "Full Body"}</span>
                                             </div>
+                                            {day.strengthWorkout.warmupNotes && (
+                                              <div className="text-xs text-green-600 dark:text-green-400 mb-1">
+                                                🔥 Warmup: {day.strengthWorkout.warmupNotes}
+                                              </div>
+                                            )}
                                             {Array.isArray(day.strengthWorkout.exercises) && day.strengthWorkout.exercises.length > 0 ? (
                                               <div className="grid gap-1 text-sm">
                                                 {day.strengthWorkout.exercises.map((ex: any, idx: number) => (
@@ -439,7 +461,7 @@ export const WorkoutPlanSection = () => {
                                                     <span className="text-muted-foreground">
                                                       {ex?.sets ?? 0}x{ex?.reps ?? 0}
                                                       {ex?.weight && ` @ ${ex.weight}`}
-                                                      {ex?.notes && ` (${ex.notes})`}
+                                                      {ex?.restBetweenSets && ` (${ex.restBetweenSets} rest)`}
                                                     </span>
                                                   </div>
                                                 ))}
@@ -451,6 +473,32 @@ export const WorkoutPlanSection = () => {
                                               </span>
                                             ) : (
                                               <span className="text-sm text-muted-foreground">No exercises listed</span>
+                                            )}
+                                            {day.strengthWorkout.cooldownNotes && (
+                                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                                ❄️ Cooldown: {day.strengthWorkout.cooldownNotes}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Yoga/Rest Day */}
+                                        {day?.yogaSession && (
+                                          <div className="border-l-2 border-purple-500/30 pl-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-purple-600">🧘</span>
+                                              <span className="font-medium">Rest Day - Yoga/Recovery</span>
+                                              {day.yogaSession.duration && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                  {day.yogaSession.duration}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {day.yogaSession.focus && (
+                                              <div className="text-sm"><span className="font-medium">Focus:</span> {day.yogaSession.focus}</div>
+                                            )}
+                                            {day.yogaSession.poses && (
+                                              <div className="text-sm text-muted-foreground">{day.yogaSession.poses}</div>
                                             )}
                                           </div>
                                         )}
