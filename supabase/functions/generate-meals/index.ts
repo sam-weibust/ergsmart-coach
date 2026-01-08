@@ -35,11 +35,17 @@ serve(async (req) => {
       });
     }
 
-    const { weight, goals, trainingLoad, dietGoal } = await req.json();
+    const { weight, goals, trainingLoad, dietGoal, allergies } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
+    }
+
+    // Build allergy guidance
+    let allergyGuidance = "";
+    if (allergies && allergies.length > 0) {
+      allergyGuidance = `CRITICAL: User has these food allergies/restrictions: ${allergies.join(", ")}. DO NOT include any foods containing these allergens. Suggest safe alternatives.`;
     }
 
     // Determine calorie adjustment based on diet goal
@@ -83,6 +89,7 @@ Generate a full day meal plan in JSON format:
 - Diet Goal: ${dietGoal || "maintain"}
 
 ${calorieGuidance}
+${allergyGuidance}
 
 Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals.`;
 

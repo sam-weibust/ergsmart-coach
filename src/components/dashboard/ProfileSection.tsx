@@ -39,6 +39,8 @@ export const ProfileSection = () => {
   const [enableStrengthTraining, setEnableStrengthTraining] = useState(true);
   const [enableMealPlans, setEnableMealPlans] = useState(true);
   const [allergies, setAllergies] = useState("");
+  const [age, setAge] = useState("");
+  const [healthIssues, setHealthIssues] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -59,11 +61,9 @@ export const ProfileSection = () => {
 
   useEffect(() => {
     if (profile) {
-      // Convert stored kg to display lbs
       if (profile.weight) {
         setWeightLbs(kgToLbs(profile.weight).toString());
       }
-      // Convert stored cm to display feet/inches
       if (profile.height) {
         const { feet, inches } = cmToFeetInches(profile.height);
         setHeightFeet(feet.toString());
@@ -78,6 +78,8 @@ export const ProfileSection = () => {
       setEnableStrengthTraining((profile as any).enable_strength_training !== false);
       setEnableMealPlans((profile as any).enable_meal_plans !== false);
       setAllergies(((profile as any).allergies || []).join(", "));
+      setAge(((profile as any).age || "").toString());
+      setHealthIssues(((profile as any).health_issues || []).join(", "));
     }
   }, [profile]);
 
@@ -86,7 +88,6 @@ export const ProfileSection = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Convert imperial input to metric for storage
       const weightKg = weightLbs ? lbsToKg(parseFloat(weightLbs)) : null;
       const heightCm = heightFeet || heightInches 
         ? feetInchesToCm(parseFloat(heightFeet) || 0, parseFloat(heightInches) || 0) 
@@ -107,6 +108,8 @@ export const ProfileSection = () => {
           enable_strength_training: enableStrengthTraining,
           enable_meal_plans: enableMealPlans,
           allergies: allergies ? allergies.split(",").map(a => a.trim()).filter(Boolean) : [],
+          age: age ? parseInt(age) : null,
+          health_issues: healthIssues ? healthIssues.split(",").map(h => h.trim()).filter(Boolean) : [],
           updated_at: new Date().toISOString(),
         } as any);
 
@@ -253,6 +256,32 @@ export const ProfileSection = () => {
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="age">Age</Label>
+                <Input
+                  id="age"
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  placeholder="25"
+                  min="10"
+                  max="120"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="healthIssues">Health Issues / Injuries</Label>
+              <Input
+                id="healthIssues"
+                value={healthIssues}
+                onChange={(e) => setHealthIssues(e.target.value)}
+                placeholder="e.g., bad knees, lower back pain, shoulder injury"
+              />
+              <p className="text-xs text-muted-foreground">
+                Separate multiple issues with commas. This helps adjust workouts for safety.
+              </p>
             </div>
 
             <div className="space-y-2">

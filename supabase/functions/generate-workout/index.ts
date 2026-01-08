@@ -40,11 +40,24 @@ serve(async (req) => {
 
     console.log("Authenticated user:", user.id);
 
-    const { months, weight, height, experience, goals, current2k } = await req.json();
+    const { months, weight, height, experience, goals, current2k, age, healthIssues } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
+    }
+
+    // Build health/age guidance
+    let healthGuidance = "";
+    if (age) {
+      if (age >= 50) {
+        healthGuidance += "Consider age-appropriate modifications: longer warmups, more recovery time, reduced intensity on high-impact exercises. ";
+      } else if (age >= 40) {
+        healthGuidance += "Include adequate warmup and cooldown periods, focus on mobility work. ";
+      }
+    }
+    if (healthIssues && healthIssues.length > 0) {
+      healthGuidance += `IMPORTANT: Athlete has these health conditions/injuries: ${healthIssues.join(", ")}. Provide safe alternative exercises and modifications. Avoid exercises that aggravate these conditions. `;
     }
 
     const weeksToGenerate = months * 4;
@@ -95,12 +108,16 @@ CRITICAL PROGRESSIVE SPEED TRAINING:
 Training zones: UT2 (easy endurance, 18-20spm), UT1 (moderate, 20-24spm), TR (threshold, 24-28spm), AT (high intensity intervals, 28-32spm).
 ${splitGuidance}
 ${progressionGuidance}
+${healthGuidance}
 
 Split format: "2:05/500m" style.
 
-IMPORTANT: Splits must get progressively FASTER each week to build speed for 2K improvement.
+IMPORTANT: 
+- Splits must get progressively FASTER each week to build speed for 2K improvement.
+- EACH workout MUST include a warmup section, cooldown section, and rest periods between intervals.
+- Day 7 is a REST DAY with yoga/stretching/mobility only (no erg or strength work).
 
-Strength exercises: Include FULL strength workouts with 4-6 exercises per day using common English names.
+Strength exercises: Include FULL strength workouts with 4-6 exercises per day using common English names. Each strength workout MUST include warmup notes and cooldown notes.
 
 Meal plans: Include a full day's nutrition for each training day with breakfast, lunch, dinner, and snacks.`;
 
@@ -109,23 +126,30 @@ Meal plans: Include a full day's nutrition for each training day with breakfast,
 - Experience: ${experience}
 - Goals: ${goals}
 ${current2k ? `- Current 2K time: ${current2k}` : ""}
+${age ? `- Age: ${age} years old` : ""}
+${healthIssues && healthIssues.length > 0 ? `- Health Issues/Injuries: ${healthIssues.join(", ")}` : ""}
 
 CRITICAL REQUIREMENTS:
 1. ALL text MUST be in English. Format splits as "2:05/500m".
 2. PROGRESSIVE SPLITS: Each week's erg workout splits must be FASTER than the previous week.
-3. FULL STRENGTH WORKOUTS: Each day needs 4-6 exercises.
+3. FULL STRENGTH WORKOUTS: Each training day needs 4-6 exercises with warmup and cooldown notes.
 4. MEAL PLANS: Include breakfast, lunch, dinner, and snacks.
 5. PERIODIZATION: Include base, build, peak, and taper phases.
-6. EVERY WEEK MUST HAVE EXACTLY 6 TRAINING DAYS (day 1 through day 6). This is mandatory.
+6. EVERY WEEK MUST HAVE EXACTLY 7 DAYS (day 1 through day 7). Day 7 is REST DAY with yoga.
+7. WARMUP/COOLDOWN/REST: Every erg workout MUST include warmup duration, cooldown duration, and rest periods between intervals.
 
-STRUCTURE: Each week MUST contain an array of 6 day objects (day: 1, day: 2, day: 3, day: 4, day: 5, day: 6).
+STRUCTURE: Each week MUST contain an array of 7 day objects (day 1-6 training, day 7 yoga/rest).
 
-Each of the 6 training days per week needs:
-- 1 erg workout (with progressively faster splits)
-- 1 FULL strength workout (4-6 exercises)
+Days 1-6 (Training days) each need:
+- 1 erg workout (with warmup, cooldown, rest periods, and progressively faster splits)
+- 1 FULL strength workout (4-6 exercises with warmup/cooldown notes)
 - 1 complete meal plan
 
-Generate ALL 6 days for EVERY week. Do not skip any days.`;
+Day 7 (Rest day) needs:
+- yogaSession: object with duration, focus area, and poses/stretches
+- mealPlan: lighter recovery-focused nutrition
+
+Generate ALL 7 days for EVERY week. Do not skip any days.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -168,13 +192,18 @@ Generate ALL 6 days for EVERY week. Do not skip any days.`;
                                 duration: { type: "string" },
                                 targetSplit: { type: "string" },
                                 rate: { type: "string" },
+                                warmup: { type: "string", description: "Warmup duration and description e.g. '10 min easy rowing + dynamic stretches'" },
+                                cooldown: { type: "string", description: "Cooldown duration and description e.g. '5 min easy rowing + static stretches'" },
+                                restPeriods: { type: "string", description: "Rest between intervals e.g. '2 min rest between pieces'" },
                                 notes: { type: "string" }
                               },
-                              required: ["zone", "description", "duration", "rate", "targetSplit"]
+                              required: ["zone", "description", "duration", "rate", "targetSplit", "warmup", "cooldown"]
                             },
                             strengthWorkout: {
                               type: "object",
                               properties: {
+                                warmupNotes: { type: "string", description: "Warmup description e.g. '5 min cardio + arm circles + leg swings'" },
+                                cooldownNotes: { type: "string", description: "Cooldown description e.g. '10 min full body stretching'" },
                                 exercises: {
                                   type: "array",
                                   items: {
@@ -184,14 +213,24 @@ Generate ALL 6 days for EVERY week. Do not skip any days.`;
                                       sets: { type: "number" },
                                       reps: { type: "number" },
                                       weight: { type: "string" },
+                                      restBetweenSets: { type: "string", description: "Rest between sets e.g. '60-90 seconds'" },
                                       notes: { type: "string" }
                                     },
-                                    required: ["exercise", "sets", "reps"]
+                                    required: ["exercise", "sets", "reps", "restBetweenSets"]
                                   }
                                 },
                                 focus: { type: "string" }
                               },
-                              required: ["exercises", "focus"]
+                              required: ["exercises", "focus", "warmupNotes", "cooldownNotes"]
+                            },
+                            yogaSession: {
+                              type: "object",
+                              description: "For rest days (Day 7) only",
+                              properties: {
+                                duration: { type: "string" },
+                                focus: { type: "string" },
+                                poses: { type: "string" }
+                              }
                             },
                             mealPlan: {
                               type: "object",
