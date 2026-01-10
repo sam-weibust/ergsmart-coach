@@ -7,6 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Users, UserPlus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Leaderboard } from "./Leaderboard";
 import { TeamGoals } from "./TeamGoals";
 import { MessageBoard } from "./MessageBoard";
@@ -91,30 +102,18 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
   const addMember = useMutation({
     mutationFn: async ({ teamId, email }: { teamId: string; email: string }) => {
-      // Sanitize input to prevent injection
-      const sanitizedEmail = email.trim().replace(/['"`,()]/g, '');
+      const sanitizedSearch = email.trim();
       
-      // Use separate queries instead of .or() with string concatenation
-      let userProfile = null;
-      
-      const { data: byEmail } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", sanitizedEmail)
-        .single();
-      
-      userProfile = byEmail;
-      
-      if (!userProfile) {
-        const { data: byUsername } = await supabase
-          .from("profiles")
-          .select("id")
-          .ilike("username", sanitizedEmail)
-          .single();
-        
-        userProfile = byUsername;
-      }
+      // Use the security definer function that bypasses RLS to find users
+      const { data: searchResults, error: searchError } = await supabase
+        .rpc("search_users_for_friend_request", {
+          current_user_id: profile.id,
+          search_term: sanitizedSearch,
+        });
 
+      if (searchError) throw searchError;
+
+      const userProfile = searchResults?.[0];
       if (!userProfile) throw new Error("User not found");
 
       const { error } = await supabase.from("team_members").insert({
@@ -122,7 +121,12 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
         user_id: userProfile.id,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          throw new Error("User is already a member of this team");
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       toast({ title: "Member added!" });
@@ -254,14 +258,31 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                               </p>
                               <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
                             </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => removeMember.mutate(member.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8"
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to remove {member.profile?.full_name || member.profile?.username || "this member"} from the team?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => removeMember.mutate(member.id)}>
+                                    Remove
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         ))}
                       </div>
@@ -280,14 +301,34 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     title={`${team.name} Chat`}
                   />
 
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => deleteTeam.mutate(team.id)}
-                    className="w-full md:w-auto"
-                  >
-                    Delete Team
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full md:w-auto"
+                      >
+                        Delete Team
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Team</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete "{team.name}"? This will remove all members and cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => deleteTeam.mutate(team.id)}
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardContent>
               )}
             </Card>
