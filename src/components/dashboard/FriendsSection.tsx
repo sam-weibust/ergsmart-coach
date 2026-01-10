@@ -105,29 +105,21 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     if (!searchTerm || !profile) return;
 
     try {
-      // Sanitize input to prevent injection
-      const sanitizedSearch = searchTerm.trim().replace(/['"`,()]/g, '');
+      const sanitizedSearch = searchTerm.trim();
       
-      // Use separate queries instead of .or() with string concatenation
-      const { data: byEmail } = await supabase
-        .from("profiles")
-        .select("id, email, username")
-        .eq("email", sanitizedSearch)
-        .neq("id", profile.id)
-        .limit(1);
+      // Use the security definer function that bypasses RLS to find users
+      const { data: searchResults, error: searchError } = await supabase
+        .rpc("search_users_for_friend_request", {
+          current_user_id: profile.id,
+          search_term: sanitizedSearch,
+        });
 
-      let friendProfile = byEmail?.[0];
-      
-      if (!friendProfile) {
-        const { data: byUsername } = await supabase
-          .from("profiles")
-          .select("id, email, username")
-          .ilike("username", sanitizedSearch)
-          .neq("id", profile.id)
-          .limit(1);
-        
-        friendProfile = byUsername?.[0];
+      if (searchError) {
+        console.error("Search error:", searchError);
+        throw searchError;
       }
+
+      const friendProfile = searchResults?.[0];
 
       if (!friendProfile) {
         toast({
