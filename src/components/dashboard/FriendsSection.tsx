@@ -5,7 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Check, X, Users, Eye, Clock } from "lucide-react";
+import { UserPlus, Check, X, Users, Eye, Clock, UserMinus, Ban } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -187,6 +198,66 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     }
   };
 
+  const removeFriend = async (friendshipId: string, friendName: string) => {
+    try {
+      const { error } = await supabase
+        .from("friendships")
+        .delete()
+        .eq("id", friendshipId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Friend removed",
+        description: `${friendName || "User"} has been removed from your friends.`,
+      });
+
+      fetchFriendships();
+    } catch (error) {
+      console.error("Error removing friend:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove friend. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const blockUser = async (friendshipId: string, friendId: string, friendName: string) => {
+    try {
+      // Delete any existing friendship first
+      await supabase
+        .from("friendships")
+        .delete()
+        .eq("id", friendshipId);
+
+      // Create a blocked entry (user blocking the friend)
+      const { error } = await supabase
+        .from("friendships")
+        .insert({
+          user_id: profile.id,
+          friend_id: friendId,
+          status: "blocked",
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "User blocked",
+        description: `${friendName || "User"} has been blocked.`,
+      });
+
+      fetchFriendships();
+    } catch (error) {
+      console.error("Error blocking user:", error);
+      toast({
+        title: "Error",
+        description: "Failed to block user. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatTime = (interval: any) => {
     if (!interval) return null;
     if (typeof interval === "string") return interval;
@@ -274,7 +345,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                 return (
                   <AccordionItem key={friendship.id} value={friendship.id}>
                     <AccordionTrigger>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-1">
                         <span className="font-semibold">{friendship.friend.full_name || friendship.friend.username || "User"}</span>
                         {goals?.current_2k_time && (
                           <Badge variant="outline" className="text-xs flex items-center gap-1">
@@ -285,7 +356,61 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">{friendship.friend.email}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">{friendship.friend.email}</p>
+                        <div className="flex gap-2">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                                <UserMinus className="h-4 w-4 mr-1" />
+                                Remove
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove Friend</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to remove {friendship.friend.full_name || friendship.friend.username || "this user"} from your friends? You can add them again later.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => removeFriend(friendship.id, friendship.friend.full_name || friendship.friend.username)}
+                                >
+                                  Remove
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm">
+                                <Ban className="h-4 w-4 mr-1" />
+                                Block
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Block User</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to block {friendship.friend.full_name || friendship.friend.username || "this user"}? They won't be able to send you friend requests.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => blockUser(friendship.id, friendship.friend.id, friendship.friend.full_name || friendship.friend.username)}
+                                >
+                                  Block
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
                       
                       {/* Performance Comparison */}
                       {goals && (
