@@ -21,17 +21,31 @@ const Dashboard = () => {
 
   useEffect(() => {
     checkUser();
-  }, []);
+    
+    // Listen for auth state changes (including session expiry)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        navigate("/auth");
+        return;
+      }
 
-    setLoading(false);
+      setLoading(false);
+    } catch (error) {
+      console.error("Auth error:", error);
+      navigate("/auth");
+    }
   };
 
   const { data: profile } = useQuery({
