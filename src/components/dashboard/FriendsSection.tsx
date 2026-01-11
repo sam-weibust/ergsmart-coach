@@ -149,6 +149,21 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
       if (error) throw error;
 
+      // Send email notification
+      try {
+        await supabase.functions.invoke("send-notification-email", {
+          body: {
+            type: "friend_request",
+            recipientEmail: friendProfile.email,
+            recipientName: friendProfile.username,
+            senderName: profile.full_name || profile.username || profile.email,
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to send email notification:", emailError);
+        // Don't fail the whole request if email fails
+      }
+
       toast({
         title: "Request sent!",
         description: "Friend request has been sent.",
@@ -165,13 +180,29 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     }
   };
 
-  const handleRequest = async (id: string, accept: boolean) => {
+  const handleRequest = async (id: string, accept: boolean, requester?: any) => {
     try {
       if (accept) {
         await supabase
           .from("friendships")
           .update({ status: "accepted" })
           .eq("id", id);
+
+        // Send email notification to the person who sent the request
+        if (requester?.email) {
+          try {
+            await supabase.functions.invoke("send-notification-email", {
+              body: {
+                type: "friend_accepted",
+                recipientEmail: requester.email,
+                recipientName: requester.full_name,
+                senderName: profile.full_name || profile.username || profile.email,
+              },
+            });
+          } catch (emailError) {
+            console.error("Failed to send email notification:", emailError);
+          }
+        }
 
         toast({
           title: "Request accepted!",
@@ -305,7 +336,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      onClick={() => handleRequest(req.id, true)}
+                      onClick={() => handleRequest(req.id, true, req.user)}
                     >
                       <Check className="h-4 w-4" />
                     </Button>

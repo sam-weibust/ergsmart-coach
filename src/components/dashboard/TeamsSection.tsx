@@ -102,7 +102,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   });
 
   const addMember = useMutation({
-    mutationFn: async ({ teamId, email }: { teamId: string; email: string }) => {
+    mutationFn: async ({ teamId, teamName, email }: { teamId: string; teamName: string; email: string }) => {
       const sanitizedSearch = email.trim();
       
       // Use the security definer function that bypasses RLS to find users
@@ -127,6 +127,22 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           throw new Error("User is already a member of this team");
         }
         throw error;
+      }
+
+      // Send email notification
+      try {
+        await supabase.functions.invoke("send-notification-email", {
+          body: {
+            type: "team_addition",
+            recipientEmail: userProfile.email,
+            recipientName: userProfile.username,
+            senderName: profile.full_name || profile.username || profile.email,
+            teamName: teamName,
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to send email notification:", emailError);
+        // Don't fail the whole request if email fails
       }
     },
     onSuccess: () => {
@@ -234,7 +250,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     />
                     <Button
                       size="icon"
-                      onClick={() => addMember.mutate({ teamId: team.id, email: memberEmail })}
+                      onClick={() => addMember.mutate({ teamId: team.id, teamName: team.name, email: memberEmail })}
                       disabled={addMember.isPending}
                     >
                       <UserPlus className="h-4 w-4" />
