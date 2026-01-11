@@ -21,6 +21,7 @@ import {
 import { Leaderboard } from "./Leaderboard";
 import { TeamGoals } from "./TeamGoals";
 import { MessageBoard } from "./MessageBoard";
+import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
 
 interface TeamsSectionProps {
   profile: any;
@@ -288,6 +289,13 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                       </div>
                     )}
                   </div>
+
+                  {/* Team Workout Plans */}
+                  <TeamWorkoutPlanSection 
+                    teamId={team.id} 
+                    teamName={team.name} 
+                    profile={profile} 
+                  />
 
                   {/* Leaderboard, Goals, Messages */}
                   <div className="grid gap-4 md:grid-cols-2">

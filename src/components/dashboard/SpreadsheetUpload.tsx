@@ -158,7 +158,12 @@ const generateTemplateCSV = (): string => {
   return [headers.join(","), ...sampleRows.map(r => r.join(","))].join("\n");
 };
 
-export const SpreadsheetUpload = () => {
+interface SpreadsheetUploadProps {
+  teamId?: string;
+  onSuccess?: () => void;
+}
+
+export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps = {}) => {
   const [fileName, setFileName] = useState<string>("");
   const [planTitle, setPlanTitle] = useState<string>("");
   const [fileType, setFileType] = useState<"csv" | "image" | null>(null);
@@ -188,14 +193,23 @@ export const SpreadsheetUpload = () => {
           throw new Error("Could not parse any workout data from the file");
         }
         
-        const { error } = await supabase.from("workout_plans").insert([{
+        const { data: newPlan, error } = await supabase.from("workout_plans").insert([{
           user_id: user.id,
           title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
           description: `Imported from ${file.name}`,
           workout_data: JSON.parse(JSON.stringify(workoutData)) as Json,
-        }]);
+        }]).select().single();
         
         if (error) throw error;
+        
+        // If teamId provided, share with team
+        if (teamId && newPlan) {
+          await supabase.from("plan_shares").insert({
+            plan_id: newPlan.id,
+            shared_by: user.id,
+            shared_with_team: teamId,
+          });
+        }
         
         return workoutData;
       }
@@ -222,14 +236,23 @@ export const SpreadsheetUpload = () => {
         throw new Error("Could not extract workout data from the image. Please try a clearer image or use CSV format.");
       }
       
-      const { error } = await supabase.from("workout_plans").insert([{
+      const { data: newPlan, error } = await supabase.from("workout_plans").insert([{
         user_id: user.id,
         title: planTitle || `Imported Plan - ${new Date().toLocaleDateString()}`,
         description: `Imported from ${file.name} (AI parsed)`,
         workout_data: workoutData as Json,
-      }]);
+      }]).select().single();
       
       if (error) throw error;
+      
+      // If teamId provided, share with team
+      if (teamId && newPlan) {
+        await supabase.from("plan_shares").insert({
+          plan_id: newPlan.id,
+          shared_by: user.id,
+          shared_with_team: teamId,
+        });
+      }
       
       return workoutData;
     },
@@ -243,6 +266,8 @@ export const SpreadsheetUpload = () => {
       setFileType(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
+      if (teamId) queryClient.invalidateQueries({ queryKey: ["team-workout-plans", teamId] });
+      onSuccess?.();
     },
     onError: (error: Error) => {
       toast({
