@@ -1,13 +1,13 @@
 project_id = "lezqonvzqwpdpmyvpuvd"
 
 [functions.generate-workout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-strength]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-meals]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-notification]
 verify_jwt = false
