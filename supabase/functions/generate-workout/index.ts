@@ -71,6 +71,7 @@ Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${star
     console.log(`Trying ${model} for weeks ${startWeek}-${endWeek}`);
     
     try {
+      console.log(`Making request to Lovable AI with model ${model}`);
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -171,11 +172,18 @@ Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${star
       });
 
       const responseText = await response.text();
-      console.log(`${model} response status: ${response.status}`);
+      console.log(`${model} response status: ${response.status}, body length: ${responseText.length}`);
       
       if (!response.ok) {
         console.error(`${model} HTTP error: ${response.status} - ${responseText}`);
-        continue; // Try next model
+        // Check for rate limiting or payment required - these should be propagated
+        if (response.status === 429) {
+          throw new Error("Rate limit exceeded. Please try again in a few moments.");
+        }
+        if (response.status === 402) {
+          throw new Error("AI usage limit reached. Please add credits to continue.");
+        }
+        continue; // Try next model for other errors
       }
 
       let data;
