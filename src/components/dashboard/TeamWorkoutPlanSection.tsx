@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Dumbbell, Utensils, ChevronDown, ChevronUp, Trash2, Upload } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
+import { GenerationProgress } from "./GenerationProgress";
 
 interface TeamWorkoutPlanSectionProps {
   teamId: string;
@@ -31,8 +32,29 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
   const [months, setMonths] = useState<string>("3");
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, string[]>>({});
   const [showUpload, setShowUpload] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState({ currentBatch: 0, totalBatches: 0 });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Calculate total batches when months changes
+  const totalWeeks = parseInt(months) * 4;
+  const totalBatches = Math.ceil(totalWeeks / 2);
+
+  // Simulate progress updates during generation
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (generationProgress.totalBatches > 0 && generationProgress.currentBatch < generationProgress.totalBatches) {
+      interval = setInterval(() => {
+        setGenerationProgress(prev => {
+          if (prev.currentBatch < prev.totalBatches) {
+            return { ...prev, currentBatch: prev.currentBatch + 1 };
+          }
+          return prev;
+        });
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [generationProgress.totalBatches, generationProgress.currentBatch]);
 
   const toggleAllWeeks = (planId: string, weeks: any[]) => {
     const weekIds = weeks.map((_, idx) => `week-${idx}`);
@@ -70,6 +92,9 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
         throw new Error("Please complete your profile first");
       }
 
+      // Initialize progress tracking
+      setGenerationProgress({ currentBatch: 1, totalBatches });
+
       const { data, error } = await supabase.functions.invoke("generate-workout", {
         body: {
           months: parseInt(months),
@@ -85,6 +110,9 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
       return data;
     },
     onSuccess: async (data) => {
+      // Reset progress
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -120,6 +148,8 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
       queryClient.invalidateQueries({ queryKey: ["team-workout-plans", teamId] });
     },
     onError: (error: Error) => {
+      // Reset progress on error
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
       toast({
         title: "Error",
         description: error.message,
@@ -197,6 +227,12 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
               Import Plan
             </Button>
           </div>
+          
+          <GenerationProgress 
+            currentBatch={generationProgress.currentBatch}
+            totalBatches={generationProgress.totalBatches}
+            isGenerating={generateTeamPlan.isPending}
+          />
           
           {showUpload && (
             <div className="pt-2">

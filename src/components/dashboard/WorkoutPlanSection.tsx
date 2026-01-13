@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Share2, Dumbbell, Utensils, ChevronDown, ChevronUp, FileImage, Printer } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
 import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
+import { GenerationProgress } from "./GenerationProgress";
 
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
@@ -27,8 +28,30 @@ export const WorkoutPlanSection = () => {
   const [months, setMonths] = useState<string>("3");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, string[]>>({});
+  const [generationProgress, setGenerationProgress] = useState({ currentBatch: 0, totalBatches: 0 });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Calculate total batches when months changes
+  const totalWeeks = parseInt(months) * 4;
+  const totalBatches = Math.ceil(totalWeeks / 2);
+
+  // Simulate progress updates during generation
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (generationProgress.totalBatches > 0 && generationProgress.currentBatch < generationProgress.totalBatches) {
+      // Estimate ~15 seconds per batch
+      interval = setInterval(() => {
+        setGenerationProgress(prev => {
+          if (prev.currentBatch < prev.totalBatches) {
+            return { ...prev, currentBatch: prev.currentBatch + 1 };
+          }
+          return prev;
+        });
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [generationProgress.totalBatches, generationProgress.currentBatch]);
 
   const toggleAllWeeks = (planId: string, weeks: any[]) => {
     const weekIds = weeks.map((_, idx) => `week-${idx}`);
@@ -144,6 +167,9 @@ export const WorkoutPlanSection = () => {
         throw new Error("Please complete your profile first");
       }
 
+      // Initialize progress tracking
+      setGenerationProgress({ currentBatch: 1, totalBatches });
+
       const { data, error } = await supabase.functions.invoke("generate-workout", {
         body: {
           months: parseInt(months),
@@ -162,6 +188,8 @@ export const WorkoutPlanSection = () => {
       return data;
     },
     onSuccess: async (data) => {
+      // Reset progress
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -181,6 +209,8 @@ export const WorkoutPlanSection = () => {
       queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
     },
     onError: (error: Error) => {
+      // Reset progress on error
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
       toast({
         title: "Error",
         description: error.message,
@@ -270,6 +300,12 @@ export const WorkoutPlanSection = () => {
               Generate Plan
             </Button>
           </div>
+          
+          <GenerationProgress 
+            currentBatch={generationProgress.currentBatch}
+            totalBatches={generationProgress.totalBatches}
+            isGenerating={generatePlan.isPending}
+          />
         </CardContent>
       </Card>
 
