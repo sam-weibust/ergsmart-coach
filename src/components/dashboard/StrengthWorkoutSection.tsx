@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Sparkles } from "lucide-react";
+import { WorkoutFeedback } from "./WorkoutFeedback";
 
 interface StrengthWorkoutSectionProps {
   profile: any;
@@ -20,7 +21,9 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [feedback, setFeedback] = useState<any>(null);
   const [workout, setWorkout] = useState({
     exercise: "",
     sets: "",
@@ -74,15 +77,50 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     setSuggestions([]);
   };
 
+  const getAIFeedback = async (savedWorkout: any) => {
+    setAnalyzingFeedback(true);
+    try {
+      // Fetch recent workouts for this exercise
+      const { data: recentWorkouts } = await supabase
+        .from("strength_workouts")
+        .select("*")
+        .eq("user_id", profile.id)
+        .eq("exercise", savedWorkout.exercise)
+        .order("workout_date", { ascending: false })
+        .limit(5);
+
+      const { data, error } = await supabase.functions.invoke("analyze-workout", {
+        body: {
+          workoutType: "strength",
+          workout: savedWorkout,
+          profile: profile,
+          recentWorkouts: recentWorkouts || [],
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      setFeedback(data.feedback);
+    } catch (error) {
+      console.error("Error getting feedback:", error);
+      // Don't show error toast - feedback is optional
+    } finally {
+      setAnalyzingFeedback(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!profile || !workout.exercise) return;
 
     setLoading(true);
+    setFeedback(null);
+    
     try {
       // Convert lbs to kg for storage
       const weightKg = lbsToKg(parseFloat(workout.weight));
       
-      const { error } = await supabase.from("strength_workouts").insert({
+      const workoutData = {
         user_id: profile.id,
         exercise: workout.exercise,
         sets: parseInt(workout.sets),
@@ -92,13 +130,25 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
         warmup_notes: workout.warmup_notes || null,
         cooldown_notes: workout.cooldown_notes || null,
         rest_between_sets: workout.rest_between_sets || null,
-      } as any);
+      };
+
+      const { data, error } = await supabase
+        .from("strength_workouts")
+        .insert(workoutData as any)
+        .select()
+        .single();
 
       if (error) throw error;
 
       toast({
         title: "Workout logged!",
-        description: "Your strength workout has been saved.",
+        description: "Analyzing your performance...",
+      });
+
+      // Get AI feedback
+      await getAIFeedback({
+        ...workoutData,
+        id: data.id,
       });
 
       setWorkout({
@@ -124,158 +174,164 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Log Strength Workout
-          </span>
-          <Button
-            onClick={getSuggestions}
-            disabled={loadingSuggestions}
-            variant="outline"
-            size="sm"
-          >
-            {loadingSuggestions ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Get AI Suggestions
-              </>
-            )}
-          </Button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {suggestions.length > 0 && (
-          <div className="space-y-2">
-            <Label>Suggested Exercises (Pick One)</Label>
-            <div className="grid gap-2">
-              {suggestions.map((sug, idx) => (
-                <Button
-                  key={idx}
-                  onClick={() => selectSuggestion(sug)}
-                  variant="outline"
-                  className="justify-start h-auto py-3"
-                >
-                  <div className="text-left">
-                    <div className="font-semibold">{sug.exercise}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {sug.sets} sets × {sug.reps} reps @ {Math.round(sug.recommendedWeight * 2.205)} lbs
+    <div className="space-y-4">
+      {feedback && (
+        <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
+      )}
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Log Strength Workout
+            </span>
+            <Button
+              onClick={getSuggestions}
+              disabled={loadingSuggestions}
+              variant="outline"
+              size="sm"
+            >
+              {loadingSuggestions ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Get AI Suggestions
+                </>
+              )}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {suggestions.length > 0 && (
+            <div className="space-y-2">
+              <Label>Suggested Exercises (Pick One)</Label>
+              <div className="grid gap-2">
+                {suggestions.map((sug, idx) => (
+                  <Button
+                    key={idx}
+                    onClick={() => selectSuggestion(sug)}
+                    variant="outline"
+                    className="justify-start h-auto py-3"
+                  >
+                    <div className="text-left">
+                      <div className="font-semibold">{sug.exercise}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {sug.sets} sets × {sug.reps} reps @ {Math.round(sug.recommendedWeight * 2.205)} lbs
+                      </div>
                     </div>
-                  </div>
-                </Button>
-              ))}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="space-y-2">
-          <Label htmlFor="exercise">Exercise</Label>
-          <Input
-            id="exercise"
-            placeholder="Deadlift, Squat, Bench Press..."
-            value={workout.exercise}
-            onChange={(e) => setWorkout({ ...workout, exercise: e.target.value })}
-          />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="sets">Sets</Label>
+            <Label htmlFor="exercise">Exercise</Label>
             <Input
-              id="sets"
-              type="number"
-              placeholder="3"
-              value={workout.sets}
-              onChange={(e) => setWorkout({ ...workout, sets: e.target.value })}
+              id="exercise"
+              placeholder="Deadlift, Squat, Bench Press..."
+              value={workout.exercise}
+              onChange={(e) => setWorkout({ ...workout, exercise: e.target.value })}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="reps">Reps</Label>
-            <Input
-              id="reps"
-              type="number"
-              placeholder="8"
-              value={workout.reps}
-              onChange={(e) => setWorkout({ ...workout, reps: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="weight">Weight (lbs)</Label>
-            <Input
-              id="weight"
-              type="number"
-              step="5"
-              placeholder="225"
-              value={workout.weight}
-              onChange={(e) => setWorkout({ ...workout, weight: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="warmup_notes">Warmup</Label>
+              <Label htmlFor="sets">Sets</Label>
               <Input
-                id="warmup_notes"
-                placeholder="e.g., 5 min row, dynamic stretching"
-                value={workout.warmup_notes}
-                onChange={(e) => setWorkout({ ...workout, warmup_notes: e.target.value })}
+                id="sets"
+                type="number"
+                placeholder="3"
+                value={workout.sets}
+                onChange={(e) => setWorkout({ ...workout, sets: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cooldown_notes">Cooldown</Label>
+              <Label htmlFor="reps">Reps</Label>
               <Input
-                id="cooldown_notes"
-                placeholder="e.g., 5 min walk, static stretching"
-                value={workout.cooldown_notes}
-                onChange={(e) => setWorkout({ ...workout, cooldown_notes: e.target.value })}
+                id="reps"
+                type="number"
+                placeholder="8"
+                value={workout.reps}
+                onChange={(e) => setWorkout({ ...workout, reps: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="rest_between_sets">Rest Between Sets</Label>
+              <Label htmlFor="weight">Weight (lbs)</Label>
               <Input
-                id="rest_between_sets"
-                placeholder="e.g., 2:00"
-                value={workout.rest_between_sets}
-                onChange={(e) => setWorkout({ ...workout, rest_between_sets: e.target.value })}
+                id="weight"
+                type="number"
+                step="5"
+                placeholder="225"
+                value={workout.weight}
+                onChange={(e) => setWorkout({ ...workout, weight: e.target.value })}
               />
             </div>
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="notes">Notes</Label>
-          <Textarea
-            id="notes"
-            placeholder="Form notes, RPE, etc."
-            value={workout.notes}
-            onChange={(e) => setWorkout({ ...workout, notes: e.target.value })}
-            className="min-h-20"
-          />
-        </div>
+          <div className="border-t pt-4 mt-4">
+            <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="warmup_notes">Warmup</Label>
+                <Input
+                  id="warmup_notes"
+                  placeholder="e.g., 5 min row, dynamic stretching"
+                  value={workout.warmup_notes}
+                  onChange={(e) => setWorkout({ ...workout, warmup_notes: e.target.value })}
+                />
+              </div>
 
-        <Button onClick={handleSave} disabled={loading || !workout.exercise} className="w-full">
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            "Log Workout"
-          )}
-        </Button>
-      </CardContent>
-    </Card>
+              <div className="space-y-2">
+                <Label htmlFor="cooldown_notes">Cooldown</Label>
+                <Input
+                  id="cooldown_notes"
+                  placeholder="e.g., 5 min walk, static stretching"
+                  value={workout.cooldown_notes}
+                  onChange={(e) => setWorkout({ ...workout, cooldown_notes: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rest_between_sets">Rest Between Sets</Label>
+                <Input
+                  id="rest_between_sets"
+                  placeholder="e.g., 2:00"
+                  value={workout.rest_between_sets}
+                  onChange={(e) => setWorkout({ ...workout, rest_between_sets: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              placeholder="Form notes, RPE, etc."
+              value={workout.notes}
+              onChange={(e) => setWorkout({ ...workout, notes: e.target.value })}
+              className="min-h-20"
+            />
+          </div>
+
+          <Button onClick={handleSave} disabled={loading || analyzingFeedback || !workout.exercise} className="w-full">
+            {loading || analyzingFeedback ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {analyzingFeedback ? "Analyzing..." : "Saving..."}
+              </>
+            ) : (
+              "Log Workout & Get Feedback"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
