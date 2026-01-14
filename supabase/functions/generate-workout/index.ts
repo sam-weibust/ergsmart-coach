@@ -60,18 +60,23 @@ ${current2k ? `2K: ${current2k}` : ""}${age ? `, Age: ${age}` : ""}
 ${healthIssues?.length ? `Health: ${healthIssues.join(", ")}` : ""}
 Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${startWeek + i}: ${getPhase(startWeek + i)}`).join(", ")}`;
 
-  // Try models in order - using gemini-3-flash-preview as primary per docs
+  // Use stable model with JSON response format instead of tool calls
   const models = [
-    "google/gemini-3-flash-preview",
-    "openai/gpt-5-mini", 
-    "google/gemini-2.5-flash-lite"
+    "google/gemini-2.5-flash",
+    "openai/gpt-5-mini"
   ];
+
+  const jsonSchema = `Return a JSON object with a "weeks" array. Each week has: week (number), phase (string), days (array of 7 day objects).
+Each day has: day (number 1-7), ergWorkout (object or null), strengthWorkout (object or null), yogaSession (object or null for day 7), mealPlan (object).
+ergWorkout: { zone, description, duration, targetSplit, rate, warmup, cooldown, restPeriods }
+strengthWorkout: { warmupNotes, cooldownNotes, focus, exercises: [{exercise, sets, reps, weight, restBetweenSets}] }
+yogaSession: { duration, focus, poses }
+mealPlan: { breakfast, lunch, dinner, snacks }`;
 
   for (const model of models) {
     console.log(`Trying ${model} for weeks ${startWeek}-${endWeek}`);
     
     try {
-      console.log(`Making request to Lovable AI with model ${model}`);
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -81,142 +86,60 @@ Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${star
         body: JSON.stringify({
           model,
           messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
+            { role: "system", content: `${systemPrompt}\n\n${jsonSchema}` },
+            { role: "user", content: `${userPrompt}\n\nRespond ONLY with valid JSON, no markdown.` }
           ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "create_weeks",
-              description: "Create training weeks",
-              parameters: {
-                type: "object",
-                properties: {
-                  weeks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        week: { type: "number" },
-                        phase: { type: "string" },
-                        days: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              day: { type: "number" },
-                              ergWorkout: {
-                                type: "object",
-                                properties: {
-                                  zone: { type: "string" },
-                                  description: { type: "string" },
-                                  duration: { type: "string" },
-                                  targetSplit: { type: "string" },
-                                  rate: { type: "string" },
-                                  warmup: { type: "string" },
-                                  cooldown: { type: "string" },
-                                  restPeriods: { type: "string" }
-                                }
-                              },
-                              strengthWorkout: {
-                                type: "object",
-                                properties: {
-                                  warmupNotes: { type: "string" },
-                                  cooldownNotes: { type: "string" },
-                                  focus: { type: "string" },
-                                  exercises: {
-                                    type: "array",
-                                    items: {
-                                      type: "object",
-                                      properties: {
-                                        exercise: { type: "string" },
-                                        sets: { type: "number" },
-                                        reps: { type: "number" },
-                                        weight: { type: "string" },
-                                        restBetweenSets: { type: "string" }
-                                      }
-                                    }
-                                  }
-                                }
-                              },
-                              yogaSession: {
-                                type: "object",
-                                properties: {
-                                  duration: { type: "string" },
-                                  focus: { type: "string" },
-                                  poses: { type: "string" }
-                                }
-                              },
-                              mealPlan: {
-                                type: "object",
-                                properties: {
-                                  breakfast: { type: "string" },
-                                  lunch: { type: "string" },
-                                  dinner: { type: "string" },
-                                  snacks: { type: "string" }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                required: ["weeks"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "create_weeks" } }
+          response_format: { type: "json_object" }
         }),
       });
 
       const responseText = await response.text();
-      console.log(`${model} response status: ${response.status}, body length: ${responseText.length}`);
+      console.log(`${model} status: ${response.status}, length: ${responseText.length}`);
       
       if (!response.ok) {
-        console.error(`${model} HTTP error: ${response.status} - ${responseText}`);
-        // Check for rate limiting or payment required - these should be propagated
+        console.error(`${model} error: ${response.status} - ${responseText.substring(0, 500)}`);
         if (response.status === 429) {
           throw new Error("Rate limit exceeded. Please try again in a few moments.");
         }
         if (response.status === 402) {
           throw new Error("AI usage limit reached. Please add credits to continue.");
         }
-        continue; // Try next model for other errors
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error(`${model} JSON parse error:`, e);
         continue;
       }
 
-      // Check for provider errors in the response body
+      const data = JSON.parse(responseText);
       if (data.error) {
         console.error(`${model} returned error:`, data.error);
-        continue; // Try next model
+        continue;
       }
 
-      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) {
-        console.error(`${model} no tool call found in response`);
-        continue; // Try next model
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        console.error(`${model} no content in response`);
+        continue;
       }
 
-      const parsed = JSON.parse(toolCall.function.arguments);
-      console.log(`${model} succeeded for weeks ${startWeek}-${endWeek}`);
-      return parsed.weeks as WeekPlan[];
+      const parsed = JSON.parse(content);
+      const weeks = parsed.weeks || parsed;
+      
+      if (!Array.isArray(weeks) || weeks.length === 0) {
+        console.error(`${model} invalid weeks structure`);
+        continue;
+      }
+
+      console.log(`${model} succeeded: ${weeks.length} weeks`);
+      return weeks as WeekPlan[];
       
     } catch (error) {
       console.error(`${model} exception:`, error);
-      continue; // Try next model
+      if (error instanceof Error && (error.message.includes("Rate limit") || error.message.includes("usage limit"))) {
+        throw error;
+      }
+      continue;
     }
   }
 
-  throw new Error(`All models failed for weeks ${startWeek}-${endWeek}. Please try again.`);
+  throw new Error(`Generation failed for weeks ${startWeek}-${endWeek}. Please try again.`);
 }
 
 serve(async (req) => {
