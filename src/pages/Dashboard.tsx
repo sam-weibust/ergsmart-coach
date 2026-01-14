@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3 } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -13,6 +13,7 @@ import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
 import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
 import StrengthWorkoutSection from "@/components/dashboard/StrengthWorkoutSection";
+import PerformanceSection from "@/components/dashboard/PerformanceSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -119,6 +120,10 @@ const Dashboard = () => {
               <History className="h-4 w-4" />
               <span>History</span>
             </TabsTrigger>
+            <TabsTrigger value="stats" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
+              <BarChart3 className="h-4 w-4" />
+              <span>Stats</span>
+            </TabsTrigger>
             <TabsTrigger value="profile" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <User className="h-4 w-4" />
               <span>Profile</span>
@@ -153,6 +158,10 @@ const Dashboard = () => {
 
           <TabsContent value="history" className="mt-4">
             <HistorySection profile={profile} />
+          </TabsContent>
+
+          <TabsContent value="stats" className="mt-4">
+            <PerformanceSection profile={profile} />
           </TabsContent>
 
           <TabsContent value="profile" className="mt-4">
