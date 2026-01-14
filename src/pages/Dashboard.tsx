@@ -4,13 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Users, Bluetooth, History, UsersRound, MessageCircle } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
 import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
+import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
+import StrengthWorkoutSection from "@/components/dashboard/StrengthWorkoutSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -109,6 +111,10 @@ const Dashboard = () => {
               <span className="hidden sm:inline">Training</span>
               <span className="sm:hidden">Plans</span>
             </TabsTrigger>
+            <TabsTrigger value="log" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
+              <PlusCircle className="h-4 w-4" />
+              <span>Log</span>
+            </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <History className="h-4 w-4" />
               <span>History</span>
@@ -136,6 +142,13 @@ const Dashboard = () => {
 
           <TabsContent value="plans" className="mt-4">
             <WorkoutPlanSection />
+          </TabsContent>
+
+          <TabsContent value="log" className="mt-4">
+            <div className="space-y-6">
+              <ErgWorkoutSection profile={profile} />
+              <StrengthWorkoutSection profile={profile} />
+            </div>
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
