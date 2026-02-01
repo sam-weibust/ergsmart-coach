@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Timer, Ruler } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 
 interface ErgWorkoutSectionProps {
@@ -20,6 +21,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
   const [loading, setLoading] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
+  const [intervalMode, setIntervalMode] = useState<"time" | "distance">("time");
   const [workout, setWorkout] = useState({
     workout_type: "steady_state",
     distance: "",
@@ -31,6 +33,11 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
     warmup_duration: "",
     cooldown_duration: "",
     rest_periods: "",
+    // Interval-specific fields
+    interval_count: "",
+    interval_duration: "",
+    interval_distance: "",
+    interval_rest: "",
   });
 
   const getAIFeedback = async (savedWorkout: any) => {
@@ -116,7 +123,12 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
         warmup_duration: "",
         cooldown_duration: "",
         rest_periods: "",
+        interval_count: "",
+        interval_duration: "",
+        interval_distance: "",
+        interval_rest: "",
       });
+      setIntervalMode("time");
     } catch (error) {
       console.error("Error saving workout:", error);
       toast({
@@ -161,9 +173,78 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             </Select>
           </div>
 
+          {/* Interval Configuration */}
+          {workout.workout_type === "intervals" && (
+            <div className="p-4 border rounded-lg bg-muted/30 space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Interval Type</Label>
+                <RadioGroup
+                  value={intervalMode}
+                  onValueChange={(v: "time" | "distance") => setIntervalMode(v)}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="time" id="time" />
+                    <Label htmlFor="time" className="flex items-center gap-1 cursor-pointer">
+                      <Timer className="h-3 w-3" /> Time
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="distance" id="distance" />
+                    <Label htmlFor="distance" className="flex items-center gap-1 cursor-pointer">
+                      <Ruler className="h-3 w-3" /> Distance
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs"># of Intervals</Label>
+                  <Input
+                    type="number"
+                    placeholder="8"
+                    value={workout.interval_count}
+                    onChange={(e) => setWorkout({ ...workout, interval_count: e.target.value })}
+                  />
+                </div>
+                
+                {intervalMode === "time" ? (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Interval Duration</Label>
+                    <Input
+                      placeholder="3:00"
+                      value={workout.interval_duration}
+                      onChange={(e) => setWorkout({ ...workout, interval_duration: e.target.value })}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Interval Distance (m)</Label>
+                    <Input
+                      type="number"
+                      placeholder="500"
+                      value={workout.interval_distance}
+                      onChange={(e) => setWorkout({ ...workout, interval_distance: e.target.value })}
+                    />
+                  </div>
+                )}
+                
+                <div className="space-y-1">
+                  <Label className="text-xs">Rest Between</Label>
+                  <Input
+                    placeholder="1:00"
+                    value={workout.interval_rest}
+                    onChange={(e) => setWorkout({ ...workout, interval_rest: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="distance">Distance (m)</Label>
+              <Label htmlFor="distance">Total Distance (m)</Label>
               <Input
                 id="distance"
                 type="number"
@@ -174,7 +255,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duration">Duration (MM:SS)</Label>
+              <Label htmlFor="duration">Total Duration (MM:SS)</Label>
               <Input
                 id="duration"
                 placeholder="20:00"

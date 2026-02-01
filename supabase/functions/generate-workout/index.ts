@@ -48,17 +48,27 @@ async function generateWeekBatch(
     return "Taper";
   };
 
-  const systemPrompt = `You are a rowing coach. Generate training plans in English.
-Zones: UT2 (18-20spm), UT1 (20-24spm), TR (24-28spm), AT (28-32spm).
+  const systemPrompt = `You are an elite rowing coach. Generate training plans in English.
+Zones: UT2 (18-20spm, 60-70% HR), UT1 (20-24spm, 70-80% HR), TR (24-28spm, 80-85% HR), AT (28-32spm, 85-95% HR).
 ${splitGuidance}
 ${healthGuidance}
-Days 1-6: ergWorkout + strengthWorkout + mealPlan. Day 7: REST with yogaSession + mealPlan only.`;
 
-  const userPrompt = `Generate weeks ${startWeek}-${endWeek} of ${totalWeeks}-week plan.
-Athlete: ${weight}kg, ${height}cm, ${experience}. Goals: ${goals}
-${current2k ? `2K: ${current2k}` : ""}${age ? `, Age: ${age}` : ""}
-${healthIssues?.length ? `Health: ${healthIssues.join(", ")}` : ""}
-Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${startWeek + i}: ${getPhase(startWeek + i)}`).join(", ")}`;
+CRITICAL STRUCTURE:
+- Days 1-6: ergWorkout + strengthWorkout + mealPlan (active training days)
+- Day 7: REST DAY - yogaSession + mealPlan ONLY (NO ergWorkout, NO strengthWorkout)
+
+The yogaSession on Day 7 must include:
+- duration: "45-60 minutes"
+- focus: e.g., "Recovery and Flexibility", "Restorative", "Active Recovery"
+- poses: List of specific yoga poses appropriate for rowers (e.g., "Child's Pose, Cat-Cow, Downward Dog, Pigeon Pose, Seated Forward Fold, Supine Spinal Twist, Savasana")`;
+
+  const userPrompt = `Generate weeks ${startWeek}-${endWeek} of ${totalWeeks}-week periodized rowing plan.
+Athlete: ${weight}kg, ${height}cm, ${experience} level. Goals: ${goals}
+${current2k ? `Current 2K: ${current2k}` : ""}${age ? `, Age: ${age}` : ""}
+${healthIssues?.length ? `Health considerations: ${healthIssues.join(", ")}` : ""}
+Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${startWeek + i}: ${getPhase(startWeek + i)}`).join(", ")}
+
+Remember: Day 7 of each week is REST with yoga only!`;
 
   // Use stable model with JSON response format instead of tool calls
   const models = [
@@ -67,11 +77,18 @@ Phases: ${Array.from({ length: endWeek - startWeek + 1 }, (_, i) => `Week ${star
   ];
 
   const jsonSchema = `Return a JSON object with a "weeks" array. Each week has: week (number), phase (string), days (array of 7 day objects).
-Each day has: day (number 1-7), ergWorkout (object or null), strengthWorkout (object or null), yogaSession (object or null for day 7), mealPlan (object).
-ergWorkout: { zone, description, duration, targetSplit, rate, warmup, cooldown, restPeriods }
-strengthWorkout: { warmupNotes, cooldownNotes, focus, exercises: [{exercise, sets, reps, weight, restBetweenSets}] }
-yogaSession: { duration, focus, poses }
-mealPlan: { breakfast, lunch, dinner, snacks }`;
+
+Each day object structure:
+- day: number 1-7
+- ergWorkout: object OR null (MUST be null for day 7)
+- strengthWorkout: object OR null (MUST be null for day 7)  
+- yogaSession: object OR null (MUST be present for day 7)
+- mealPlan: object (always present)
+
+ergWorkout fields: { zone, description, duration, targetSplit, rate, warmup, cooldown, restPeriods }
+strengthWorkout fields: { warmupNotes, cooldownNotes, focus, exercises: [{exercise, sets, reps, weight, restBetweenSets}] }
+yogaSession fields: { duration, focus, poses }
+mealPlan fields: { breakfast, lunch, dinner, snacks }`;
 
   for (const model of models) {
     console.log(`Trying ${model} for weeks ${startWeek}-${endWeek}`);

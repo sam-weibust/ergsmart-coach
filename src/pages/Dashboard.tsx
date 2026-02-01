@@ -12,8 +12,9 @@ import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import TeamsSection from "@/components/dashboard/TeamsSection";
 import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
-import StrengthWorkoutSection from "@/components/dashboard/StrengthWorkoutSection";
+import MultiSetStrengthForm from "@/components/dashboard/MultiSetStrengthForm";
 import PerformanceSection from "@/components/dashboard/PerformanceSection";
+import ComparisonSection from "@/components/dashboard/ComparisonSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -152,7 +153,7 @@ const Dashboard = () => {
           <TabsContent value="log" className="mt-4">
             <div className="space-y-6">
               <ErgWorkoutSection profile={profile} />
-              <StrengthWorkoutSection profile={profile} />
+              <MultiSetStrengthForm profile={profile} />
             </div>
           </TabsContent>
 
@@ -161,7 +162,10 @@ const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="stats" className="mt-4">
-            <PerformanceSection profile={profile} />
+            <div className="space-y-6">
+              <PerformanceSection profile={profile} />
+              <ComparisonSection profile={profile} />
+            </div>
           </TabsContent>
 
           <TabsContent value="profile" className="mt-4">
