@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3 } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -15,6 +15,7 @@ import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
 import MultiSetStrengthForm from "@/components/dashboard/MultiSetStrengthForm";
 import PerformanceSection from "@/components/dashboard/PerformanceSection";
 import ComparisonSection from "@/components/dashboard/ComparisonSection";
+import AwardsSection from "@/components/dashboard/AwardsSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -125,6 +126,14 @@ const Dashboard = () => {
               <BarChart3 className="h-4 w-4" />
               <span>Stats</span>
             </TabsTrigger>
+            <TabsTrigger value="compare" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
+              <GitCompare className="h-4 w-4" />
+              <span>Compare</span>
+            </TabsTrigger>
+            <TabsTrigger value="awards" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
+              <Trophy className="h-4 w-4" />
+              <span>Awards</span>
+            </TabsTrigger>
             <TabsTrigger value="profile" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
               <User className="h-4 w-4" />
               <span>Profile</span>
@@ -162,10 +171,15 @@ const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="stats" className="mt-4">
-            <div className="space-y-6">
-              <PerformanceSection profile={profile} />
-              <ComparisonSection profile={profile} />
-            </div>
+            <PerformanceSection profile={profile} />
+          </TabsContent>
+
+          <TabsContent value="compare" className="mt-4">
+            <ComparisonSection profile={profile} />
+          </TabsContent>
+
+          <TabsContent value="awards" className="mt-4">
+            <AwardsSection profile={profile} />
           </TabsContent>
 
           <TabsContent value="profile" className="mt-4">
