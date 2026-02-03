@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
-import { Users, Trophy, TrendingUp, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Users, Trophy, TrendingUp, ArrowUp, ArrowDown, Minus, Eye, EyeOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ComparisonSectionProps {
@@ -33,6 +35,7 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
   const [comparisonType, setComparisonType] = useState<"friends" | "team">("friends");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [dateRange, setDateRange] = useState<"7" | "30" | "90" | "365">("30");
+  const [showComparison, setShowComparison] = useState(true);
 
   const isCoach = profile?.user_type === "coach";
 
@@ -199,23 +202,38 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
   const getTrendIcon = (value: number, isLowerBetter = false) => {
     if (value === 0) return <Minus className="h-4 w-4 text-muted-foreground" />;
     if (isLowerBetter) {
-      return value < 0 ? <ArrowUp className="h-4 w-4 text-green-500" /> : <ArrowDown className="h-4 w-4 text-red-500" />;
+      return value < 0 ? <ArrowUp className="h-4 w-4 text-primary" /> : <ArrowDown className="h-4 w-4 text-destructive" />;
     }
-    return value > 0 ? <ArrowUp className="h-4 w-4 text-green-500" /> : <ArrowDown className="h-4 w-4 text-red-500" />;
+    return value > 0 ? <ArrowUp className="h-4 w-4 text-primary" /> : <ArrowDown className="h-4 w-4 text-destructive" />;
   };
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Performance Comparison
-          </CardTitle>
-          <CardDescription>
-            Compare your progress with friends or teammates
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Performance Comparison
+              </CardTitle>
+              <CardDescription>
+                Compare your progress with friends or teammates
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="show-comparison" className="text-sm text-muted-foreground">
+                {showComparison ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              </Label>
+              <Switch
+                id="show-comparison"
+                checked={showComparison}
+                onCheckedChange={setShowComparison}
+              />
+            </div>
+          </div>
         </CardHeader>
+        {showComparison && (
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-3">
             <Select value={comparisonType} onValueChange={(v: "friends" | "team") => setComparisonType(v)}>
@@ -376,6 +394,7 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
             </div>
           )}
         </CardContent>
+        )}
       </Card>
     </div>
   );
