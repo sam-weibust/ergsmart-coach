@@ -45,13 +45,27 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const fetchFriendships = async () => {
     if (!profile) return;
 
-    const { data } = await supabase
+    // Get friendships where user initiated (user_id = me)
+    const { data: initiatedFriendships } = await supabase
       .from("friendships")
       .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
       .eq("user_id", profile.id)
       .eq("status", "accepted");
 
-    setFriendships(data || []);
+    // Get friendships where user received and accepted (friend_id = me)
+    const { data: receivedFriendships } = await supabase
+      .from("friendships")
+      .select("*, friend:profiles!friendships_user_id_fkey(id, full_name, email, username)")
+      .eq("friend_id", profile.id)
+      .eq("status", "accepted");
+
+    // Combine both lists
+    const allFriendships = [
+      ...(initiatedFriendships || []),
+      ...(receivedFriendships || []),
+    ];
+
+    setFriendships(allFriendships);
   };
 
   const fetchRequests = async () => {
