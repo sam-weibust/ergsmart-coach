@@ -80,125 +80,170 @@ const Dashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-primary">Loading...</div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <p className="text-muted-foreground animate-pulse">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Mobile-optimized header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-3 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <img src={crewsyncLogo} alt="CrewSync" className="h-8 w-8 rounded-md" />
-            <span className="font-semibold text-lg hidden sm:inline">CrewSync</span>
+    <div className="min-h-screen bg-gradient-subtle">
+      {/* Header */}
+      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-20 shadow-sm">
+        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <img 
+              src={crewsyncLogo} 
+              alt="CrewSync" 
+              className="h-9 w-9 rounded-lg shadow-sm border border-border" 
+            />
+            <span className="font-semibold text-lg hidden sm:inline bg-gradient-primary bg-clip-text text-transparent">
+              CrewSync
+            </span>
           </div>
+          
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <NotificationBell />
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="h-4 w-4 sm:mr-2" />
+            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2">
+              <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-3 py-4 pb-20 md:pb-8">
-        <Tabs defaultValue="plans" className="space-y-4">
-          {/* Mobile-friendly tabs - scrollable horizontally on mobile */}
-          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-            <TabsTrigger value="plans" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <Calendar className="h-4 w-4" />
-              <span className="hidden sm:inline">Training</span>
-              <span className="sm:hidden">Plans</span>
-            </TabsTrigger>
-            <TabsTrigger value="log" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <PlusCircle className="h-4 w-4" />
-              <span>Log</span>
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <History className="h-4 w-4" />
-              <span>History</span>
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <BarChart3 className="h-4 w-4" />
-              <span>Stats</span>
-            </TabsTrigger>
-            <TabsTrigger value="compare" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <GitCompare className="h-4 w-4" />
-              <span>Compare</span>
-            </TabsTrigger>
-            <TabsTrigger value="awards" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <Trophy className="h-4 w-4" />
-              <span>Awards</span>
-            </TabsTrigger>
-            <TabsTrigger value="profile" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <User className="h-4 w-4" />
-              <span>Profile</span>
-            </TabsTrigger>
-            <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <MessageCircle className="h-4 w-4" />
-              <span>Friends</span>
-            </TabsTrigger>
-            {isCoach && (
-              <TabsTrigger value="teams" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-                <UsersRound className="h-4 w-4" />
-                <span>Teams</span>
+      <main className="container mx-auto px-4 py-6 pb-24 md:pb-8">
+        <Tabs defaultValue="plans" className="space-y-6">
+          {/* Tab Navigation */}
+          <div className="bg-card rounded-xl p-1.5 shadow-card border border-border">
+            <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent h-auto p-0 gap-1">
+              <TabsTrigger 
+                value="plans" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">Training</span>
+                <span className="sm:hidden">Plans</span>
               </TabsTrigger>
-            )}
-            <TabsTrigger value="devices" className="flex items-center gap-1.5 text-xs sm:text-sm px-3">
-              <Bluetooth className="h-4 w-4" />
-              <span className="hidden sm:inline">Devices</span>
-              <span className="sm:hidden">Sync</span>
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger 
+                value="log" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span>Log</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="history" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <History className="h-4 w-4" />
+                <span>History</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="stats" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>Stats</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="compare" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <GitCompare className="h-4 w-4" />
+                <span>Compare</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="awards" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <Trophy className="h-4 w-4" />
+                <span>Awards</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="profile" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <User className="h-4 w-4" />
+                <span>Profile</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="friends" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Friends</span>
+              </TabsTrigger>
+              {isCoach && (
+                <TabsTrigger 
+                  value="teams" 
+                  className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                >
+                  <UsersRound className="h-4 w-4" />
+                  <span>Teams</span>
+                </TabsTrigger>
+              )}
+              <TabsTrigger 
+                value="devices" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <Bluetooth className="h-4 w-4" />
+                <span className="hidden sm:inline">Devices</span>
+                <span className="sm:hidden">Sync</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="plans" className="mt-4">
-            <WorkoutPlanSection />
-          </TabsContent>
-
-          <TabsContent value="log" className="mt-4">
-            <div className="space-y-6">
-              <ErgWorkoutSection profile={profile} />
-              <MultiSetStrengthForm profile={profile} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="history" className="mt-4">
-            <HistorySection profile={profile} />
-          </TabsContent>
-
-          <TabsContent value="stats" className="mt-4">
-            <PerformanceSection profile={profile} />
-          </TabsContent>
-
-          <TabsContent value="compare" className="mt-4">
-            <ComparisonSection profile={profile} />
-          </TabsContent>
-
-          <TabsContent value="awards" className="mt-4">
-            <AwardsSection profile={profile} />
-          </TabsContent>
-
-          <TabsContent value="profile" className="mt-4">
-            <ProfileSection />
-          </TabsContent>
-
-          <TabsContent value="friends" className="mt-4">
-            <FriendsSection profile={profile} />
-          </TabsContent>
-
-          {isCoach && (
-            <TabsContent value="teams" className="mt-4">
-              <TeamsSection profile={profile} isCoach={isCoach} />
+          {/* Tab Content */}
+          <div className="animate-fade-in">
+            <TabsContent value="plans" className="mt-0">
+              <WorkoutPlanSection />
             </TabsContent>
-          )}
 
-          <TabsContent value="devices" className="mt-4">
-            <DeviceSection />
-          </TabsContent>
+            <TabsContent value="log" className="mt-0">
+              <div className="space-y-6">
+                <ErgWorkoutSection profile={profile} />
+                <MultiSetStrengthForm profile={profile} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              <HistorySection profile={profile} />
+            </TabsContent>
+
+            <TabsContent value="stats" className="mt-0">
+              <PerformanceSection profile={profile} />
+            </TabsContent>
+
+            <TabsContent value="compare" className="mt-0">
+              <ComparisonSection profile={profile} />
+            </TabsContent>
+
+            <TabsContent value="awards" className="mt-0">
+              <AwardsSection profile={profile} />
+            </TabsContent>
+
+            <TabsContent value="profile" className="mt-0">
+              <ProfileSection />
+            </TabsContent>
+
+            <TabsContent value="friends" className="mt-0">
+              <FriendsSection profile={profile} />
+            </TabsContent>
+
+            {isCoach && (
+              <TabsContent value="teams" className="mt-0">
+                <TeamsSection profile={profile} isCoach={isCoach} />
+              </TabsContent>
+            )}
+
+            <TabsContent value="devices" className="mt-0">
+              <DeviceSection />
+            </TabsContent>
+          </div>
         </Tabs>
       </main>
     </div>
