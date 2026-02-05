@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -81,8 +81,11 @@ const Dashboard = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-          <p className="text-muted-foreground animate-pulse">Loading...</p>
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
+            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-primary animate-pulse-soft" />
+          </div>
+          <p className="text-muted-foreground font-medium">Loading your training...</p>
         </div>
       </div>
     );
@@ -91,23 +94,24 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-subtle">
       {/* Header */}
-      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-20 shadow-sm">
+      <header className="border-b border-border bg-card/90 backdrop-blur-xl sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img 
               src={crewsyncLogo} 
               alt="CrewSync" 
-              className="h-9 w-9 rounded-lg shadow-sm border border-border" 
+              className="h-10 w-10 rounded-xl shadow-sm border border-border hover:scale-105 transition-transform cursor-pointer" 
+              onClick={() => navigate("/")}
             />
-            <span className="font-semibold text-lg hidden sm:inline bg-gradient-primary bg-clip-text text-transparent">
+            <span className="font-bold text-lg hidden sm:inline text-gradient">
               CrewSync
             </span>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
             <NotificationBell />
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2">
+            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2 hover:bg-destructive/10 hover:text-destructive">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
             </Button>
@@ -115,14 +119,14 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-8">
+      <main className="container mx-auto px-4 py-6 pb-24 md:pb-8 animate-fade-in">
         <Tabs defaultValue="plans" className="space-y-6">
           {/* Tab Navigation */}
-          <div className="bg-card rounded-xl p-1.5 shadow-card border border-border">
-            <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent h-auto p-0 gap-1">
+          <div className="bg-card rounded-2xl p-2 shadow-card border border-border">
+            <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent h-auto p-0 gap-1.5">
               <TabsTrigger 
                 value="plans" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <Calendar className="h-4 w-4" />
                 <span className="hidden sm:inline">Training</span>
@@ -130,49 +134,49 @@ const Dashboard = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="log" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <PlusCircle className="h-4 w-4" />
                 <span>Log</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="history" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <History className="h-4 w-4" />
                 <span>History</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="stats" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <BarChart3 className="h-4 w-4" />
                 <span>Stats</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="compare" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <GitCompare className="h-4 w-4" />
                 <span>Compare</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="awards" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <Trophy className="h-4 w-4" />
                 <span>Awards</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="profile" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <User className="h-4 w-4" />
                 <span>Profile</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="friends" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>Friends</span>
@@ -180,7 +184,7 @@ const Dashboard = () => {
               {isCoach && (
                 <TabsTrigger 
                   value="teams" 
-                  className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                  className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
                 >
                   <UsersRound className="h-4 w-4" />
                   <span>Teams</span>
@@ -188,7 +192,7 @@ const Dashboard = () => {
               )}
               <TabsTrigger 
                 value="devices" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
                 <Bluetooth className="h-4 w-4" />
                 <span className="hidden sm:inline">Devices</span>
@@ -198,7 +202,7 @@ const Dashboard = () => {
           </div>
 
           {/* Tab Content */}
-          <div className="animate-fade-in">
+          <div className="animate-fade-in-up">
             <TabsContent value="plans" className="mt-0">
               <WorkoutPlanSection />
             </TabsContent>
