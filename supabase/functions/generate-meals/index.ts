@@ -35,7 +35,7 @@ serve(async (req) => {
       });
     }
 
-    const { weight, goals, trainingLoad, dietGoal, allergies } = await req.json();
+    const { weight, height, age, goals, trainingLoad, dietGoal, allergies } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -84,6 +84,8 @@ Generate a full day meal plan in JSON format:
 
     const userPrompt = `Create a full day meal plan for:
 - Weight: ${weight}kg
+- Height: ${height ? height + "cm" : "not specified"}
+- Age: ${age || "not specified"}
 - Goals: ${goals}
 - Training Load: ${trainingLoad}
 - Diet Goal: ${dietGoal || "maintain"}
@@ -91,7 +93,7 @@ Generate a full day meal plan in JSON format:
 ${calorieGuidance}
 ${allergyGuidance}
 
-Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals.`;
+Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals. Ensure macros (protein, carbs, fats) are accurate and sum correctly to the daily totals.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

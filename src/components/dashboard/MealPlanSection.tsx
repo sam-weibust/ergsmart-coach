@@ -24,9 +24,12 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
       const { data, error } = await supabase.functions.invoke("generate-meals", {
         body: {
           weight: profile.weight,
+          height: profile.height,
+          age: profile.age,
           goals: profile.goals,
           trainingLoad: "moderate",
           dietGoal: dietGoal,
+          allergies: profile.allergies || [],
         },
       });
 
