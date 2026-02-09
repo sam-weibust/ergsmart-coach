@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, User } from "lucide-react";
 import { NotificationSettings } from "./NotificationSettings";
+import { Timer } from "lucide-react";
 
 // Imperial conversion helpers
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
@@ -41,6 +42,8 @@ export const ProfileSection = () => {
   const [allergies, setAllergies] = useState("");
   const [age, setAge] = useState("");
   const [healthIssues, setHealthIssues] = useState("");
+  const [current2k, setCurrent2k] = useState("");
+  const [goal2k, setGoal2k] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
@@ -58,6 +61,32 @@ export const ProfileSection = () => {
       return data;
     },
   });
+
+  const { data: userGoals } = useQuery({
+    queryKey: ["user-goals-profile"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const formatInterval = (interval: string | null | unknown) => {
+    if (!interval) return "";
+    const str = String(interval);
+    const match = str.match(/(\d{2}):(\d{2}):(\d{2})/);
+    if (match) {
+      const [, hours, minutes, seconds] = match;
+      const totalMinutes = parseInt(hours) * 60 + parseInt(minutes);
+      return `${totalMinutes}:${seconds}`;
+    }
+    return str;
+  };
 
   useEffect(() => {
     if (profile) {
@@ -82,6 +111,13 @@ export const ProfileSection = () => {
       setHealthIssues(((profile as any).health_issues || []).join(", "));
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (userGoals) {
+      setCurrent2k(formatInterval(userGoals.current_2k_time));
+      setGoal2k(formatInterval(userGoals.goal_2k_time));
+    }
+  }, [userGoals]);
 
   const updateProfile = useMutation({
     mutationFn: async () => {
@@ -114,6 +150,27 @@ export const ProfileSection = () => {
         } as any);
 
       if (error) throw error;
+
+      // Also save 2K times to user_goals
+      const parseTimeToInterval = (time: string) => {
+        if (!time) return null;
+        const parts = time.split(":");
+        if (parts.length !== 2) return null;
+        const minutes = parseInt(parts[0]);
+        const seconds = parseFloat(parts[1]);
+        if (isNaN(minutes) || isNaN(seconds)) return null;
+        return `00:${minutes.toString().padStart(2, '0')}:${Math.floor(seconds).toString().padStart(2, '0')}`;
+      };
+
+      const { error: goalsError } = await supabase
+        .from("user_goals")
+        .upsert({
+          user_id: user.id,
+          current_2k_time: parseTimeToInterval(current2k),
+          goal_2k_time: parseTimeToInterval(goal2k),
+        } as any);
+
+      if (goalsError) console.error("Error saving 2K times:", goalsError);
     },
     onSuccess: () => {
       toast({
@@ -121,6 +178,8 @@ export const ProfileSection = () => {
         description: "Your settings have been saved.",
       });
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["user-goals-profile"] });
     },
     onError: (error: Error) => {
       toast({
@@ -282,6 +341,36 @@ export const ProfileSection = () => {
               <p className="text-xs text-muted-foreground">
                 Separate multiple issues with commas. This helps adjust workouts for safety.
               </p>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h3 className="font-medium mb-4 flex items-center gap-2">
+                <Timer className="h-4 w-4" />
+                2K Erg Times
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                These times directly determine your training splits. Plans will progressively move your pace toward your goal.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="current2k">Current 2K Time (M:SS)</Label>
+                  <Input
+                    id="current2k"
+                    value={current2k}
+                    onChange={(e) => setCurrent2k(e.target.value)}
+                    placeholder="7:30"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="goal2k">Goal 2K Time (M:SS)</Label>
+                  <Input
+                    id="goal2k"
+                    value={goal2k}
+                    onChange={(e) => setGoal2k(e.target.value)}
+                    placeholder="7:00"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
