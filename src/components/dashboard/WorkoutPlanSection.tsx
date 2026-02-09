@@ -178,6 +178,7 @@ export const WorkoutPlanSection = () => {
           experience: profile.experience_level || "intermediate",
           goals: profile.goals || "general fitness",
           current2k: userGoals?.current_2k_time || null,
+          goal2k: userGoals?.goal_2k_time || null,
           age: (profile as any).age || null,
           healthIssues: (profile as any).health_issues || [],
         },

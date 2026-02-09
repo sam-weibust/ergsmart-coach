@@ -187,7 +187,7 @@ serve(async (req) => {
 
     console.log("User:", user.id);
 
-    const { months, weight, height, experience, goals, current2k, age, healthIssues } = await req.json();
+    const { months, weight, height, experience, goals, current2k, goal2k, age, healthIssues } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -206,13 +206,32 @@ serve(async (req) => {
     
     let splitGuidance = "";
     if (current2k) {
-      const parts = current2k.toString().replace(/^00:/, "").split(":").map(Number);
-      let totalSeconds = parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+      const parseTime = (t: string) => {
+        const p = t.toString().replace(/^00:/, "").split(":").map(Number);
+        return p.length === 2 ? p[0] * 60 + p[1] : 0;
+      };
       
-      if (totalSeconds > 0) {
-        const pace = totalSeconds / 4;
+      const currentSeconds = parseTime(current2k);
+      const goalSeconds = goal2k ? parseTime(goal2k) : 0;
+      
+      if (currentSeconds > 0) {
+        const currentPace = currentSeconds / 4; // 500m split from 2K
+        const goalPace = goalSeconds > 0 ? goalSeconds / 4 : currentPace - 8; // default: ~8s improvement
         const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}/500m`;
-        splitGuidance = `2K: ${current2k}. Splits: UT2 ${fmt(pace + 22)}, UT1 ${fmt(pace + 16)}, TR ${fmt(pace + 10)}, AT ${fmt(pace + 4)}. Progress 0.5s/week faster.`;
+        
+        // Calculate per-week improvement rate
+        const paceImprovement = (currentPace - goalPace) / totalWeeks;
+        
+        splitGuidance = `CRITICAL PROGRESSIVE SPLIT INSTRUCTIONS:
+Current 2K: ${current2k} (500m pace: ${fmt(currentPace)}). Goal 2K: ${goal2k || "not set"} (500m pace: ${fmt(goalPace)}).
+Total improvement needed: ${(currentPace - goalPace).toFixed(1)}s per 500m over ${totalWeeks} weeks = ~${paceImprovement.toFixed(2)}s/week faster.
+
+WEEK 1 starting splits: UT2 ${fmt(currentPace + 22)}, UT1 ${fmt(currentPace + 16)}, TR ${fmt(currentPace + 10)}, AT ${fmt(currentPace + 4)}.
+FINAL WEEK target splits: UT2 ${fmt(goalPace + 20)}, UT1 ${fmt(goalPace + 14)}, TR ${fmt(goalPace + 8)}, AT ${fmt(goalPace + 2)}.
+
+EVERY WEEK the splits MUST get faster. Each week should improve approximately ${paceImprovement.toFixed(1)}s/500m across all zones.
+Do NOT keep splits the same across weeks. The athlete's pace must progressively decrease (get faster) from week 1 to the final week.
+Example: If Week 1 AT split is ${fmt(currentPace + 4)}, Week 2 should be ~${fmt(currentPace + 4 - paceImprovement)}, Week 3 ~${fmt(currentPace + 4 - paceImprovement * 2)}, etc.`;
       }
     }
 
