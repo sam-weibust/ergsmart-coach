@@ -163,6 +163,18 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
       if (error) throw error;
 
+      // Create in-app notification for the recipient
+      try {
+        await supabase.from("notifications").insert({
+          user_id: friendProfile.id,
+          type: "friend_request",
+          title: "New Friend Request",
+          body: `${profile.full_name || profile.username || profile.email} sent you a friend request.`,
+        });
+      } catch (notifError) {
+        console.error("Failed to create notification:", notifError);
+      }
+
       // Send email notification
       try {
         await supabase.functions.invoke("send-notification-email", {
@@ -175,7 +187,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         });
       } catch (emailError) {
         console.error("Failed to send email notification:", emailError);
-        // Don't fail the whole request if email fails
       }
 
       toast({
@@ -201,6 +212,20 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
           .from("friendships")
           .update({ status: "accepted" })
           .eq("id", id);
+
+        // Create in-app notification for the requester
+        if (requester?.id) {
+          try {
+            await supabase.from("notifications").insert({
+              user_id: requester.id,
+              type: "friend_request",
+              title: "Friend Request Accepted!",
+              body: `${profile.full_name || profile.username || profile.email} accepted your friend request.`,
+            });
+          } catch (notifError) {
+            console.error("Failed to create notification:", notifError);
+          }
+        }
 
         // Send email notification to the person who sent the request
         if (requester?.email) {
