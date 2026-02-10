@@ -11,8 +11,8 @@ export const GenerationProgress = ({ currentBatch, totalBatches, isGenerating }:
   if (!isGenerating) return null;
 
   const progress = totalBatches > 0 ? (currentBatch / totalBatches) * 100 : 0;
-  const startWeek = (currentBatch - 1) * 2 + 1;
-  const endWeek = Math.min(currentBatch * 2, totalBatches * 2);
+  const startWeek = (currentBatch - 1) * 4 + 1;
+  const endWeek = Math.min(currentBatch * 4, totalBatches * 4);
 
   return (
     <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in duration-300">
@@ -35,7 +35,7 @@ export const GenerationProgress = ({ currentBatch, totalBatches, isGenerating }:
       </div>
       
       <div className="text-xs text-muted-foreground">
-        Batch {currentBatch} of {totalBatches} • Each batch contains 2 weeks of training
+        Batch {currentBatch} of {totalBatches} • Each batch contains 4 weeks of training
       </div>
     </div>
   );

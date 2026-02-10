@@ -235,8 +235,8 @@ Example: If Week 1 AT split is ${fmt(currentPace + 4)}, Week 2 should be ~${fmt(
       }
     }
 
-    // Generate in batches of 2 weeks for reliability
-    const batchSize = 2;
+    // Generate in batches of 4 weeks to reduce API calls and avoid timeouts
+    const batchSize = 4;
     const allWeeks: WeekPlan[] = [];
     
     for (let startWeek = 1; startWeek <= totalWeeks; startWeek += batchSize) {
