@@ -70,7 +70,13 @@ Generate a full day meal plan in JSON format:
       "protein": grams,
       "carbs": grams,
       "fats": grams,
-      "timing": "Best time to eat relative to training"
+      "timing": "Best time to eat relative to training",
+      "recipe": {
+        "ingredients": ["ingredient 1 with amount", "ingredient 2 with amount"],
+        "instructions": ["Step 1", "Step 2", "Step 3"],
+        "prep_time": "10 min",
+        "cook_time": "15 min"
+      }
     }
   ],
   "dailyTotals": {
@@ -80,7 +86,9 @@ Generate a full day meal plan in JSON format:
     "fats": total
   },
   "hydrationNote": "Daily hydration guidance"
-}`;
+}
+
+IMPORTANT: Every meal MUST include a "recipe" object with ingredients (with amounts), step-by-step instructions, prep_time, and cook_time. Even for simple meals like snacks, provide preparation details.`;
 
     const userPrompt = `Create a full day meal plan for:
 - Weight: ${weight}kg
@@ -93,7 +101,7 @@ Generate a full day meal plan in JSON format:
 ${calorieGuidance}
 ${allergyGuidance}
 
-Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals. Ensure macros (protein, carbs, fats) are accurate and sum correctly to the daily totals.`;
+Include breakfast, lunch, dinner, and 2 snacks. Focus on recovery, performance, and practical meals. Ensure macros (protein, carbs, fats) are accurate and sum correctly to the daily totals. Include detailed recipes with ingredients and instructions for EVERY meal.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
