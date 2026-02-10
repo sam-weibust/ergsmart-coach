@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -19,6 +19,7 @@ import AwardsSection from "@/components/dashboard/AwardsSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
+import MealPlanTab from "@/components/dashboard/MealPlanTab";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -140,6 +141,13 @@ const Dashboard = () => {
                 <span>Log</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="meals" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <UtensilsCrossed className="h-4 w-4" />
+                <span>Meals</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="history" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
@@ -212,6 +220,10 @@ const Dashboard = () => {
                 <ErgWorkoutSection profile={profile} />
                 <MultiSetStrengthForm profile={profile} />
               </div>
+            </TabsContent>
+
+            <TabsContent value="meals" className="mt-0">
+              <MealPlanTab profile={profile} />
             </TabsContent>
 
             <TabsContent value="history" className="mt-0">
