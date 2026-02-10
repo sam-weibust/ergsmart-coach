@@ -34,13 +34,13 @@ export const WorkoutPlanSection = () => {
 
   // Calculate total batches when months changes
   const totalWeeks = parseInt(months) * 4;
-  const totalBatches = Math.ceil(totalWeeks / 2);
+  const totalBatches = Math.ceil(totalWeeks / 4);
 
   // Simulate progress updates during generation
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (generationProgress.totalBatches > 0 && generationProgress.currentBatch < generationProgress.totalBatches) {
-      // Estimate ~15 seconds per batch
+      // Estimate ~25 seconds per batch (4 weeks each)
       interval = setInterval(() => {
         setGenerationProgress(prev => {
           if (prev.currentBatch < prev.totalBatches) {
@@ -48,7 +48,7 @@ export const WorkoutPlanSection = () => {
           }
           return prev;
         });
-      }, 15000);
+      }, 25000);
     }
     return () => clearInterval(interval);
   }, [generationProgress.totalBatches, generationProgress.currentBatch]);
@@ -167,8 +167,20 @@ export const WorkoutPlanSection = () => {
         throw new Error("Please complete your profile first");
       }
 
+      // Fetch user goals fresh to ensure we have latest 2K times
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      
+      const { data: freshGoals } = await supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
       // Initialize progress tracking
-      setGenerationProgress({ currentBatch: 1, totalBatches });
+      const numWeeks = parseInt(months) * 4;
+      const batches = Math.ceil(numWeeks / 4);
+      setGenerationProgress({ currentBatch: 1, totalBatches: batches });
 
       const { data, error } = await supabase.functions.invoke("generate-workout", {
         body: {
@@ -177,10 +189,10 @@ export const WorkoutPlanSection = () => {
           height: profile.height,
           experience: profile.experience_level || "intermediate",
           goals: profile.goals || "general fitness",
-          current2k: userGoals?.current_2k_time || null,
-          goal2k: userGoals?.goal_2k_time || null,
-          age: (profile as any).age || null,
-          healthIssues: (profile as any).health_issues || [],
+          current2k: freshGoals?.current_2k_time ? String(freshGoals.current_2k_time) : null,
+          goal2k: freshGoals?.goal_2k_time ? String(freshGoals.goal_2k_time) : null,
+          age: profile.age || null,
+          healthIssues: profile.health_issues || [],
         },
       });
 
