@@ -235,22 +235,25 @@ Example: If Week 1 AT split is ${fmt(currentPace + 4)}, Week 2 should be ~${fmt(
       }
     }
 
-    // Generate in batches of 4 weeks to reduce API calls and avoid timeouts
+    // Generate all batches in parallel to avoid timeout
     const batchSize = 4;
-    const allWeeks: WeekPlan[] = [];
+    const batchPromises: Promise<WeekPlan[]>[] = [];
     
     for (let startWeek = 1; startWeek <= totalWeeks; startWeek += batchSize) {
       const endWeek = Math.min(startWeek + batchSize - 1, totalWeeks);
-      console.log(`Generating weeks ${startWeek}-${endWeek}/${totalWeeks}`);
+      console.log(`Queuing weeks ${startWeek}-${endWeek}/${totalWeeks}`);
       
-      const batchWeeks = await generateWeekBatch(
-        startWeek, endWeek, totalWeeks,
-        { weight, height, experience, goals, current2k, age, healthIssues, splitGuidance, healthGuidance },
-        LOVABLE_API_KEY
+      batchPromises.push(
+        generateWeekBatch(
+          startWeek, endWeek, totalWeeks,
+          { weight, height, experience, goals, current2k, age, healthIssues, splitGuidance, healthGuidance },
+          LOVABLE_API_KEY
+        )
       );
-      
-      allWeeks.push(...batchWeeks);
     }
+    
+    const batchResults = await Promise.all(batchPromises);
+    const allWeeks: WeekPlan[] = batchResults.flat();
     
     console.log(`Generated ${allWeeks.length} weeks successfully`);
     
