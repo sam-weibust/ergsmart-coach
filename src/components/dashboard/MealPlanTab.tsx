@@ -8,13 +8,11 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Sparkles, UtensilsCrossed, Flame, Beef, Wheat, Droplets,
-  ChefHat, Trash2, Heart, Plus, X, Apple, PencilLine
+  ChefHat, Trash2, Heart, Plus, X, Apple
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import CustomMealLogger from "./CustomMealLogger";
 
 interface MealPlanTabProps {
   profile: any;
@@ -30,16 +28,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
   const [newPreference, setNewPreference] = useState("");
   const preferences: string[] = profile?.food_preferences || [];
 
-  // Custom logging
-  const [customLogOpen, setCustomLogOpen] = useState(false);
-  const [customMeal, setCustomMeal] = useState({
-    meal_type: "Snack",
-    description: "",
-    calories: "",
-    protein: "",
-    carbs: "",
-    fats: "",
-  });
+  // Custom logging is handled by CustomMealLogger component
 
   // Fetch saved meal plans
   const { data: savedMeals, isLoading: mealsLoading } = useQuery({
@@ -196,27 +185,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     }
   };
 
-  const logCustomMeal = async () => {
-    if (!profile || !customMeal.description) return;
-    try {
-      const { error } = await supabase.from("meal_plans").insert({
-        user_id: profile.id,
-        meal_type: customMeal.meal_type,
-        description: customMeal.description,
-        calories: parseInt(customMeal.calories) || 0,
-        protein: parseFloat(customMeal.protein) || 0,
-        carbs: parseFloat(customMeal.carbs) || 0,
-        fats: parseFloat(customMeal.fats) || 0,
-      });
-      if (error) throw error;
-      toast({ title: "Meal logged!" });
-      setCustomLogOpen(false);
-      setCustomMeal({ meal_type: "Snack", description: "", calories: "", protein: "", carbs: "", fats: "" });
-      queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
-    } catch (error) {
-      toast({ title: "Error logging meal", variant: "destructive" });
-    }
-  };
+
 
   const deleteDayMeals = async (date: string) => {
     try {
@@ -258,63 +227,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
               </CardDescription>
             </div>
             {/* Custom Log Button */}
-            <Dialog open={customLogOpen} onOpenChange={setCustomLogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <PencilLine className="h-4 w-4 mr-1" />
-                  Log Meal
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Log a Custom Meal</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <div>
-                    <Label>Meal Type</Label>
-                    <Select value={customMeal.meal_type} onValueChange={(v) => setCustomMeal({ ...customMeal, meal_type: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Breakfast">Breakfast</SelectItem>
-                        <SelectItem value="Lunch">Lunch</SelectItem>
-                        <SelectItem value="Dinner">Dinner</SelectItem>
-                        <SelectItem value="Snack">Snack</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Input placeholder="e.g. Grilled chicken salad" value={customMeal.description}
-                      onChange={(e) => setCustomMeal({ ...customMeal, description: e.target.value })} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label>Calories</Label>
-                      <Input type="number" placeholder="450" value={customMeal.calories}
-                        onChange={(e) => setCustomMeal({ ...customMeal, calories: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Protein (g)</Label>
-                      <Input type="number" placeholder="30" value={customMeal.protein}
-                        onChange={(e) => setCustomMeal({ ...customMeal, protein: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Carbs (g)</Label>
-                      <Input type="number" placeholder="50" value={customMeal.carbs}
-                        onChange={(e) => setCustomMeal({ ...customMeal, carbs: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Fats (g)</Label>
-                      <Input type="number" placeholder="15" value={customMeal.fats}
-                        onChange={(e) => setCustomMeal({ ...customMeal, fats: e.target.value })} />
-                    </div>
-                  </div>
-                  <Button onClick={logCustomMeal} className="w-full" disabled={!customMeal.description}>
-                    <Plus className="h-4 w-4 mr-1" /> Log Meal
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <CustomMealLogger profileId={profile?.id} />
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
