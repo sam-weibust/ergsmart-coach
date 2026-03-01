@@ -183,6 +183,7 @@ export type Database = {
           description: string
           fats: number | null
           id: string
+          is_favorite: boolean | null
           meal_date: string
           meal_type: string
           protein: number | null
@@ -195,6 +196,7 @@ export type Database = {
           description: string
           fats?: number | null
           id?: string
+          is_favorite?: boolean | null
           meal_date?: string
           meal_type: string
           protein?: number | null
@@ -207,6 +209,7 @@ export type Database = {
           description?: string
           fats?: number | null
           id?: string
+          is_favorite?: boolean | null
           meal_date?: string
           meal_type?: string
           protein?: number | null
@@ -329,6 +332,7 @@ export type Database = {
           enable_meal_plans: boolean | null
           enable_strength_training: boolean | null
           experience_level: string | null
+          food_preferences: string[] | null
           full_name: string | null
           goals: string | null
           health_issues: string[] | null
@@ -348,6 +352,7 @@ export type Database = {
           enable_meal_plans?: boolean | null
           enable_strength_training?: boolean | null
           experience_level?: string | null
+          food_preferences?: string[] | null
           full_name?: string | null
           goals?: string | null
           health_issues?: string[] | null
@@ -367,6 +372,7 @@ export type Database = {
           enable_meal_plans?: boolean | null
           enable_strength_training?: boolean | null
           experience_level?: string | null
+          food_preferences?: string[] | null
           full_name?: string | null
           goals?: string | null
           health_issues?: string[] | null

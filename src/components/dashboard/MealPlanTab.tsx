@@ -4,9 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Sparkles, UtensilsCrossed, Flame, Beef, Wheat, Droplets, ChefHat, Trash2 } from "lucide-react";
+import {
+  Loader2, Sparkles, UtensilsCrossed, Flame, Beef, Wheat, Droplets,
+  ChefHat, Trash2, Heart, Plus, X, Apple, PencilLine
+} from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface MealPlanTabProps {
   profile: any;
@@ -18,25 +26,37 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
   const [loading, setLoading] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
 
-  // Fetch saved meal plans for calorie tracker
+  // Food preferences
+  const [newPreference, setNewPreference] = useState("");
+  const preferences: string[] = profile?.food_preferences || [];
+
+  // Custom logging
+  const [customLogOpen, setCustomLogOpen] = useState(false);
+  const [customMeal, setCustomMeal] = useState({
+    meal_type: "Snack",
+    description: "",
+    calories: "",
+    protein: "",
+    carbs: "",
+    fats: "",
+  });
+
+  // Fetch saved meal plans
   const { data: savedMeals, isLoading: mealsLoading } = useQuery({
     queryKey: ["saved-meal-plans"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
-
       const { data, error } = await supabase
         .from("meal_plans")
         .select("*")
         .eq("user_id", user.id)
         .order("meal_date", { ascending: false });
-
       if (error) throw error;
       return data;
     },
   });
 
-  // Group saved meals by date for the tracker
   const mealsByDate = useMemo(() => {
     if (!savedMeals) return {};
     const grouped: Record<string, any[]> = {};
@@ -48,7 +68,6 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     return grouped;
   }, [savedMeals]);
 
-  // Calculate daily totals for tracker
   const dailyTotals = useMemo(() => {
     return Object.entries(mealsByDate).map(([date, meals]) => {
       const totals = meals.reduce(
@@ -64,21 +83,70 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     });
   }, [mealsByDate]);
 
-  // Calorie target based on profile
+  // Favorites
+  const favoriteMeals = useMemo(() => {
+    if (!savedMeals) return [];
+    return savedMeals.filter((m: any) => m.is_favorite);
+  }, [savedMeals]);
+
+  // Calorie target using Mifflin-St Jeor
   const calorieTarget = useMemo(() => {
     if (!profile?.weight) return 2500;
-    const base = profile.weight * 35; // rough athletic TDEE
+    const w = Number(profile.weight);
+    const h = profile.height ? Number(profile.height) : 175;
+    const a = profile.age ? Number(profile.age) : 25;
+    const bmr = 10 * w + 6.25 * h - 5 * a + 5;
+    const tdee = Math.round(bmr * 1.7);
     const dietGoal = profile?.diet_goal || "maintain";
-    if (dietGoal === "cut") return Math.round(base - 400);
-    if (dietGoal === "bulk") return Math.round(base + 400);
-    return Math.round(base);
+    if (dietGoal === "cut") return tdee - 400;
+    if (dietGoal === "bulk") return tdee + 400;
+    return tdee;
   }, [profile]);
+
+  // Recent meal descriptions for variety
+  const recentMealDescriptions = useMemo(() => {
+    if (!savedMeals) return [];
+    return savedMeals.slice(0, 20).map((m: any) => m.description);
+  }, [savedMeals]);
+
+  const addPreference = async () => {
+    if (!newPreference.trim() || !profile) return;
+    const updated = [...preferences, newPreference.trim()];
+    const { error } = await supabase
+      .from("profiles")
+      .update({ food_preferences: updated } as any)
+      .eq("id", profile.id);
+    if (error) {
+      toast({ title: "Error saving preference", variant: "destructive" });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      setNewPreference("");
+    }
+  };
+
+  const removePreference = async (pref: string) => {
+    const updated = preferences.filter((p) => p !== pref);
+    await supabase
+      .from("profiles")
+      .update({ food_preferences: updated } as any)
+      .eq("id", profile.id);
+    queryClient.invalidateQueries({ queryKey: ["profile"] });
+  };
+
+  const toggleFavorite = async (mealId: string, current: boolean) => {
+    const { error } = await supabase
+      .from("meal_plans")
+      .update({ is_favorite: !current } as any)
+      .eq("id", mealId);
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
+      toast({ title: !current ? "Added to favorites ❤️" : "Removed from favorites" });
+    }
+  };
 
   const generateMealPlan = async () => {
     setLoading(true);
     try {
-      const dietGoal = profile?.diet_goal || "maintain";
-
       const { data, error } = await supabase.functions.invoke("generate-meals", {
         body: {
           weight: profile.weight,
@@ -86,20 +154,18 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
           age: profile.age,
           goals: profile.goals,
           trainingLoad: "moderate",
-          dietGoal,
+          dietGoal: profile?.diet_goal || "maintain",
           allergies: profile.allergies || [],
+          foodPreferences: preferences,
+          favoriteMeals: favoriteMeals.map((m: any) => m.description),
+          recentMealDescriptions,
         },
       });
-
       if (error) throw error;
       setGeneratedPlan(data.mealPlan);
     } catch (error) {
       console.error("Error generating meal plan:", error);
-      toast({
-        title: "Error",
-        description: "Failed to generate meal plan. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to generate meal plan.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -118,18 +184,37 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
         carbs: meal.carbs,
         fats: meal.fats,
       }));
-
       const { error } = await supabase.from("meal_plans").insert(meals);
       if (error) throw error;
-
-      toast({ title: "Meal plan saved!", description: "Your daily meal plan has been saved." });
+      toast({ title: "Meal plan saved!" });
       setGeneratedPlan(null);
       queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
     } catch (error) {
-      console.error("Error saving meal plan:", error);
       toast({ title: "Error", description: "Failed to save meal plan.", variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const logCustomMeal = async () => {
+    if (!profile || !customMeal.description) return;
+    try {
+      const { error } = await supabase.from("meal_plans").insert({
+        user_id: profile.id,
+        meal_type: customMeal.meal_type,
+        description: customMeal.description,
+        calories: parseInt(customMeal.calories) || 0,
+        protein: parseFloat(customMeal.protein) || 0,
+        carbs: parseFloat(customMeal.carbs) || 0,
+        fats: parseFloat(customMeal.fats) || 0,
+      });
+      if (error) throw error;
+      toast({ title: "Meal logged!" });
+      setCustomLogOpen(false);
+      setCustomMeal({ meal_type: "Snack", description: "", calories: "", protein: "", carbs: "", fats: "" });
+      queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
+    } catch (error) {
+      toast({ title: "Error logging meal", variant: "destructive" });
     }
   };
 
@@ -137,17 +222,15 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { error } = await supabase
         .from("meal_plans")
         .delete()
         .eq("user_id", user.id)
         .eq("meal_date", date);
-
       if (error) throw error;
       toast({ title: "Meals deleted" });
       queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
-    } catch (error) {
+    } catch {
       toast({ title: "Error deleting meals", variant: "destructive" });
     }
   };
@@ -164,13 +247,75 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
       {/* Calorie Tracker */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Flame className="h-5 w-5 text-orange-500" />
-            Today's Calorie Tracker
-          </CardTitle>
-          <CardDescription>
-            Target: {calorieTarget} cal ({dietLabel} mode)
-          </CardDescription>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Flame className="h-5 w-5 text-orange-500" />
+                Today's Calorie Tracker
+              </CardTitle>
+              <CardDescription>
+                Target: {calorieTarget} cal ({dietLabel} mode)
+              </CardDescription>
+            </div>
+            {/* Custom Log Button */}
+            <Dialog open={customLogOpen} onOpenChange={setCustomLogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <PencilLine className="h-4 w-4 mr-1" />
+                  Log Meal
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Log a Custom Meal</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Meal Type</Label>
+                    <Select value={customMeal.meal_type} onValueChange={(v) => setCustomMeal({ ...customMeal, meal_type: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Breakfast">Breakfast</SelectItem>
+                        <SelectItem value="Lunch">Lunch</SelectItem>
+                        <SelectItem value="Dinner">Dinner</SelectItem>
+                        <SelectItem value="Snack">Snack</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Input placeholder="e.g. Grilled chicken salad" value={customMeal.description}
+                      onChange={(e) => setCustomMeal({ ...customMeal, description: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label>Calories</Label>
+                      <Input type="number" placeholder="450" value={customMeal.calories}
+                        onChange={(e) => setCustomMeal({ ...customMeal, calories: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Protein (g)</Label>
+                      <Input type="number" placeholder="30" value={customMeal.protein}
+                        onChange={(e) => setCustomMeal({ ...customMeal, protein: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Carbs (g)</Label>
+                      <Input type="number" placeholder="50" value={customMeal.carbs}
+                        onChange={(e) => setCustomMeal({ ...customMeal, carbs: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Fats (g)</Label>
+                      <Input type="number" placeholder="15" value={customMeal.fats}
+                        onChange={(e) => setCustomMeal({ ...customMeal, fats: e.target.value })} />
+                    </div>
+                  </div>
+                  <Button onClick={logCustomMeal} className="w-full" disabled={!customMeal.description}>
+                    <Plus className="h-4 w-4 mr-1" /> Log Meal
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -203,11 +348,92 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
 
           {!todayData && (
             <p className="text-sm text-muted-foreground text-center py-2">
-              No meals logged today. Generate a meal plan below!
+              No meals logged today. Generate a meal plan or log a custom meal!
             </p>
           )}
         </CardContent>
       </Card>
+
+      {/* Food Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Apple className="h-5 w-5 text-green-500" />
+            Food Preferences
+          </CardTitle>
+          <CardDescription>
+            Add foods and cuisines you enjoy — AI will incorporate them into your meals
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. Mediterranean, chicken, avocado..."
+              value={newPreference}
+              onChange={(e) => setNewPreference(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addPreference()}
+            />
+            <Button onClick={addPreference} size="sm" disabled={!newPreference.trim()}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          {preferences.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {preferences.map((pref) => (
+                <Badge key={pref} variant="secondary" className="gap-1 pr-1">
+                  {pref}
+                  <button onClick={() => removePreference(pref)} className="ml-1 hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* Dietary restrictions reminder */}
+          {profile?.allergies && profile.allergies.length > 0 && (
+            <div className="text-xs text-muted-foreground flex flex-wrap gap-1 items-center pt-1">
+              <span>Restrictions:</span>
+              {profile.allergies.map((a: string) => (
+                <Badge key={a} variant="destructive" className="text-xs">{a}</Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Favorite Meals */}
+      {favoriteMeals.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Heart className="h-5 w-5 text-red-500 fill-red-500" />
+              Favorite Meals ({favoriteMeals.length})
+            </CardTitle>
+            <CardDescription>
+              Meals you love — AI will suggest similar options when generating new plans
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {favoriteMeals.slice(0, 10).map((meal: any) => (
+                <div key={meal.id} className="flex justify-between items-start p-3 bg-muted rounded-lg">
+                  <div>
+                    <span className="font-medium text-sm">{meal.meal_type}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">{meal.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium whitespace-nowrap">{meal.calories} cal</span>
+                    <button onClick={() => toggleFavorite(meal.id, true)}>
+                      <Heart className="h-4 w-4 text-red-500 fill-red-500" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Generate Meal Plan */}
       <Card>
@@ -217,22 +443,16 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
             Generate Meal Plan
           </CardTitle>
           <CardDescription>
-            AI-powered daily meal plan with recipes and macro breakdown
+            AI-powered daily meal plan based on your body, goals, preferences & restrictions
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!generatedPlan ? (
             <Button onClick={generateMealPlan} disabled={loading || !profile?.weight} className="w-full">
               {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
               ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Today's Meal Plan
-                </>
+                <><Sparkles className="mr-2 h-4 w-4" />Generate Today's Meal Plan</>
               )}
             </Button>
           ) : (
@@ -253,7 +473,6 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                   <CardContent className="space-y-3">
                     <p className="text-sm">{meal.description}</p>
 
-                    {/* Recipe */}
                     {meal.recipe && (
                       <Accordion type="single" collapsible>
                         <AccordionItem value="recipe" className="border-none">
@@ -296,7 +515,6 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                       </Accordion>
                     )}
 
-                    {/* Macros */}
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t">
                       <div className="text-center p-2 bg-muted rounded">
                         <div className="text-lg font-bold text-red-500">{meal.protein}g</div>
@@ -315,7 +533,6 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                 </Card>
               ))}
 
-              {/* Daily Totals */}
               {generatedPlan.dailyTotals && (
                 <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border">
                   <CardContent className="pt-4">
@@ -365,7 +582,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
         <Card>
           <CardHeader>
             <CardTitle>Meal History</CardTitle>
-            <CardDescription>Your saved meal plans and daily macro totals</CardDescription>
+            <CardDescription>Your saved meals — tap ❤️ to favorite</CardDescription>
           </CardHeader>
           <CardContent>
             <Accordion type="single" collapsible className="w-full">
@@ -375,9 +592,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                     <div className="flex justify-between items-center w-full pr-4">
                       <span className="font-medium">
                         {new Date(day.date + "T12:00:00").toLocaleDateString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
+                          weekday: "short", month: "short", day: "numeric",
                         })}
                       </span>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -392,21 +607,24 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                     <div className="space-y-2">
                       {day.meals.map((meal: any) => (
                         <div key={meal.id} className="flex justify-between items-start p-3 bg-muted rounded-lg">
-                          <div>
+                          <div className="flex-1">
                             <span className="font-medium text-sm">{meal.meal_type}</span>
                             <p className="text-xs text-muted-foreground mt-0.5">{meal.description}</p>
                           </div>
-                          <span className="text-xs font-medium whitespace-nowrap ml-2">{meal.calories} cal</span>
+                          <div className="flex items-center gap-2 ml-2">
+                            <span className="text-xs font-medium whitespace-nowrap">{meal.calories} cal</span>
+                            <button onClick={() => toggleFavorite(meal.id, !!meal.is_favorite)}>
+                              <Heart className={`h-4 w-4 ${meal.is_favorite ? "text-red-500 fill-red-500" : "text-muted-foreground"}`} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                       <Button
-                        variant="ghost"
-                        size="sm"
+                        variant="ghost" size="sm"
                         className="text-destructive hover:text-destructive"
                         onClick={() => deleteDayMeals(day.date)}
                       >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete Day
+                        <Trash2 className="h-3 w-3 mr-1" /> Delete Day
                       </Button>
                     </div>
                   </AccordionContent>
