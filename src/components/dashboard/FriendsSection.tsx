@@ -141,7 +141,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
       if (searchError) {
         console.error("Search error:", searchError);
-        throw searchError;
+        throw new Error("Search failed. Please try again.");
       }
 
       const friendProfile = searchResults?.[0];
@@ -155,38 +155,32 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         return;
       }
 
+      // Check for existing friendship (pending, accepted, or blocked)
+      const { data: existing } = await supabase
+        .from("friendships")
+        .select("id, status")
+        .or(
+          `and(user_id.eq.${profile.id},friend_id.eq.${friendProfile.id}),and(user_id.eq.${friendProfile.id},friend_id.eq.${profile.id})`
+        );
+
+      if (existing && existing.length > 0) {
+        const status = existing[0].status;
+        const msg = status === "accepted" ? "You're already friends!" 
+          : status === "pending" ? "A friend request is already pending."
+          : "Cannot send request to this user.";
+        toast({ title: msg, variant: "destructive" });
+        return;
+      }
+
       const { error } = await supabase.from("friendships").insert({
         user_id: profile.id,
         friend_id: friendProfile.id,
         status: "pending",
       });
 
-      if (error) throw error;
-
-      // Create in-app notification for the recipient
-      try {
-        await supabase.from("notifications").insert({
-          user_id: friendProfile.id,
-          type: "friend_request",
-          title: "New Friend Request",
-          body: `${profile.full_name || profile.username || profile.email} sent you a friend request.`,
-        });
-      } catch (notifError) {
-        console.error("Failed to create notification:", notifError);
-      }
-
-      // Send email notification
-      try {
-        await supabase.functions.invoke("send-notification-email", {
-          body: {
-            type: "friend_request",
-            recipientEmail: friendProfile.email,
-            recipientName: friendProfile.username,
-            senderName: profile.full_name || profile.username || profile.email,
-          },
-        });
-      } catch (emailError) {
-        console.error("Failed to send email notification:", emailError);
+      if (error) {
+        console.error("Friendship insert error:", error);
+        throw new Error("Could not send friend request. Please try again.");
       }
 
       toast({
@@ -195,11 +189,22 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
       });
 
       setSearchTerm("");
-    } catch (error) {
+
+      // Non-blocking: send email notification (don't await or let errors affect UX)
+      supabase.functions.invoke("send-notification-email", {
+        body: {
+          type: "friend_request",
+          recipientEmail: friendProfile.email,
+          recipientName: friendProfile.username,
+          senderName: profile.full_name || profile.username || profile.email,
+        },
+      }).catch((e) => console.error("Email notification failed:", e));
+
+    } catch (error: any) {
       console.error("Error sending request:", error);
       toast({
         title: "Error",
-        description: "Failed to send request. Please try again.",
+        description: error.message || "Failed to send request. Please try again.",
         variant: "destructive",
       });
     }

@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, Sparkles, UtensilsCrossed, Flame, Beef, Wheat, Droplets,
+  Loader2, Sparkles, UtensilsCrossed, Flame, Beef, Wheat, Droplets, Check,
   ChefHat, Trash2, Heart, Plus, X, Apple
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -441,6 +441,69 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                         <div className="text-lg font-bold text-blue-500">{meal.fats}g</div>
                         <div className="text-xs text-muted-foreground">Fats</div>
                       </div>
+                    </div>
+
+                    {/* Per-meal Log & Favorite buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={meal._logged}
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase.from("meal_plans").insert({
+                              user_id: profile.id,
+                              meal_type: meal.meal_type,
+                              description: meal.description,
+                              calories: meal.calories,
+                              protein: meal.protein,
+                              carbs: meal.carbs,
+                              fats: meal.fats,
+                            });
+                            if (error) throw error;
+                            meal._logged = true;
+                            setGeneratedPlan({ ...generatedPlan });
+                            queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
+                            toast({ title: "Meal logged ✅" });
+                          } catch {
+                            toast({ title: "Error logging meal", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        {meal._logged ? (
+                          <><Check className="h-4 w-4 mr-1" /> Logged</>
+                        ) : (
+                          <><Plus className="h-4 w-4 mr-1" /> Log</>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase.from("meal_plans").insert({
+                              user_id: profile.id,
+                              meal_type: meal.meal_type,
+                              description: meal.description,
+                              calories: meal.calories,
+                              protein: meal.protein,
+                              carbs: meal.carbs,
+                              fats: meal.fats,
+                              is_favorite: true,
+                            });
+                            if (error) throw error;
+                            meal._logged = true;
+                            setGeneratedPlan({ ...generatedPlan });
+                            queryClient.invalidateQueries({ queryKey: ["saved-meal-plans"] });
+                            toast({ title: "Added to favorites ❤️" });
+                          } catch {
+                            toast({ title: "Error saving favorite", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        <Heart className="h-4 w-4 mr-1" /> Favorite
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
