@@ -444,11 +444,11 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                     </div>
 
                     {/* Per-meal Log & Favorite buttons */}
-                    <div className="flex gap-2 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                       <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1"
+                        size="default"
+                        variant="default"
+                        className="w-full"
                         disabled={meal._logged}
                         onClick={async () => {
                           try {
@@ -472,14 +472,15 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                         }}
                       >
                         {meal._logged ? (
-                          <><Check className="h-4 w-4 mr-1" /> Logged</>
+                          <><Check className="h-4 w-4 mr-2" /> Logged</>
                         ) : (
-                          <><Plus className="h-4 w-4 mr-1" /> Log</>
+                          <><Plus className="h-4 w-4 mr-2" /> Log Meal</>
                         )}
                       </Button>
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="default"
+                        variant="secondary"
+                        className="w-full"
                         onClick={async () => {
                           try {
                             const { error } = await supabase.from("meal_plans").insert({
@@ -502,7 +503,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
                           }
                         }}
                       >
-                        <Heart className="h-4 w-4 mr-1" /> Favorite
+                        <Heart className="h-4 w-4 mr-2" /> Favorite Meal
                       </Button>
                     </div>
                   </CardContent>
