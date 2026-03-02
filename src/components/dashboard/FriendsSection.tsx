@@ -156,16 +156,34 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
       }
 
       // Check for existing friendship (pending, accepted, or blocked)
-      const { data: existing } = await supabase
-        .from("friendships")
-        .select("id, status")
-        .or(
-          `and(user_id.eq.${profile.id},friend_id.eq.${friendProfile.id}),and(user_id.eq.${friendProfile.id},friend_id.eq.${profile.id})`
-        );
+      const [existingOutgoingRes, existingIncomingRes] = await Promise.all([
+        supabase
+          .from("friendships")
+          .select("id, status")
+          .eq("user_id", profile.id)
+          .eq("friend_id", friendProfile.id)
+          .limit(1),
+        supabase
+          .from("friendships")
+          .select("id, status")
+          .eq("user_id", friendProfile.id)
+          .eq("friend_id", profile.id)
+          .limit(1),
+      ]);
 
-      if (existing && existing.length > 0) {
+      if (existingOutgoingRes.error || existingIncomingRes.error) {
+        console.error("Existing friendship check error:", existingOutgoingRes.error || existingIncomingRes.error);
+        throw new Error("Could not verify existing requests. Please try again.");
+      }
+
+      const existing = [
+        ...(existingOutgoingRes.data || []),
+        ...(existingIncomingRes.data || []),
+      ];
+
+      if (existing.length > 0) {
         const status = existing[0].status;
-        const msg = status === "accepted" ? "You're already friends!" 
+        const msg = status === "accepted" ? "You're already friends!"
           : status === "pending" ? "A friend request is already pending."
           : "Cannot send request to this user.";
         toast({ title: msg, variant: "destructive" });
