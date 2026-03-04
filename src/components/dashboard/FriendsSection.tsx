@@ -208,7 +208,17 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
       setSearchTerm("");
 
-      // Non-blocking: send email notification (don't await or let errors affect UX)
+      // Non-blocking: create in-app notification for the recipient
+      supabase.from("notifications").insert({
+        user_id: friendProfile.id,
+        type: "friend_request",
+        title: "New Friend Request",
+        body: `${profile.full_name || profile.username || profile.email} sent you a friend request.`,
+      }).then(({ error: notifErr }) => {
+        if (notifErr) console.error("In-app notification failed:", notifErr);
+      });
+
+      // Non-blocking: send email notification
       supabase.functions.invoke("send-notification-email", {
         body: {
           type: "friend_request",
