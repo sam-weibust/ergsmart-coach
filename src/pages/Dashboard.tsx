@@ -78,6 +78,23 @@ const Dashboard = () => {
 
   const isCoach = (profile as any)?.user_type === "coach";
 
+  // Check if user is a member of any team (for rowers to see Teams tab)
+  const { data: userTeams } = useQuery({
+    queryKey: ["user-team-memberships"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id);
+      return data || [];
+    },
+    enabled: !loading,
+  });
+
+  const isOnTeam = isCoach || (userTeams && userTeams.length > 0);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -189,7 +206,7 @@ const Dashboard = () => {
                 <MessageCircle className="h-4 w-4" />
                 <span>Friends</span>
               </TabsTrigger>
-              {isCoach && (
+              {isOnTeam && (
                 <TabsTrigger 
                   value="teams" 
                   className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
@@ -250,7 +267,7 @@ const Dashboard = () => {
               <FriendsSection profile={profile} />
             </TabsContent>
 
-            {isCoach && (
+            {isOnTeam && (
               <TabsContent value="teams" className="mt-0">
                 <TeamsSection profile={profile} isCoach={isCoach} />
               </TabsContent>
