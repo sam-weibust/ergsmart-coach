@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.analyze-workout]
 verify_jwt = false
+
+[functions.chat-rowing]
+verify_jwt = false
