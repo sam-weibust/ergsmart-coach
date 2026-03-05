@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.chat-rowing]
 verify_jwt = false
+
+[functions.critique-rowing]
+verify_jwt = false

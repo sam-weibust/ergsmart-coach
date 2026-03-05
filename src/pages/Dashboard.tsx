@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye } from "lucide-react";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -21,6 +21,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import AskSection from "@/components/dashboard/AskSection";
+import CritiqueSection from "@/components/dashboard/CritiqueSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -217,6 +218,13 @@ const Dashboard = () => {
                 </TabsTrigger>
               )}
               <TabsTrigger 
+                value="critique" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <Eye className="h-4 w-4" />
+                <span>Critique</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="ask" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
@@ -280,6 +288,10 @@ const Dashboard = () => {
                 <TeamsSection profile={profile} isCoach={isCoach} />
               </TabsContent>
             )}
+
+            <TabsContent value="critique" className="mt-0">
+              <CritiqueSection />
+            </TabsContent>
 
             <TabsContent value="ask" className="mt-0">
               <AskSection />
