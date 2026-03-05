@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Timer, Ruler } from "lucide-react";
+import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
+import { toast as sonnerToast } from "sonner";
 
 interface ErgWorkoutSectionProps {
   profile: any;
@@ -20,8 +21,11 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
+  const [parsingPhoto, setParsingPhoto] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
   const [intervalMode, setIntervalMode] = useState<"time" | "distance">("time");
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [workout, setWorkout] = useState({
     workout_type: "steady_state",
     distance: "",
@@ -39,6 +43,66 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
     interval_distance: "",
     interval_rest: "",
   });
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setParsingPhoto(true);
+    sonnerToast.info("Reading your erg screen...");
+
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-erg-screen`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ imageBase64: base64 }),
+        }
+      );
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error || `Error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const w = data.workout;
+
+      setWorkout(prev => ({
+        ...prev,
+        workout_type: w.workout_type || prev.workout_type,
+        distance: w.distance ? String(w.distance) : prev.distance,
+        duration: w.duration || prev.duration,
+        avg_split: w.avg_split || prev.avg_split,
+        avg_heart_rate: w.avg_heart_rate ? String(w.avg_heart_rate) : prev.avg_heart_rate,
+        calories: w.calories ? String(w.calories) : prev.calories,
+        notes: w.notes || prev.notes,
+      }));
+
+      sonnerToast.success("Erg data imported! Review and save.");
+    } catch (err: any) {
+      console.error("Photo parse error:", err);
+      sonnerToast.error(err.message || "Failed to read erg screen");
+    } finally {
+      setParsingPhoto(false);
+      // Reset inputs so same file can be re-selected
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+  };
 
   const getAIFeedback = async (savedWorkout: any) => {
     setAnalyzingFeedback(true);
@@ -149,10 +213,52 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
       
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Log Erg Workout
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Log Erg Workout
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={parsingPhoto}
+                className="gap-1.5"
+              >
+                {parsingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                <span className="hidden sm:inline">Snap Erg</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={parsingPhoto}
+                className="gap-1.5"
+              >
+                {parsingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                <span className="hidden sm:inline">Upload Photo</span>
+              </Button>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Take a photo of your erg screen or type your workout manually.
+          </p>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoCapture}
+          />
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoCapture}
+          />
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
