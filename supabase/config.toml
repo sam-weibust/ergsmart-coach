@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.critique-rowing]
 verify_jwt = false
+
+[functions.parse-erg-screen]
+verify_jwt = false
