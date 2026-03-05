@@ -49,49 +49,49 @@ export type Database = {
       erg_workouts: {
         Row: {
           avg_heart_rate: number | null
-          avg_split: unknown
+          avg_split: string | null
           calories: number | null
-          cooldown_duration: unknown
+          cooldown_duration: string | null
           created_at: string | null
           distance: number | null
-          duration: unknown
+          duration: string | null
           id: string
           notes: string | null
           rest_periods: string | null
           user_id: string
-          warmup_duration: unknown
+          warmup_duration: string | null
           workout_date: string
           workout_type: string
         }
         Insert: {
           avg_heart_rate?: number | null
-          avg_split?: unknown
+          avg_split?: string | null
           calories?: number | null
-          cooldown_duration?: unknown
+          cooldown_duration?: string | null
           created_at?: string | null
           distance?: number | null
-          duration?: unknown
+          duration?: string | null
           id?: string
           notes?: string | null
           rest_periods?: string | null
           user_id: string
-          warmup_duration?: unknown
+          warmup_duration?: string | null
           workout_date?: string
           workout_type: string
         }
         Update: {
           avg_heart_rate?: number | null
-          avg_split?: unknown
+          avg_split?: string | null
           calories?: number | null
-          cooldown_duration?: unknown
+          cooldown_duration?: string | null
           created_at?: string | null
           distance?: number | null
-          duration?: unknown
+          duration?: string | null
           id?: string
           notes?: string | null
           rest_periods?: string | null
           user_id?: string
-          warmup_duration?: unknown
+          warmup_duration?: string | null
           workout_date?: string
           workout_type?: string
         }
@@ -460,7 +460,7 @@ export type Database = {
           id: string
           notes: string | null
           reps: number
-          rest_between_sets: unknown
+          rest_between_sets: string | null
           sets: number
           user_id: string
           warmup_notes: string | null
@@ -474,7 +474,7 @@ export type Database = {
           id?: string
           notes?: string | null
           reps: number
-          rest_between_sets?: unknown
+          rest_between_sets?: string | null
           sets: number
           user_id: string
           warmup_notes?: string | null
@@ -488,7 +488,7 @@ export type Database = {
           id?: string
           notes?: string | null
           reps?: number
-          rest_between_sets?: unknown
+          rest_between_sets?: string | null
           sets?: number
           user_id?: string
           warmup_notes?: string | null
@@ -660,12 +660,12 @@ export type Database = {
       user_goals: {
         Row: {
           created_at: string | null
-          current_2k_time: unknown
-          current_5k_time: unknown
-          current_6k_time: unknown
-          goal_2k_time: unknown
-          goal_5k_time: unknown
-          goal_6k_time: unknown
+          current_2k_time: string | null
+          current_5k_time: string | null
+          current_6k_time: string | null
+          goal_2k_time: string | null
+          goal_5k_time: string | null
+          goal_6k_time: string | null
           id: string
           notes: string | null
           updated_at: string | null
@@ -673,12 +673,12 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          current_2k_time?: unknown
-          current_5k_time?: unknown
-          current_6k_time?: unknown
-          goal_2k_time?: unknown
-          goal_5k_time?: unknown
-          goal_6k_time?: unknown
+          current_2k_time?: string | null
+          current_5k_time?: string | null
+          current_6k_time?: string | null
+          goal_2k_time?: string | null
+          goal_5k_time?: string | null
+          goal_6k_time?: string | null
           id?: string
           notes?: string | null
           updated_at?: string | null
@@ -686,12 +686,12 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          current_2k_time?: unknown
-          current_5k_time?: unknown
-          current_6k_time?: unknown
-          goal_2k_time?: unknown
-          goal_5k_time?: unknown
-          goal_6k_time?: unknown
+          current_2k_time?: string | null
+          current_5k_time?: string | null
+          current_6k_time?: string | null
+          goal_2k_time?: string | null
+          goal_5k_time?: string | null
+          goal_6k_time?: string | null
           id?: string
           notes?: string | null
           updated_at?: string | null
