@@ -60,10 +60,23 @@ export const NotificationBell = () => {
         (payload) => {
           queryClient.invalidateQueries({ queryKey: ["notifications"] });
           const newNotif = payload.new as any;
+          // In-app toast
           toast({
             title: newNotif.title,
             description: newNotif.body,
           });
+          // Browser push notification
+          if ("Notification" in window && Notification.permission === "granted") {
+            try {
+              new Notification(newNotif.title, {
+                body: newNotif.body,
+                icon: "/favicon.ico",
+                tag: newNotif.id,
+              });
+            } catch (e) {
+              console.error("Push notification error:", e);
+            }
+          }
         }
       )
       .subscribe();

@@ -129,21 +129,24 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
         throw error;
       }
 
-      // Send email notification
-      try {
-        await supabase.functions.invoke("send-notification-email", {
-          body: {
-            type: "team_addition",
-            recipientEmail: userProfile.email,
-            recipientName: userProfile.username,
-            senderName: profile.full_name || profile.username || profile.email,
-            teamName: teamName,
-          },
-        });
-      } catch (emailError) {
-        console.error("Failed to send email notification:", emailError);
-        // Don't fail the whole request if email fails
-      }
+      // Non-blocking: in-app notification
+      supabase.from("notifications").insert({
+        user_id: userProfile.id,
+        type: "plan_shared",
+        title: "Added to Team",
+        body: `${profile.full_name || profile.username || profile.email} added you to the team "${teamName}".`,
+      }).then(({ error: e }) => e && console.error("In-app notification error:", e));
+
+      // Non-blocking: email notification
+      supabase.functions.invoke("send-notification-email", {
+        body: {
+          type: "team_addition",
+          recipientEmail: userProfile.email,
+          recipientName: userProfile.username,
+          senderName: profile.full_name || profile.username || profile.email,
+          teamName: teamName,
+        },
+      }).catch(e => console.error("Email notification error:", e));
     },
     onSuccess: () => {
       toast({ title: "Member added!" });
