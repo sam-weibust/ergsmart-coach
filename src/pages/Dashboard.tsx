@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -22,6 +23,7 @@ import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
+import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -250,6 +252,9 @@ const Dashboard = () => {
 
             <TabsContent value="log" className="mt-0">
               <div className="space-y-6">
+                <TodaysWorkouts profile={profile} />
+                <Separator className="my-2" />
+                <h2 className="text-lg font-semibold text-foreground">Custom Workout</h2>
                 <ErgWorkoutSection profile={profile} />
                 <MultiSetStrengthForm profile={profile} />
               </div>
