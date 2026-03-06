@@ -1,31 +1,27 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Check, X, Users, Eye, Clock, UserMinus, Ban } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  UserPlus, Check, X, Users, Clock, UserMinus, Ban, Search,
+  Mail, Bell, BellOff, Loader2, Eye, Send, Shield, MessageCircle
+} from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { NotificationSettings } from "./NotificationSettings";
 
 interface FriendsSectionProps {
   profile: any;
@@ -33,158 +29,123 @@ interface FriendsSectionProps {
 
 const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
-  const [friendships, setFriendships] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    fetchFriendships();
-    fetchRequests();
-  }, [profile]);
+  // Fetch friendships
+  const { data: friendships = [], refetch: refetchFriendships } = useQuery({
+    queryKey: ["friendships", profile?.id],
+    queryFn: async () => {
+      if (!profile) return [];
 
-  const fetchFriendships = async () => {
-    if (!profile) return;
+      const [{ data: initiated }, { data: received }] = await Promise.all([
+        supabase
+          .from("friendships")
+          .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
+          .eq("user_id", profile.id)
+          .eq("status", "accepted"),
+        supabase
+          .from("friendships")
+          .select("*, friend:profiles!friendships_user_id_fkey(id, full_name, email, username)")
+          .eq("friend_id", profile.id)
+          .eq("status", "accepted"),
+      ]);
 
-    // Get friendships where user initiated (user_id = me)
-    const { data: initiatedFriendships } = await supabase
-      .from("friendships")
-      .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
-      .eq("user_id", profile.id)
-      .eq("status", "accepted");
+      return [...(initiated || []), ...(received || [])];
+    },
+    enabled: !!profile?.id,
+  });
 
-    // Get friendships where user received and accepted (friend_id = me)
-    const { data: receivedFriendships } = await supabase
-      .from("friendships")
-      .select("*, friend:profiles!friendships_user_id_fkey(id, full_name, email, username)")
-      .eq("friend_id", profile.id)
-      .eq("status", "accepted");
+  // Fetch pending requests
+  const { data: requests = [], refetch: refetchRequests } = useQuery({
+    queryKey: ["friend-requests", profile?.id],
+    queryFn: async () => {
+      if (!profile) return [];
+      const { data } = await supabase
+        .from("friendships")
+        .select("*, user:profiles!friendships_user_id_fkey(id, full_name, email, username)")
+        .eq("friend_id", profile.id)
+        .eq("status", "pending");
+      return data || [];
+    },
+    enabled: !!profile?.id,
+  });
 
-    // Combine both lists
-    const allFriendships = [
-      ...(initiatedFriendships || []),
-      ...(receivedFriendships || []),
-    ];
+  // Fetch sent (outgoing) requests
+  const { data: sentRequests = [], refetch: refetchSent } = useQuery({
+    queryKey: ["sent-requests", profile?.id],
+    queryFn: async () => {
+      if (!profile) return [];
+      const { data } = await supabase
+        .from("friendships")
+        .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
+        .eq("user_id", profile.id)
+        .eq("status", "pending");
+      return data || [];
+    },
+    enabled: !!profile?.id,
+  });
 
-    setFriendships(allFriendships);
-  };
+  // Friend plans & goals
+  const { data: friendGoals } = useQuery({
+    queryKey: ["friend-goals", friendships],
+    queryFn: async () => {
+      if (!friendships.length) return {};
+      const friendIds = friendships.map((f: any) => f.friend.id);
+      const { data } = await supabase.from("user_goals").select("*").in("user_id", friendIds);
+      return data?.reduce((acc: any, goal: any) => { acc[goal.user_id] = goal; return acc; }, {}) || {};
+    },
+    enabled: friendships.length > 0,
+  });
 
-  const fetchRequests = async () => {
-    if (!profile) return;
-
-    const { data } = await supabase
-      .from("friendships")
-      .select("*, user:profiles!friendships_user_id_fkey(id, full_name, email)")
-      .eq("friend_id", profile.id)
-      .eq("status", "pending");
-
-    setRequests(data || []);
-  };
-
-  // Fetch friend's workout plans (shared with you)
   const { data: friendPlans } = useQuery({
     queryKey: ["friend-plans", friendships],
     queryFn: async () => {
       if (!friendships.length) return {};
-      
-      const friendIds = friendships.map(f => f.friend.id);
-      
-      const { data } = await supabase
-        .from("workout_plans")
-        .select("*")
-        .in("user_id", friendIds);
-
-      // Group by user_id
+      const friendIds = friendships.map((f: any) => f.friend.id);
+      const { data } = await supabase.from("workout_plans").select("*").in("user_id", friendIds);
       const grouped: Record<string, any[]> = {};
-      data?.forEach(plan => {
-        if (!grouped[plan.user_id]) grouped[plan.user_id] = [];
-        grouped[plan.user_id].push(plan);
-      });
-      
+      data?.forEach(plan => { if (!grouped[plan.user_id]) grouped[plan.user_id] = []; grouped[plan.user_id].push(plan); });
       return grouped;
     },
     enabled: friendships.length > 0,
   });
 
-  // Fetch friend's goals for comparison
-  const { data: friendGoals } = useQuery({
-    queryKey: ["friend-goals", friendships],
-    queryFn: async () => {
-      if (!friendships.length) return {};
-      
-      const friendIds = friendships.map(f => f.friend.id);
-      
-      const { data } = await supabase
-        .from("user_goals")
-        .select("*")
-        .in("user_id", friendIds);
-
-      return data?.reduce((acc: any, goal: any) => {
-        acc[goal.user_id] = goal;
-        return acc;
-      }, {}) || {};
-    },
-    enabled: friendships.length > 0,
-  });
-
-  const sendRequest = async () => {
-    if (!searchTerm || !profile) return;
-
+  const searchUsers = async () => {
+    if (!searchTerm.trim() || !profile) return;
+    setSearching(true);
     try {
-      const sanitizedSearch = searchTerm.trim();
-      
-      // Use the security definer function that bypasses RLS to find users
-      const { data: searchResults, error: searchError } = await supabase
-        .rpc("search_users_for_friend_request", {
-          current_user_id: profile.id,
-          search_term: sanitizedSearch,
-        });
-
-      if (searchError) {
-        console.error("Search error:", searchError);
-        throw new Error("Search failed. Please try again.");
+      const { data, error } = await supabase.rpc("search_users_for_friend_request", {
+        current_user_id: profile.id,
+        search_term: searchTerm.trim(),
+      });
+      if (error) throw error;
+      setSearchResults(data || []);
+      if (!data?.length) {
+        toast({ title: "No users found", description: "Try a different email or username.", variant: "destructive" });
       }
+    } catch (error: any) {
+      toast({ title: "Search failed", description: error.message, variant: "destructive" });
+    } finally {
+      setSearching(false);
+    }
+  };
 
-      const friendProfile = searchResults?.[0];
-
-      if (!friendProfile) {
-        toast({
-          title: "User not found",
-          description: "No user found with that email or username.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Check for existing friendship (pending, accepted, or blocked)
-      const [existingOutgoingRes, existingIncomingRes] = await Promise.all([
-        supabase
-          .from("friendships")
-          .select("id, status")
-          .eq("user_id", profile.id)
-          .eq("friend_id", friendProfile.id)
-          .limit(1),
-        supabase
-          .from("friendships")
-          .select("id, status")
-          .eq("user_id", friendProfile.id)
-          .eq("friend_id", profile.id)
-          .limit(1),
+  const sendRequest = async (targetUser: any) => {
+    setSending(true);
+    try {
+      // Check for existing
+      const [{ data: out }, { data: inc }] = await Promise.all([
+        supabase.from("friendships").select("id, status").eq("user_id", profile.id).eq("friend_id", targetUser.id).limit(1),
+        supabase.from("friendships").select("id, status").eq("user_id", targetUser.id).eq("friend_id", profile.id).limit(1),
       ]);
-
-      if (existingOutgoingRes.error || existingIncomingRes.error) {
-        console.error("Existing friendship check error:", existingOutgoingRes.error || existingIncomingRes.error);
-        throw new Error("Could not verify existing requests. Please try again.");
-      }
-
-      const existing = [
-        ...(existingOutgoingRes.data || []),
-        ...(existingIncomingRes.data || []),
-      ];
-
+      const existing = [...(out || []), ...(inc || [])];
       if (existing.length > 0) {
-        const status = existing[0].status;
-        const msg = status === "accepted" ? "You're already friends!"
-          : status === "pending" ? "A friend request is already pending."
+        const msg = existing[0].status === "accepted" ? "You're already friends!"
+          : existing[0].status === "pending" ? "Request already pending."
           : "Cannot send request to this user.";
         toast({ title: msg, variant: "destructive" });
         return;
@@ -192,406 +153,410 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
       const { error } = await supabase.from("friendships").insert({
         user_id: profile.id,
-        friend_id: friendProfile.id,
+        friend_id: targetUser.id,
         status: "pending",
       });
+      if (error) throw error;
 
-      if (error) {
-        console.error("Friendship insert error:", error);
-        throw new Error("Could not send friend request. Please try again.");
-      }
-
-      toast({
-        title: "Request sent!",
-        description: "Friend request has been sent.",
-      });
-
+      toast({ title: "Request sent!", description: `Friend request sent to ${targetUser.username || targetUser.email}` });
+      setSearchResults([]);
       setSearchTerm("");
 
-      // Non-blocking: create in-app notification for the recipient
+      // Non-blocking: in-app + email notifications
       supabase.from("notifications").insert({
-        user_id: friendProfile.id,
+        user_id: targetUser.id,
         type: "friend_request",
         title: "New Friend Request",
         body: `${profile.full_name || profile.username || profile.email} sent you a friend request.`,
-      }).then(({ error: notifErr }) => {
-        if (notifErr) console.error("In-app notification failed:", notifErr);
-      });
+      }).then(({ error: e }) => e && console.error("Notification error:", e));
 
-      // Non-blocking: send email notification
       supabase.functions.invoke("send-notification-email", {
         body: {
           type: "friend_request",
-          recipientEmail: friendProfile.email,
-          recipientName: friendProfile.username,
+          recipientEmail: targetUser.email,
+          recipientName: targetUser.username,
           senderName: profile.full_name || profile.username || profile.email,
         },
-      }).catch((e) => console.error("Email notification failed:", e));
+      }).catch(e => console.error("Email error:", e));
 
+      refetchSent();
     } catch (error: any) {
-      console.error("Error sending request:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send request. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSending(false);
     }
   };
 
   const handleRequest = async (id: string, accept: boolean, requester?: any) => {
     try {
       if (accept) {
-        await supabase
-          .from("friendships")
-          .update({ status: "accepted" })
-          .eq("id", id);
+        await supabase.from("friendships").update({ status: "accepted" }).eq("id", id);
 
-        // Create in-app notification for the requester
         if (requester?.id) {
-          try {
-            await supabase.from("notifications").insert({
-              user_id: requester.id,
-              type: "friend_request",
-              title: "Friend Request Accepted!",
-              body: `${profile.full_name || profile.username || profile.email} accepted your friend request.`,
-            });
-          } catch (notifError) {
-            console.error("Failed to create notification:", notifError);
-          }
+          supabase.from("notifications").insert({
+            user_id: requester.id,
+            type: "friend_request",
+            title: "Friend Request Accepted!",
+            body: `${profile.full_name || profile.username || profile.email} accepted your friend request.`,
+          }).then(({ error: e }) => e && console.error("Notification error:", e));
         }
 
-        // Send email notification to the person who sent the request
         if (requester?.email) {
-          try {
-            await supabase.functions.invoke("send-notification-email", {
-              body: {
-                type: "friend_accepted",
-                recipientEmail: requester.email,
-                recipientName: requester.full_name,
-                senderName: profile.full_name || profile.username || profile.email,
-              },
-            });
-          } catch (emailError) {
-            console.error("Failed to send email notification:", emailError);
-          }
+          supabase.functions.invoke("send-notification-email", {
+            body: {
+              type: "friend_accepted",
+              recipientEmail: requester.email,
+              recipientName: requester.full_name || requester.username,
+              senderName: profile.full_name || profile.username || profile.email,
+            },
+          }).catch(e => console.error("Email error:", e));
         }
 
-        toast({
-          title: "Request accepted!",
-          description: "You are now friends.",
-        });
+        toast({ title: "Request accepted!", description: "You are now friends." });
       } else {
         await supabase.from("friendships").delete().eq("id", id);
-
-        toast({
-          title: "Request declined",
-          description: "Friend request has been declined.",
-        });
+        toast({ title: "Request declined" });
       }
 
-      fetchFriendships();
-      fetchRequests();
+      refetchFriendships();
+      refetchRequests();
     } catch (error) {
-      console.error("Error handling request:", error);
-      toast({
-        title: "Error",
-        description: "Failed to process request. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to process request.", variant: "destructive" });
     }
   };
 
   const removeFriend = async (friendshipId: string, friendName: string) => {
     try {
-      const { error } = await supabase
-        .from("friendships")
-        .delete()
-        .eq("id", friendshipId);
-
+      const { error } = await supabase.from("friendships").delete().eq("id", friendshipId);
       if (error) throw error;
-
-      toast({
-        title: "Friend removed",
-        description: `${friendName || "User"} has been removed from your friends.`,
-      });
-
-      fetchFriendships();
+      toast({ title: "Friend removed", description: `${friendName || "User"} removed.` });
+      refetchFriendships();
     } catch (error) {
-      console.error("Error removing friend:", error);
-      toast({
-        title: "Error",
-        description: "Failed to remove friend. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to remove friend.", variant: "destructive" });
     }
   };
 
   const blockUser = async (friendshipId: string, friendId: string, friendName: string) => {
     try {
-      // Delete any existing friendship first
-      await supabase
-        .from("friendships")
-        .delete()
-        .eq("id", friendshipId);
-
-      // Create a blocked entry (user blocking the friend)
-      const { error } = await supabase
-        .from("friendships")
-        .insert({
-          user_id: profile.id,
-          friend_id: friendId,
-          status: "blocked",
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "User blocked",
-        description: `${friendName || "User"} has been blocked.`,
-      });
-
-      fetchFriendships();
+      await supabase.from("friendships").delete().eq("id", friendshipId);
+      await supabase.from("friendships").insert({ user_id: profile.id, friend_id: friendId, status: "blocked" });
+      toast({ title: "User blocked", description: `${friendName || "User"} blocked.` });
+      refetchFriendships();
     } catch (error) {
-      console.error("Error blocking user:", error);
-      toast({
-        title: "Error",
-        description: "Failed to block user. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to block user.", variant: "destructive" });
+    }
+  };
+
+  const cancelRequest = async (friendshipId: string) => {
+    try {
+      await supabase.from("friendships").delete().eq("id", friendshipId);
+      toast({ title: "Request cancelled" });
+      refetchSent();
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to cancel request.", variant: "destructive" });
     }
   };
 
   const formatTime = (interval: any) => {
     if (!interval) return null;
-    if (typeof interval === "string") return interval;
-    return interval;
+    return typeof interval === "string" ? interval : interval;
   };
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5" />
-            Add Friend or Coach
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter email or username"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && sendRequest()}
-            />
-            <Button onClick={sendRequest}>Send Request</Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Search by email address or username to add friends or coaches.
-          </p>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="search" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="search" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Search className="h-4 w-4" />
+            <span className="hidden sm:inline">Find</span>
+          </TabsTrigger>
+          <TabsTrigger value="requests" className="flex items-center gap-1.5 text-xs sm:text-sm relative">
+            <Mail className="h-4 w-4" />
+            <span className="hidden sm:inline">Requests</span>
+            {(requests.length + sentRequests.length) > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+                {requests.length + sentRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Friends</span>
+            <span className="text-xs text-muted-foreground">({friendships.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Bell className="h-4 w-4" />
+            <span className="hidden sm:inline">Alerts</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {requests.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Pending Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {requests.map((req) => (
-                <div key={req.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-semibold">{req.user.full_name || "User"}</p>
-                    <p className="text-sm text-muted-foreground">{req.user.email}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleRequest(req.id, true, req.user)}
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRequest(req.id, false)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+        {/* Search Tab */}
+        <TabsContent value="search" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <UserPlus className="h-5 w-5 text-primary" />
+                Find Friends & Coaches
+              </CardTitle>
+              <CardDescription>Search by email address or username</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Email or username..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchUsers()}
+                    className="pl-9"
+                  />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                <Button onClick={searchUsers} disabled={searching || !searchTerm.trim()}>
+                  {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Friends & Coaches
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {friendships.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No friends or coaches yet. Add some above!
-            </p>
-          ) : (
-            <Accordion type="single" collapsible>
-              {friendships.map((friendship) => {
-                const goals = friendGoals?.[friendship.friend.id];
-                const plans = friendPlans?.[friendship.friend.id] || [];
-                
-                return (
-                  <AccordionItem key={friendship.id} value={friendship.id}>
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-3 flex-1">
-                        <span className="font-semibold">{friendship.friend.full_name || friendship.friend.username || "User"}</span>
-                        {goals?.current_2k_time && (
-                          <Badge variant="outline" className="text-xs flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            2K: {formatTime(goals.current_2k_time)}
-                          </Badge>
-                        )}
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Results</p>
+                  {searchResults.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
+                      <div>
+                        <p className="font-semibold">{user.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">{friendship.friend.email}</p>
-                        <div className="flex gap-2">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                                <UserMinus className="h-4 w-4 mr-1" />
-                                Remove
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Remove Friend</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to remove {friendship.friend.full_name || friendship.friend.username || "this user"} from your friends? You can add them again later.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => removeFriend(friendship.id, friendship.friend.full_name || friendship.friend.username)}
-                                >
-                                  Remove
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                          
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="sm">
-                                <Ban className="h-4 w-4 mr-1" />
-                                Block
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Block User</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to block {friendship.friend.full_name || friendship.friend.username || "this user"}? They won't be able to send you friend requests.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => blockUser(friendship.id, friendship.friend.id, friendship.friend.full_name || friendship.friend.username)}
-                                >
-                                  Block
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
+                      <Button
+                        size="sm"
+                        onClick={() => sendRequest(user)}
+                        disabled={sending}
+                        className="gap-1.5"
+                      >
+                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Requests Tab */}
+        <TabsContent value="requests" className="space-y-4">
+          {/* Incoming */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Incoming Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {requests.length === 0 ? (
+                <p className="text-muted-foreground text-center py-6 text-sm">No pending requests</p>
+              ) : (
+                <div className="space-y-2">
+                  {requests.map((req) => (
+                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
+                      <div>
+                        <p className="font-semibold">{req.user.full_name || req.user.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{req.user.email}</p>
                       </div>
-                      
-                      {/* Performance Comparison */}
-                      {goals && (
-                        <div className="p-3 bg-muted/50 rounded-lg">
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            Times
-                          </h4>
-                          <div className="grid grid-cols-3 gap-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">2K:</span>{" "}
-                              {formatTime(goals.current_2k_time) || "Not set"}
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleRequest(req.id, true, req.user)} className="gap-1.5">
+                          <Check className="h-4 w-4" /> Accept
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleRequest(req.id, false)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Sent */}
+          {sentRequests.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Send className="h-5 w-5 text-muted-foreground" />
+                  Sent Requests
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {sentRequests.map((req: any) => (
+                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
+                      <div>
+                        <p className="font-semibold">{req.friend.full_name || req.friend.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{req.friend.email}</p>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => cancelRequest(req.id)} className="text-destructive hover:text-destructive">
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Friends List Tab */}
+        <TabsContent value="friends" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Users className="h-5 w-5 text-primary" />
+                Friends & Coaches
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {friendships.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <p className="text-muted-foreground">No friends yet</p>
+                  <p className="text-sm text-muted-foreground/70">Use the Find tab to search for friends</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {friendships.map((friendship: any) => {
+                    const goals = friendGoals?.[friendship.friend.id];
+                    const plans = friendPlans?.[friendship.friend.id] || [];
+
+                    return (
+                      <div key={friendship.id} className="rounded-xl border overflow-hidden">
+                        <div className="p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                              {(friendship.friend.full_name || friendship.friend.username || "U").charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">5K:</span>{" "}
-                              {formatTime(goals.current_5k_time) || "Not set"}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">6K:</span>{" "}
-                              {formatTime(goals.current_6k_time) || "Not set"}
+                              <p className="font-semibold">
+                                {friendship.friend.full_name || friendship.friend.username || "User"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{friendship.friend.email}</p>
                             </div>
                           </div>
+                          <div className="flex items-center gap-1">
+                            {goals?.current_2k_time && (
+                              <Badge variant="outline" className="text-xs gap-1 hidden sm:flex">
+                                <Clock className="h-3 w-3" />
+                                2K: {formatTime(goals.current_2k_time)}
+                              </Badge>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                                  <UserMinus className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remove Friend</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Remove {friendship.friend.full_name || friendship.friend.username || "this user"} from your friends?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => removeFriend(friendship.id, friendship.friend.full_name || friendship.friend.username)}>
+                                    Remove
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                                  <Ban className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Block User</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Block {friendship.friend.full_name || friendship.friend.username || "this user"}? They won't be able to send you requests.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => blockUser(friendship.id, friendship.friend.id, friendship.friend.full_name || friendship.friend.username)}
+                                  >
+                                    Block
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </div>
-                      )}
 
-                      {/* Their Plans */}
-                      {plans.length > 0 && (
-                        <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <Eye className="h-4 w-4" />
-                            Their Plans ({plans.length})
-                          </h4>
-                          <div className="space-y-2">
-                            {plans.slice(0, 3).map((plan: any) => (
-                              <Dialog key={plan.id}>
+                        {/* Quick stats row */}
+                        {(goals || plans.length > 0) && (
+                          <div className="px-4 pb-3 flex flex-wrap gap-2">
+                            {goals?.current_2k_time && (
+                              <Badge variant="secondary" className="text-xs">2K: {formatTime(goals.current_2k_time)}</Badge>
+                            )}
+                            {goals?.current_5k_time && (
+                              <Badge variant="secondary" className="text-xs">5K: {formatTime(goals.current_5k_time)}</Badge>
+                            )}
+                            {goals?.current_6k_time && (
+                              <Badge variant="secondary" className="text-xs">6K: {formatTime(goals.current_6k_time)}</Badge>
+                            )}
+                            {plans.length > 0 && (
+                              <Dialog>
                                 <DialogTrigger asChild>
-                                  <Button variant="outline" size="sm" className="w-full justify-between">
-                                    <span className="truncate">{plan.title}</span>
-                                    <span className="text-xs text-muted-foreground ml-2">
-                                      {new Date(plan.created_at).toLocaleDateString()}
-                                    </span>
-                                  </Button>
+                                  <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent gap-1">
+                                    <Eye className="h-3 w-3" />
+                                    {plans.length} plan{plans.length > 1 ? "s" : ""}
+                                  </Badge>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                                   <DialogHeader>
-                                    <DialogTitle>{plan.title}</DialogTitle>
+                                    <DialogTitle>{friendship.friend.full_name || friendship.friend.username}'s Plans</DialogTitle>
                                   </DialogHeader>
-                                  <div className="space-y-4">
-                                    {Array.isArray(plan.workout_data) ? (plan.workout_data as any[]).slice(0, 4).map((week: any) => (
-                                      <div key={week.week} className="space-y-2">
-                                        <h4 className="font-semibold">Week {week.week} - {week.phase}</h4>
-                                        <div className="grid gap-2">
-                                          {week.days?.slice(0, 3).map((day: any) => (
-                                            <div key={day.day} className="p-2 border rounded text-sm">
-                                              <span className="font-medium">Day {day.day}:</span>{" "}
-                                              {day.ergWorkout?.zone} - {day.ergWorkout?.description}
-                                            </div>
-                                          ))}
-                                        </div>
+                                  <div className="space-y-3">
+                                    {plans.map((plan: any) => (
+                                      <div key={plan.id} className="p-3 border rounded-lg">
+                                        <p className="font-medium">{plan.title}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {new Date(plan.created_at).toLocaleDateString()}
+                                        </p>
+                                        {Array.isArray(plan.workout_data) && (plan.workout_data as any[]).slice(0, 2).map((week: any) => (
+                                          <div key={week.week} className="mt-2 text-sm">
+                                            <span className="font-medium">Week {week.week}</span> - {week.phase}
+                                          </div>
+                                        ))}
                                       </div>
-                                    )) : (
-                                      <p className="text-muted-foreground">No workout data</p>
-                                    )}
+                                    ))}
                                   </div>
                                 </DialogContent>
                               </Dialog>
-                            ))}
+                            )}
                           </div>
-                        </div>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
-          )}
-        </CardContent>
-      </Card>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notification Settings Tab */}
+        <TabsContent value="settings" className="space-y-4">
+          <NotificationSettings />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
