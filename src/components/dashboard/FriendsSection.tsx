@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   UserPlus, Check, X, Users, Clock, UserMinus, Ban, Search,
-  Mail, Bell, Loader2, Eye, Send, MessageCircle, Activity, ArrowLeft, Dumbbell, Rowing
+  Mail, Bell, Loader2, Eye, Send, MessageCircle, Activity, ArrowLeft, Dumbbell, Waves
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
