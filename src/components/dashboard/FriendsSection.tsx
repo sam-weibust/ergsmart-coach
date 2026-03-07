@@ -576,7 +576,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                             {isErg ? (
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge variant="secondary" className="text-xs gap-1">
-                                  <Rowing className="h-3 w-3" />
+                                  <Waves className="h-3 w-3" />
                                   {item.workout_type}
                                 </Badge>
                                 {item.distance && (
