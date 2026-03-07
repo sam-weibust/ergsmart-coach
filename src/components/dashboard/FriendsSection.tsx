@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,20 +8,20 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   UserPlus, Check, X, Users, Clock, UserMinus, Ban, Search,
-  Mail, Bell, BellOff, Loader2, Eye, Send, Shield, MessageCircle
+  Mail, Bell, Loader2, Eye, Send, MessageCircle, Activity, ArrowLeft, Dumbbell, Waves
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { NotificationSettings } from "./NotificationSettings";
+import { MessageBoard } from "./MessageBoard";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface FriendsSectionProps {
   profile: any;
@@ -34,13 +34,13 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [sending, setSending] = useState(false);
+  const [dmFriend, setDmFriend] = useState<any>(null);
 
   // Fetch friendships
   const { data: friendships = [], refetch: refetchFriendships } = useQuery({
     queryKey: ["friendships", profile?.id],
     queryFn: async () => {
       if (!profile) return [];
-
       const [{ data: initiated }, { data: received }] = await Promise.all([
         supabase
           .from("friendships")
@@ -53,7 +53,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
           .eq("friend_id", profile.id)
           .eq("status", "accepted"),
       ]);
-
       return [...(initiated || []), ...(received || [])];
     },
     enabled: !!profile?.id,
@@ -74,7 +73,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     enabled: !!profile?.id,
   });
 
-  // Fetch sent (outgoing) requests
+  // Fetch sent requests
   const { data: sentRequests = [], refetch: refetchSent } = useQuery({
     queryKey: ["sent-requests", profile?.id],
     queryFn: async () => {
@@ -89,7 +88,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     enabled: !!profile?.id,
   });
 
-  // Friend plans & goals
+  // Friend goals & plans
   const { data: friendGoals } = useQuery({
     queryKey: ["friend-goals", friendships],
     queryFn: async () => {
@@ -110,6 +109,41 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
       const grouped: Record<string, any[]> = {};
       data?.forEach(plan => { if (!grouped[plan.user_id]) grouped[plan.user_id] = []; grouped[plan.user_id].push(plan); });
       return grouped;
+    },
+    enabled: friendships.length > 0,
+  });
+
+  // Activity feed: recent erg + strength workouts from friends
+  const { data: activityFeed = [] } = useQuery({
+    queryKey: ["friend-activity", friendships],
+    queryFn: async () => {
+      if (!friendships.length) return [];
+      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendMap = friendships.reduce((acc: any, f: any) => {
+        acc[f.friend.id] = f.friend;
+        return acc;
+      }, {});
+
+      const [{ data: ergData }, { data: strengthData }] = await Promise.all([
+        supabase
+          .from("erg_workouts")
+          .select("*")
+          .in("user_id", friendIds)
+          .order("created_at", { ascending: false })
+          .limit(20),
+        supabase
+          .from("strength_workouts")
+          .select("*")
+          .in("user_id", friendIds)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+
+      const items: any[] = [];
+      ergData?.forEach(w => items.push({ ...w, _type: "erg", _friend: friendMap[w.user_id] }));
+      strengthData?.forEach(w => items.push({ ...w, _type: "strength", _friend: friendMap[w.user_id] }));
+      items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return items.slice(0, 30);
     },
     enabled: friendships.length > 0,
   });
@@ -137,7 +171,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const sendRequest = async (targetUser: any) => {
     setSending(true);
     try {
-      // Check for existing
       const [{ data: out }, { data: inc }] = await Promise.all([
         supabase.from("friendships").select("id, status").eq("user_id", profile.id).eq("friend_id", targetUser.id).limit(1),
         supabase.from("friendships").select("id, status").eq("user_id", targetUser.id).eq("friend_id", profile.id).limit(1),
@@ -162,7 +195,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
       setSearchResults([]);
       setSearchTerm("");
 
-      // Non-blocking: in-app + email notifications
       supabase.from("notifications").insert({
         user_id: targetUser.id,
         type: "friend_request",
@@ -191,7 +223,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     try {
       if (accept) {
         await supabase.from("friendships").update({ status: "accepted" }).eq("id", id);
-
         if (requester?.id) {
           supabase.from("notifications").insert({
             user_id: requester.id,
@@ -200,7 +231,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
             body: `${profile.full_name || profile.username || profile.email} accepted your friend request.`,
           }).then(({ error: e }) => e && console.error("Notification error:", e));
         }
-
         if (requester?.email) {
           supabase.functions.invoke("send-notification-email", {
             body: {
@@ -211,13 +241,11 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
             },
           }).catch(e => console.error("Email error:", e));
         }
-
         toast({ title: "Request accepted!", description: "You are now friends." });
       } else {
         await supabase.from("friendships").delete().eq("id", id);
         toast({ title: "Request declined" });
       }
-
       refetchFriendships();
       refetchRequests();
     } catch (error) {
@@ -262,10 +290,49 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     return typeof interval === "string" ? interval : interval;
   };
 
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  // If DM is open, show the message board
+  if (dmFriend) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" onClick={() => setDmFriend(null)} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to Friends
+        </Button>
+        <MessageBoard
+          friendId={dmFriend.id}
+          currentUserId={profile.id}
+          title={`Chat with ${dmFriend.full_name || dmFriend.username || "Friend"}`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="search" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="friends" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Friends</span>
+            <span className="text-xs text-muted-foreground">({friendships.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <MessageCircle className="h-4 w-4" />
+            <span className="hidden sm:inline">DMs</span>
+          </TabsTrigger>
+          <TabsTrigger value="feed" className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Activity className="h-4 w-4" />
+            <span className="hidden sm:inline">Feed</span>
+          </TabsTrigger>
           <TabsTrigger value="search" className="flex items-center gap-1.5 text-xs sm:text-sm">
             <Search className="h-4 w-4" />
             <span className="hidden sm:inline">Find</span>
@@ -279,134 +346,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Friends</span>
-            <span className="text-xs text-muted-foreground">({friendships.length})</span>
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Alerts</span>
-          </TabsTrigger>
         </TabsList>
-
-        {/* Search Tab */}
-        <TabsContent value="search" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <UserPlus className="h-5 w-5 text-primary" />
-                Find Friends & Coaches
-              </CardTitle>
-              <CardDescription>Search by email address or username</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Email or username..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && searchUsers()}
-                    className="pl-9"
-                  />
-                </div>
-                <Button onClick={searchUsers} disabled={searching || !searchTerm.trim()}>
-                  {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                </Button>
-              </div>
-
-              {/* Search Results */}
-              {searchResults.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Results</p>
-                  {searchResults.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
-                      <div>
-                        <p className="font-semibold">{user.username || "User"}</p>
-                        <p className="text-sm text-muted-foreground">{user.email}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => sendRequest(user)}
-                        disabled={sending}
-                        className="gap-1.5"
-                      >
-                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        Add
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Requests Tab */}
-        <TabsContent value="requests" className="space-y-4">
-          {/* Incoming */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                Incoming Requests
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {requests.length === 0 ? (
-                <p className="text-muted-foreground text-center py-6 text-sm">No pending requests</p>
-              ) : (
-                <div className="space-y-2">
-                  {requests.map((req) => (
-                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
-                      <div>
-                        <p className="font-semibold">{req.user.full_name || req.user.username || "User"}</p>
-                        <p className="text-sm text-muted-foreground">{req.user.email}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleRequest(req.id, true, req.user)} className="gap-1.5">
-                          <Check className="h-4 w-4" /> Accept
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => handleRequest(req.id, false)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Sent */}
-          {sentRequests.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Send className="h-5 w-5 text-muted-foreground" />
-                  Sent Requests
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {sentRequests.map((req: any) => (
-                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
-                      <div>
-                        <p className="font-semibold">{req.friend.full_name || req.friend.username || "User"}</p>
-                        <p className="text-sm text-muted-foreground">{req.friend.email}</p>
-                      </div>
-                      <Button size="sm" variant="ghost" onClick={() => cancelRequest(req.id)} className="text-destructive hover:text-destructive">
-                        <X className="h-4 w-4 mr-1" /> Cancel
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         {/* Friends List Tab */}
         <TabsContent value="friends" className="space-y-4">
@@ -445,6 +385,14 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-primary"
+                              onClick={() => setDmFriend(friendship.friend)}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
                             {goals?.current_2k_time && (
                               <Badge variant="outline" className="text-xs gap-1 hidden sm:flex">
                                 <Clock className="h-3 w-3" />
@@ -499,7 +447,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                           </div>
                         </div>
 
-                        {/* Quick stats row */}
                         {(goals || plans.length > 0) && (
                           <div className="px-4 pb-3 flex flex-wrap gap-2">
                             {goals?.current_2k_time && (
@@ -552,9 +499,227 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
           </Card>
         </TabsContent>
 
-        {/* Notification Settings Tab */}
-        <TabsContent value="settings" className="space-y-4">
-          <NotificationSettings />
+        {/* DMs Tab */}
+        <TabsContent value="messages" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MessageCircle className="h-5 w-5 text-primary" />
+                Direct Messages
+              </CardTitle>
+              <CardDescription>Select a friend to start chatting</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {friendships.length === 0 ? (
+                <p className="text-center text-muted-foreground py-6 text-sm">Add friends to start messaging</p>
+              ) : (
+                <div className="space-y-2">
+                  {friendships.map((friendship: any) => (
+                    <button
+                      key={friendship.id}
+                      onClick={() => setDmFriend(friendship.friend)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors text-left"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                        {(friendship.friend.full_name || friendship.friend.username || "U").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold truncate">
+                          {friendship.friend.full_name || friendship.friend.username || "User"}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{friendship.friend.email}</p>
+                      </div>
+                      <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Activity Feed Tab */}
+        <TabsContent value="feed" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Activity className="h-5 w-5 text-primary" />
+                Friend Activity
+              </CardTitle>
+              <CardDescription>Recent workouts from your friends</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activityFeed.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <Activity className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <p className="text-muted-foreground">No recent activity</p>
+                  <p className="text-sm text-muted-foreground/70">Your friends' workouts will show up here</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px] pr-2">
+                  <div className="space-y-3">
+                    {activityFeed.map((item: any) => {
+                      const friendName = item._friend?.full_name || item._friend?.username || "Friend";
+                      const initial = friendName.charAt(0).toUpperCase();
+                      const isErg = item._type === "erg";
+
+                      return (
+                        <div key={`${item._type}-${item.id}`} className="flex gap-3 p-3 rounded-xl border bg-card">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                            {initial}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-sm truncate">{friendName}</p>
+                              <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(item.created_at)}</span>
+                            </div>
+                            {isErg ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <Waves className="h-3 w-3" />
+                                  {item.workout_type}
+                                </Badge>
+                                {item.distance && (
+                                  <span className="text-xs text-muted-foreground">{item.distance}m</span>
+                                )}
+                                {item.duration && (
+                                  <span className="text-xs text-muted-foreground">{item.duration}</span>
+                                )}
+                                {item.avg_split && (
+                                  <span className="text-xs text-muted-foreground">Avg {item.avg_split}/500m</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <Dumbbell className="h-3 w-3" />
+                                  {item.exercise}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {item.sets}×{item.reps} @ {item.weight}lbs
+                                </span>
+                              </div>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-muted-foreground mt-1 italic">"{item.notes}"</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Search Tab */}
+        <TabsContent value="search" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <UserPlus className="h-5 w-5 text-primary" />
+                Find Friends & Coaches
+              </CardTitle>
+              <CardDescription>Search by email address or username</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Email or username..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchUsers()}
+                    className="pl-9"
+                  />
+                </div>
+                <Button onClick={searchUsers} disabled={searching || !searchTerm.trim()}>
+                  {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Results</p>
+                  {searchResults.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
+                      <div>
+                        <p className="font-semibold">{user.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Button size="sm" onClick={() => sendRequest(user)} disabled={sending} className="gap-1.5">
+                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Requests Tab */}
+        <TabsContent value="requests" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Incoming Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {requests.length === 0 ? (
+                <p className="text-muted-foreground text-center py-6 text-sm">No pending requests</p>
+              ) : (
+                <div className="space-y-2">
+                  {requests.map((req) => (
+                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
+                      <div>
+                        <p className="font-semibold">{req.user.full_name || req.user.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{req.user.email}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleRequest(req.id, true, req.user)} className="gap-1.5">
+                          <Check className="h-4 w-4" /> Accept
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleRequest(req.id, false)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {sentRequests.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Send className="h-5 w-5 text-muted-foreground" />
+                  Sent Requests
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {sentRequests.map((req: any) => (
+                    <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
+                      <div>
+                        <p className="font-semibold">{req.friend.full_name || req.friend.username || "User"}</p>
+                        <p className="text-sm text-muted-foreground">{req.friend.email}</p>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => cancelRequest(req.id)} className="text-destructive hover:text-destructive">
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
