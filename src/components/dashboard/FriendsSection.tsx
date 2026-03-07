@@ -319,26 +319,26 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="friends" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <Users className="h-4 w-4" />
+        <TabsList className="flex w-full overflow-x-auto">
+          <TabsTrigger value="friends" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0">
+            <Users className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Friends</span>
             <span className="text-xs text-muted-foreground">({friendships.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="messages" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <MessageCircle className="h-4 w-4" />
+          <TabsTrigger value="messages" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0">
+            <MessageCircle className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">DMs</span>
           </TabsTrigger>
-          <TabsTrigger value="feed" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <Activity className="h-4 w-4" />
+          <TabsTrigger value="feed" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0">
+            <Activity className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Feed</span>
           </TabsTrigger>
-          <TabsTrigger value="search" className="flex items-center gap-1.5 text-xs sm:text-sm">
-            <Search className="h-4 w-4" />
+          <TabsTrigger value="search" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0">
+            <Search className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Find</span>
           </TabsTrigger>
-          <TabsTrigger value="requests" className="flex items-center gap-1.5 text-xs sm:text-sm relative">
-            <Mail className="h-4 w-4" />
+          <TabsTrigger value="requests" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0 relative">
+            <Mail className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Requests</span>
             {(requests.length + sentRequests.length) > 0 && (
               <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
