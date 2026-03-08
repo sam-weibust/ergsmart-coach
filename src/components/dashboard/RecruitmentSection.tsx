@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   GraduationCap, Loader2, AlertTriangle, Trophy, Target,
-  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp
+  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
