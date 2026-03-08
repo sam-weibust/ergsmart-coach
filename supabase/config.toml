@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.parse-erg-screen]
 verify_jwt = false
+
+[functions.predict-recruitment]
+verify_jwt = false
