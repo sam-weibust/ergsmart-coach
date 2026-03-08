@@ -206,7 +206,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
         .eq("user_id", profile.id)
         .eq("status", "pending");
-      return data || [];
+      return (data || []).filter((r: any) => r.friend && r.friend.id);
     },
     enabled: !!profile?.id,
   });
