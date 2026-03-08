@@ -53,7 +53,9 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
           .eq("friend_id", profile.id)
           .eq("status", "accepted"),
       ]);
-      return [...(initiated || []), ...(received || [])];
+      const all = [...(initiated || []), ...(received || [])];
+      // Filter out entries where the friend profile couldn't be loaded
+      return all.filter((f: any) => f.friend && f.friend.id);
     },
     enabled: !!profile?.id,
   });
@@ -93,7 +95,8 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-goals", friendships],
     queryFn: async () => {
       if (!friendships.length) return {};
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return {};
       const { data } = await supabase.from("user_goals").select("*").in("user_id", friendIds);
       return data?.reduce((acc: any, goal: any) => { acc[goal.user_id] = goal; return acc; }, {}) || {};
     },
@@ -104,7 +107,8 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-plans", friendships],
     queryFn: async () => {
       if (!friendships.length) return {};
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return {};
       const { data } = await supabase.from("workout_plans").select("*").in("user_id", friendIds);
       const grouped: Record<string, any[]> = {};
       data?.forEach(plan => { if (!grouped[plan.user_id]) grouped[plan.user_id] = []; grouped[plan.user_id].push(plan); });
@@ -118,9 +122,10 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-activity", friendships],
     queryFn: async () => {
       if (!friendships.length) return [];
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return [];
       const friendMap = friendships.reduce((acc: any, f: any) => {
-        acc[f.friend.id] = f.friend;
+        if (f.friend?.id) acc[f.friend.id] = f.friend;
         return acc;
       }, {});
 
