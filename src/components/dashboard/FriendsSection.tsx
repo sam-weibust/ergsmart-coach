@@ -122,9 +122,12 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-activity", friendships],
     queryFn: async () => {
       if (!friendships.length) return [];
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return [];
       const friendMap = friendships.reduce((acc: any, f: any) => {
-        acc[f.friend.id] = f.friend;
+        if (f.friend?.id) acc[f.friend.id] = f.friend;
+        return acc;
+      }, {});
         return acc;
       }, {});
 
