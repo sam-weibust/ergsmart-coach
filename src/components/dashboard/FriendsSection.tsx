@@ -95,7 +95,8 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-goals", friendships],
     queryFn: async () => {
       if (!friendships.length) return {};
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return {};
       const { data } = await supabase.from("user_goals").select("*").in("user_id", friendIds);
       return data?.reduce((acc: any, goal: any) => { acc[goal.user_id] = goal; return acc; }, {}) || {};
     },
