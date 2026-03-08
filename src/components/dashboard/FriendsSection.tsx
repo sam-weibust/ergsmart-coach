@@ -128,8 +128,6 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         if (f.friend?.id) acc[f.friend.id] = f.friend;
         return acc;
       }, {});
-        return acc;
-      }, {});
 
       const [{ data: ergData }, { data: strengthData }] = await Promise.all([
         supabase
