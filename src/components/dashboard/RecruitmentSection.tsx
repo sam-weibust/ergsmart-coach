@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   GraduationCap, Loader2, AlertTriangle, Trophy, Target,
-  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History
+  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History, Mail
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
