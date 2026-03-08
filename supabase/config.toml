@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.predict-recruitment]
 verify_jwt = false
+
+[functions.generate-recruit-emails]
+verify_jwt = false
+
+[functions.parse-nutrition-label]
+verify_jwt = false
