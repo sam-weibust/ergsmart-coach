@@ -61,9 +61,10 @@ const likelihoodConfig = {
 
 const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const { toast } = useToast();
-  const [prediction, setPrediction] = useState<RecruitmentPrediction | null>(null);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [tiersOpen, setTiersOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: goals } = useQuery({
     queryKey: ["user-goals-recruit", profile?.id],
@@ -79,7 +80,46 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     enabled: !!profile,
   });
 
+  // Load saved predictions
+  const { data: savedPredictions = [] } = useQuery({
+    queryKey: ["recruitment-predictions", profile?.id],
+    queryFn: async () => {
+      if (!profile) return [];
+      const { data } = await supabase
+        .from("recruitment_predictions")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+    enabled: !!profile,
+  });
+
+  const latestPrediction = savedPredictions[0];
+  const prediction: RecruitmentPrediction | null = latestPrediction?.prediction_data as any;
+
+  // Detect if profile/goals changed since last prediction
+  const hasProfileChanged = useMemo(() => {
+    if (!latestPrediction || !profile) return false;
+    const snap = latestPrediction.profile_snapshot as any;
+    const goalSnap = latestPrediction.goals_snapshot as any;
+    return (
+      snap?.weight !== profile.weight ||
+      snap?.height !== profile.height ||
+      snap?.age !== profile.age ||
+      goalSnap?.current_2k_time !== goals?.current_2k_time ||
+      goalSnap?.current_5k_time !== goals?.current_5k_time ||
+      goalSnap?.current_6k_time !== goals?.current_6k_time
+    );
+  }, [latestPrediction, profile, goals]);
+
   const hasMinimumData = profile && (goals?.current_2k_time || goals?.current_5k_time || goals?.current_6k_time);
+
+  // Convert metric for display
+  const displayWeight = profile?.weight ? Math.round(profile.weight * 2.20462) : null;
+  const displayHeightIn = profile?.height ? Math.round(profile.height / 2.54) : null;
+  const displayHeight = displayHeightIn ? `${Math.floor(displayHeightIn / 12)}'${displayHeightIn % 12}"` : null;
 
   const generatePrediction = async () => {
     if (!profile) return;
@@ -95,7 +135,28 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
         return;
       }
 
-      setPrediction(data);
+      // Save to database
+      const { error: saveError } = await supabase
+        .from("recruitment_predictions")
+        .insert({
+          user_id: profile.id,
+          prediction_data: data,
+          profile_snapshot: {
+            weight: profile.weight,
+            height: profile.height,
+            age: profile.age,
+            experience_level: profile.experience_level,
+          },
+          goals_snapshot: goals ? {
+            current_2k_time: goals.current_2k_time,
+            current_5k_time: goals.current_5k_time,
+            current_6k_time: goals.current_6k_time,
+          } : null,
+        } as any);
+
+      if (saveError) console.error("Failed to save prediction:", saveError);
+
+      queryClient.invalidateQueries({ queryKey: ["recruitment-predictions"] });
     } catch (err: any) {
       toast({
         title: "Prediction Failed",
