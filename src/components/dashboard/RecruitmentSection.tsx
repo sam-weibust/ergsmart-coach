@@ -274,6 +274,23 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     return acc;
   }, {} as Record<string, SchoolPrediction[]>);
 
+  // If viewing email campaign for a school, show that instead
+  if (selectedSchoolForEmail) {
+    return (
+      <RecruitEmailSection
+        school={selectedSchoolForEmail.school}
+        division={selectedSchoolForEmail.division}
+        chance={selectedSchoolForEmail.chance}
+        profile={activeProfile}
+        goals={{ current_2k_time: current2k, current_5k_time: current5k, current_6k_time: current6k }}
+        gpa={gpa}
+        gender={gender}
+        predictionData={prediction}
+        onClose={() => setSelectedSchoolForEmail(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Card */}
