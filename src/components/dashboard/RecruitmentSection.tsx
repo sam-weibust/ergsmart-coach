@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   GraduationCap, Loader2, AlertTriangle, Trophy, Target,
   TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History
@@ -65,68 +67,102 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const [loading, setLoading] = useState(false);
   const [tiersOpen, setTiersOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [gpa, setGpa] = useState("");
+  const [gender, setGender] = useState<"mens" | "womens">("mens");
 
-  const { data: goals } = useQuery({
-    queryKey: ["user-goals-recruit", profile?.id],
+  // Refetch profile fresh every time this section mounts
+  const { data: freshProfile } = useQuery({
+    queryKey: ["profile-recruit-fresh"],
     queryFn: async () => {
-      if (!profile) return null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
       const { data } = await supabase
-        .from("user_goals")
+        .from("profiles")
         .select("*")
-        .eq("user_id", profile.id)
+        .eq("id", user.id)
         .maybeSingle();
       return data;
     },
-    enabled: !!profile,
+    refetchOnMount: "always",
+    staleTime: 0,
+  });
+
+  const activeProfile = freshProfile || profile;
+
+  const { data: goals, refetch: refetchGoals } = useQuery({
+    queryKey: ["user-goals-recruit", activeProfile?.id],
+    queryFn: async () => {
+      if (!activeProfile) return null;
+      const { data } = await supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", activeProfile.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!activeProfile,
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   // Load saved predictions
   const { data: savedPredictions = [] } = useQuery({
-    queryKey: ["recruitment-predictions", profile?.id],
+    queryKey: ["recruitment-predictions", activeProfile?.id],
     queryFn: async () => {
-      if (!profile) return [];
+      if (!activeProfile) return [];
       const { data } = await supabase
         .from("recruitment_predictions")
         .select("*")
-        .eq("user_id", profile.id)
+        .eq("user_id", activeProfile.id)
         .order("created_at", { ascending: false })
         .limit(10);
       return data || [];
     },
-    enabled: !!profile,
+    enabled: !!activeProfile,
   });
 
   const latestPrediction = savedPredictions[0];
   const prediction: RecruitmentPrediction | null = latestPrediction?.prediction_data as any;
 
+  // Restore GPA/gender from latest prediction snapshot
+  useEffect(() => {
+    if (latestPrediction) {
+      const snap = latestPrediction.profile_snapshot as any;
+      if (snap?.gpa) setGpa(snap.gpa);
+      if (snap?.gender) setGender(snap.gender);
+    }
+  }, [latestPrediction]);
+
   // Detect if profile/goals changed since last prediction
   const hasProfileChanged = useMemo(() => {
-    if (!latestPrediction || !profile) return false;
+    if (!latestPrediction || !activeProfile) return false;
     const snap = latestPrediction.profile_snapshot as any;
     const goalSnap = latestPrediction.goals_snapshot as any;
     return (
-      snap?.weight !== profile.weight ||
-      snap?.height !== profile.height ||
-      snap?.age !== profile.age ||
+      snap?.weight !== activeProfile.weight ||
+      snap?.height !== activeProfile.height ||
+      snap?.age !== activeProfile.age ||
+      snap?.gpa !== gpa ||
+      snap?.gender !== gender ||
       goalSnap?.current_2k_time !== goals?.current_2k_time ||
       goalSnap?.current_5k_time !== goals?.current_5k_time ||
       goalSnap?.current_6k_time !== goals?.current_6k_time
     );
-  }, [latestPrediction, profile, goals]);
+  }, [latestPrediction, activeProfile, goals, gpa, gender]);
 
-  const hasMinimumData = profile && (goals?.current_2k_time || goals?.current_5k_time || goals?.current_6k_time);
+  const hasMinimumData = activeProfile && (goals?.current_2k_time || goals?.current_5k_time || goals?.current_6k_time);
 
   // Convert metric for display
-  const displayWeight = profile?.weight ? Math.round(profile.weight * 2.20462) : null;
-  const displayHeightIn = profile?.height ? Math.round(profile.height / 2.54) : null;
+  const displayWeight = activeProfile?.weight ? Math.round(activeProfile.weight * 2.20462) : null;
+  const displayHeightIn = activeProfile?.height ? Math.round(activeProfile.height / 2.54) : null;
   const displayHeight = displayHeightIn ? `${Math.floor(displayHeightIn / 12)}'${displayHeightIn % 12}"` : null;
 
   const generatePrediction = async () => {
-    if (!profile) return;
+    if (!activeProfile) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("predict-recruitment", {
-        body: { profile, goals },
+        body: { profile: activeProfile, goals, gpa, gender },
       });
 
       if (error) throw error;
@@ -139,13 +175,15 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
       const { error: saveError } = await supabase
         .from("recruitment_predictions")
         .insert({
-          user_id: profile.id,
+          user_id: activeProfile.id,
           prediction_data: data,
           profile_snapshot: {
-            weight: profile.weight,
-            height: profile.height,
-            age: profile.age,
-            experience_level: profile.experience_level,
+            weight: activeProfile.weight,
+            height: activeProfile.height,
+            age: activeProfile.age,
+            experience_level: activeProfile.experience_level,
+            gpa,
+            gender,
           },
           goals_snapshot: goals ? {
             current_2k_time: goals.current_2k_time,
@@ -195,8 +233,8 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Current Metrics Display */}
-          {profile && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {activeProfile && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Weight</p>
                 <p className="font-bold text-sm">{displayWeight ? `${displayWeight} lbs` : "—"}</p>
@@ -211,10 +249,45 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               </div>
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Age</p>
-                <p className="font-bold text-sm">{profile.age || "—"}</p>
+                <p className="font-bold text-sm">{activeProfile.age || "—"}</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Gender</p>
+                <p className="font-bold text-sm capitalize">{gender}</p>
               </div>
             </div>
           )}
+
+          {/* GPA & Gender Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30 border border-border">
+            <div className="space-y-2">
+              <Label htmlFor="recruit-gpa" className="text-sm font-medium">GPA (Unweighted)</Label>
+              <Input
+                id="recruit-gpa"
+                type="number"
+                step="0.01"
+                min="0"
+                max="4.0"
+                placeholder="e.g. 3.75"
+                value={gpa}
+                onChange={(e) => setGpa(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground">Academic eligibility matters — especially for D1/D3</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Category</Label>
+              <RadioGroup value={gender} onValueChange={(v) => setGender(v as "mens" | "womens")} className="flex gap-4 pt-1">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="mens" id="mens" />
+                  <Label htmlFor="mens" className="cursor-pointer">Men's Rowing</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="womens" id="womens" />
+                  <Label htmlFor="womens" className="cursor-pointer">Women's Rowing</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
 
           {!hasMinimumData && (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
@@ -313,6 +386,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
                     <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
                       {snapWeight && <span>Weight: {snapWeight} lbs</span>}
                       {gSnap?.current_2k_time && <span>2K: {gSnap.current_2k_time}</span>}
+                      {snap?.gpa && <span>GPA: {snap.gpa}</span>}
                       <span>{pred.school_predictions?.length || 0} schools</span>
                     </div>
                   </div>
