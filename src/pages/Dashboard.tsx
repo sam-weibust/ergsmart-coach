@@ -243,6 +243,13 @@ const Dashboard = () => {
                 <span>Ask</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="forum" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <MessagesSquare className="h-4 w-4" />
+                <span>Forum</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="devices" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
