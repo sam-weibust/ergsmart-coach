@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Dumbbell } from "lucide-react";
+import ShareWorkoutDialog from "./ShareWorkoutDialog";
 
 interface HistorySectionProps {
   profile: any;
@@ -79,9 +80,14 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                         {new Date(workout.workout_date).toLocaleDateString()}
                       </p>
                     </div>
-                    {workout.distance && (
-                      <span className="text-lg font-bold">{workout.distance}m</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {workout.distance && (
+                        <span className="text-lg font-bold">{workout.distance}m</span>
+                      )}
+                      {profile?.id && (
+                        <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     {workout.duration && <span>Time: {workout.duration}</span>}
@@ -112,7 +118,12 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                         {new Date(workout.workout_date).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
+                      {profile?.id && (
+                        <ShareWorkoutDialog workoutId={workout.id} workoutType="strength" userId={profile.id} />
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm">
                     {workout.sets} sets × {workout.reps} reps
