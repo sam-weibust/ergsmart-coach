@@ -43,12 +43,17 @@ D3: Williams, Bates, WPI, Trinity, Tufts, MIT (heavyweight), Colby, Hamilton, We
 NAIA: Oklahoma City, Lindsey Wilson
 CLUB: Strong programs at Michigan, Florida, Texas, USC, UCLA, NC State`;
 
+    // Convert metric units to imperial for the prompt
+    const weightLbs = profile.weight ? Math.round(profile.weight * 2.20462) : null;
+    const heightInches = profile.height ? Math.round(profile.height / 2.54) : null;
+    const heightFeetStr = heightInches ? `${Math.floor(heightInches / 12)}'${heightInches % 12}"` : "Unknown";
+
     const userPrompt = `Analyze this rower's recruitment potential:
 
 ATHLETE PROFILE:
 - Age: ${profile.age || "Unknown"}
-- Height: ${profile.height ? profile.height + " inches" : "Unknown"}
-- Weight: ${profile.weight ? profile.weight + " lbs" : "Unknown"}
+- Height: ${heightInches ? `${heightFeetStr} (${heightInches} inches)` : "Unknown"}
+- Weight: ${weightLbs ? weightLbs + " lbs" : "Unknown"}
 - Experience Level: ${profile.experience_level || "Unknown"}
 - Goals: ${profile.goals || "Not specified"}
 
