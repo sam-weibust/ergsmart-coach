@@ -191,7 +191,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         .select("*, user:profiles!friendships_user_id_fkey(id, full_name, email, username)")
         .eq("friend_id", profile.id)
         .eq("status", "pending");
-      return data || [];
+      return (data || []).filter((r: any) => r.user && r.user.id);
     },
     enabled: !!profile?.id,
   });
@@ -206,7 +206,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
         .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email, username)")
         .eq("user_id", profile.id)
         .eq("status", "pending");
-      return data || [];
+      return (data || []).filter((r: any) => r.friend && r.friend.id);
     },
     enabled: !!profile?.id,
   });
@@ -493,6 +493,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
               ) : (
                 <div className="space-y-3">
                   {friendships.map((friendship: any) => {
+                    if (!friendship.friend) return null;
                     const goals = friendGoals?.[friendship.friend.id];
                     const plans = friendPlans?.[friendship.friend.id] || [];
 
