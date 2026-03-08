@@ -107,7 +107,8 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     queryKey: ["friend-plans", friendships],
     queryFn: async () => {
       if (!friendships.length) return {};
-      const friendIds = friendships.map((f: any) => f.friend.id);
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      if (!friendIds.length) return {};
       const { data } = await supabase.from("workout_plans").select("*").in("user_id", friendIds);
       const grouped: Record<string, any[]> = {};
       data?.forEach(plan => { if (!grouped[plan.user_id]) grouped[plan.user_id] = []; grouped[plan.user_id].push(plan); });
