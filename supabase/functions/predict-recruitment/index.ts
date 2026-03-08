@@ -18,6 +18,8 @@ serve(async (req) => {
 
     const systemPrompt = `You are a college rowing recruitment expert with deep knowledge of NCAA D1, D2, D3, NAIA, and club rowing programs in the United States. You provide REALISTIC recruitment assessments.
 
+IMPORTANT: All responses must be in English only. Do not use any non-English characters, Chinese characters, or other non-Latin scripts anywhere in your response.
+
 You are analyzing a ${genderCategory} rowing recruit.
 
 CRITICAL RULES FOR REALISM:
