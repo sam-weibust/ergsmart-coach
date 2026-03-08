@@ -193,14 +193,48 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Current Metrics Display */}
+          {profile && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Weight</p>
+                <p className="font-bold text-sm">{displayWeight ? `${displayWeight} lbs` : "—"}</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Height</p>
+                <p className="font-bold text-sm">{displayHeight || "—"}</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">2K Time</p>
+                <p className="font-bold text-sm">{goals?.current_2k_time || "—"}</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Age</p>
+                <p className="font-bold text-sm">{profile.age || "—"}</p>
+              </div>
+            </div>
+          )}
+
           {!hasMinimumData && (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 mb-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium text-amber-700 dark:text-amber-300 text-sm">Missing Erg Times</p>
                 <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-1">
-                  Go to the <strong>Profile</strong> tab to add your stats, and the <strong>Stats</strong> tab to set your current erg times. Predictions are most accurate with a 2K time.
+                  Go to the <strong>Profile</strong> tab to add your stats, and the <strong>Stats</strong> tab to set your current erg times.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {hasProfileChanged && prediction && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+              <RefreshCw className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-sm">Profile Updated</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your metrics have changed since the last prediction. Refresh to get an updated assessment.
                 </p>
               </div>
             </div>
@@ -221,7 +255,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               ) : prediction ? (
                 <>
                   <RefreshCw className="h-4 w-4" />
-                  Refresh Prediction
+                  {hasProfileChanged ? "Update Prediction" : "Refresh Prediction"}
                 </>
               ) : (
                 <>
@@ -230,12 +264,64 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
                 </>
               )}
             </Button>
-            <p className="text-xs text-muted-foreground mt-1 sm:mt-2.5">
-              Uses your current profile data and erg times
-            </p>
+            {savedPredictions.length > 1 && (
+              <Button variant="outline" size="lg" className="gap-2" onClick={() => setShowHistory(!showHistory)}>
+                <History className="h-4 w-4" />
+                History ({savedPredictions.length})
+              </Button>
+            )}
           </div>
+
+          {latestPrediction && (
+            <p className="text-[10px] text-muted-foreground">
+              Last prediction: {new Date(latestPrediction.created_at).toLocaleString()}
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      {/* Prediction History */}
+      {showHistory && savedPredictions.length > 1 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              Prediction History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {savedPredictions.map((p: any, i: number) => {
+                const pred = p.prediction_data as RecruitmentPrediction;
+                const snap = p.profile_snapshot as any;
+                const gSnap = p.goals_snapshot as any;
+                const snapWeight = snap?.weight ? Math.round(snap.weight * 2.20462) : null;
+                return (
+                  <div key={p.id} className={`p-3 rounded-lg border ${i === 0 ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={i === 0 ? "default" : "outline"} className="text-xs">
+                          {pred.predicted_tier}
+                        </Badge>
+                        {i === 0 && <Badge variant="secondary" className="text-[10px]">Latest</Badge>}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{pred.overall_assessment}</p>
+                    <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
+                      {snapWeight && <span>Weight: {snapWeight} lbs</span>}
+                      {gSnap?.current_2k_time && <span>2K: {gSnap.current_2k_time}</span>}
+                      <span>{pred.school_predictions?.length || 0} schools</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Results */}
       {prediction && (
