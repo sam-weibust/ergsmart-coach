@@ -322,6 +322,10 @@ const Dashboard = () => {
               <AskSection />
             </TabsContent>
 
+            <TabsContent value="forum" className="mt-0">
+              <ForumSection />
+            </TabsContent>
+
             <TabsContent value="devices" className="mt-0">
               <DeviceSection />
             </TabsContent>
