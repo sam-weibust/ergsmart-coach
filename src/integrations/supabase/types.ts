@@ -452,6 +452,41 @@ export type Database = {
           },
         ]
       }
+      recruitment_predictions: {
+        Row: {
+          created_at: string
+          goals_snapshot: Json | null
+          id: string
+          prediction_data: Json
+          profile_snapshot: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goals_snapshot?: Json | null
+          id?: string
+          prediction_data: Json
+          profile_snapshot: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goals_snapshot?: Json | null
+          id?: string
+          prediction_data?: Json
+          profile_snapshot?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruitment_predictions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strength_workouts: {
         Row: {
           cooldown_notes: string | null
