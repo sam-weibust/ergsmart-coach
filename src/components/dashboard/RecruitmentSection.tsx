@@ -69,6 +69,11 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const [showHistory, setShowHistory] = useState(false);
   const [gpa, setGpa] = useState("");
   const [gender, setGender] = useState<"mens" | "womens">("mens");
+  const [current2k, setCurrent2k] = useState("");
+  const [current5k, setCurrent5k] = useState("");
+  const [current6k, setCurrent6k] = useState("");
+  const [timesInitialized, setTimesInitialized] = useState(false);
+  const [savingTimes, setSavingTimes] = useState(false);
 
   // Refetch profile fresh every time this section mounts
   const { data: freshProfile } = useQuery({
