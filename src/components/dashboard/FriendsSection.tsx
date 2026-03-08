@@ -27,6 +27,127 @@ interface FriendsSectionProps {
   profile: any;
 }
 
+const DmFriendList = ({ friendships, profileId, onSelectFriend }: { friendships: any[]; profileId: string; onSelectFriend: (f: any) => void }) => {
+  const { data: lastMessages = {} } = useQuery({
+    queryKey: ["dm-last-messages", profileId],
+    queryFn: async () => {
+      if (!profileId || friendships.length === 0) return {};
+      const friendIds = friendships.map((f: any) => f.friend?.id).filter(Boolean);
+      
+      // Fetch last message for each friend conversation
+      const results: Record<string, { content: string; created_at: string; sender_id: string; is_read: boolean }> = {};
+      
+      const { data: messages } = await supabase
+        .from("friend_messages")
+        .select("*")
+        .or(`sender_id.eq.${profileId},receiver_id.eq.${profileId}`)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      
+      if (messages) {
+        for (const friendId of friendIds) {
+          const msg = messages.find(
+            (m: any) =>
+              (m.sender_id === profileId && m.receiver_id === friendId) ||
+              (m.sender_id === friendId && m.receiver_id === profileId)
+          );
+          if (msg) {
+            results[friendId] = {
+              content: msg.content,
+              created_at: msg.created_at,
+              sender_id: msg.sender_id,
+              is_read: msg.sender_id === profileId, // messages you sent are always "read"
+            };
+          }
+        }
+      }
+      return results;
+    },
+    enabled: !!profileId && friendships.length > 0,
+    refetchInterval: 10000, // poll every 10s for new messages
+  });
+
+  // Sort friendships: unread first, then by last message time, then alphabetical
+  const sorted = [...friendships].sort((a: any, b: any) => {
+    const msgA = lastMessages[a.friend?.id];
+    const msgB = lastMessages[b.friend?.id];
+    const unreadA = msgA && !msgA.is_read ? 1 : 0;
+    const unreadB = msgB && !msgB.is_read ? 1 : 0;
+    if (unreadA !== unreadB) return unreadB - unreadA;
+    if (msgA && msgB) return new Date(msgB.created_at).getTime() - new Date(msgA.created_at).getTime();
+    if (msgA) return -1;
+    if (msgB) return 1;
+    return 0;
+  });
+
+  const formatTime = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "now";
+    if (diffMins < 60) return `${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d`;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  return (
+    <div className="space-y-1">
+      {sorted.map((friendship: any) => {
+        const lastMsg = lastMessages[friendship.friend?.id];
+        const isUnread = lastMsg && !lastMsg.is_read;
+        return (
+          <button
+            key={friendship.id}
+            onClick={() => onSelectFriend(friendship.friend)}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left ${
+              isUnread
+                ? "bg-primary/5 border-primary/20 hover:bg-primary/10"
+                : "bg-card hover:bg-accent/50 border-border"
+            }`}
+          >
+            <div className="relative shrink-0">
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                isUnread ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary"
+              }`}>
+                {(friendship.friend.full_name || friendship.friend.username || "U").charAt(0).toUpperCase()}
+              </div>
+              {isUnread && (
+                <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary border-2 border-background" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className={`truncate text-sm ${isUnread ? "font-bold" : "font-semibold"}`}>
+                  {friendship.friend.full_name || friendship.friend.username || "User"}
+                </p>
+                {lastMsg && (
+                  <span className={`text-[10px] shrink-0 ${isUnread ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                    {formatTime(lastMsg.created_at)}
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs truncate ${isUnread ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {lastMsg
+                  ? `${lastMsg.sender_id === profileId ? "You: " : ""}${lastMsg.content}`
+                  : friendship.friend.email}
+              </p>
+            </div>
+            {isUnread ? (
+              <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+            ) : (
+              <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
