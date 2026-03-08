@@ -68,6 +68,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const [loading, setLoading] = useState(false);
   const [tiersOpen, setTiersOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedSchoolForEmail, setSelectedSchoolForEmail] = useState<{ school: string; division: string; chance: string } | null>(null);
   const [gpa, setGpa] = useState("");
   const [gender, setGender] = useState<"mens" | "womens">("mens");
   const [current2k, setCurrent2k] = useState("");
