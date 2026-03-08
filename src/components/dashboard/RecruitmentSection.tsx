@@ -243,11 +243,11 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
             gpa,
             gender,
           },
-          goals_snapshot: goals ? {
-            current_2k_time: goals.current_2k_time,
-            current_5k_time: goals.current_5k_time,
-            current_6k_time: goals.current_6k_time,
-          } : null,
+          goals_snapshot: {
+            current_2k_time: current2k || null,
+            current_5k_time: current5k || null,
+            current_6k_time: current6k || null,
+          },
         } as any);
 
       if (saveError) console.error("Failed to save prediction:", saveError);
