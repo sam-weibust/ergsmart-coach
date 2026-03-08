@@ -118,7 +118,12 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                         {new Date(workout.workout_date).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
+                      {profile?.id && (
+                        <ShareWorkoutDialog workoutId={workout.id} workoutType="strength" userId={profile.id} />
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm">
                     {workout.sets} sets × {workout.reps} reps
