@@ -24,6 +24,7 @@ import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
+import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
