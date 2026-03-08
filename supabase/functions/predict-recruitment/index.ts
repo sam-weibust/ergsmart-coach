@@ -10,22 +10,37 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { profile, goals } = await req.json();
+    const { profile, goals, gpa, gender } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const genderCategory = gender === "womens" ? "Women's" : "Men's";
+
     const systemPrompt = `You are a college rowing recruitment expert with deep knowledge of NCAA D1, D2, D3, NAIA, and club rowing programs in the United States. You provide REALISTIC recruitment assessments.
 
+You are analyzing a ${genderCategory} rowing recruit.
+
 CRITICAL RULES FOR REALISM:
+FOR MEN'S ROWING:
 - D1 heavyweight men need sub-6:20 2K times minimum, top programs (Harvard, Yale, Cal, Washington) want sub-6:10 or better
-- D1 lightweight men need sub-6:30 2K for top programs
+- D1 lightweight men (under 160 lbs) need sub-6:30 2K for top programs
+- D3 men are typically 6:30-7:00 range
+- Height matters - ideal D1 heavyweight men are 6'2"+ and 185+ lbs
+
+FOR WOMEN'S ROWING:
 - D1 women need sub-7:10 2K for top programs, sub-7:30 for mid-tier D1
-- D3 men are typically 6:30-7:00 range, D3 women 7:30-8:00
-- Height and weight matter enormously - ideal D1 heavyweight men are 6'2"+ and 185+ lbs
-- Age context matters - a high school junior with a 6:40 has more potential than a college senior
+- D1 lightweight women (under 130 lbs) need sub-7:20 for top programs
+- D3 women are typically 7:30-8:00 range
+- Height matters - ideal D1 women are 5'10"+ and 150+ lbs
+
+GENERAL RULES:
+- Age context matters - a high school junior with improving times has more potential
 - Experience level matters - a novice with good times has high upside
-- Be HONEST - if someone's times aren't competitive for D1, say so clearly
-- Consider that lightweight categories exist (men <160 lbs, women <130 lbs)
+- Be HONEST - if someone's times aren't competitive for higher divisions, say so clearly
+- GPA matters significantly for academic institutions, especially D3 and Ivy League D1 schools
+  - Most D1 programs need minimum 3.0 GPA, Ivies typically want 3.5+
+  - D3 academic schools (Williams, Bates, Tufts) want strong academics
+  - If GPA is provided, factor it heavily into school-specific predictions
 
 You must respond with a JSON object using this EXACT tool call format.
 
@@ -34,10 +49,10 @@ For each school prediction:
 - walkOn vs recruited distinction matters
 - Be specific about what times they'd need to improve to for each tier
 
-Consider these real programs and their approximate competitiveness:
+Consider these real ${genderCategory} programs and their approximate competitiveness:
 TOP D1: Harvard, Yale, Princeton, Cal, Washington, Wisconsin, Brown, Cornell, Dartmouth, Penn, Columbia, Stanford
 MID D1: Georgetown, Northeastern, Syracuse, Boston University, Michigan, Ohio State, Notre Dame, Clemson, Virginia, Navy
-D1 LIGHTWEIGHT: Cornell, Harvard, Princeton, Georgetown, MIT, Columbia, Penn, Dartmouth
+${gender === "mens" ? "D1 LIGHTWEIGHT: Cornell, Harvard, Princeton, Georgetown, MIT, Columbia, Penn, Dartmouth" : ""}
 D2: Mercyhurst, Florida Tech, Barry, Drury, Central Oklahoma
 D3: Williams, Bates, WPI, Trinity, Tufts, MIT (heavyweight), Colby, Hamilton, Wesleyan, Ithaca, RIT
 NAIA: Oklahoma City, Lindsey Wilson
@@ -48,14 +63,16 @@ CLUB: Strong programs at Michigan, Florida, Texas, USC, UCLA, NC State`;
     const heightInches = profile.height ? Math.round(profile.height / 2.54) : null;
     const heightFeetStr = heightInches ? `${Math.floor(heightInches / 12)}'${heightInches % 12}"` : "Unknown";
 
-    const userPrompt = `Analyze this rower's recruitment potential:
+    const userPrompt = `Analyze this ${genderCategory} rower's recruitment potential:
 
 ATHLETE PROFILE:
+- Gender/Category: ${genderCategory}
 - Age: ${profile.age || "Unknown"}
 - Height: ${heightInches ? `${heightFeetStr} (${heightInches} inches)` : "Unknown"}
 - Weight: ${weightLbs ? weightLbs + " lbs" : "Unknown"}
 - Experience Level: ${profile.experience_level || "Unknown"}
 - Goals: ${profile.goals || "Not specified"}
+- GPA: ${gpa || "Not provided"}
 
 ERG TIMES:
 - 2K Time: ${goals?.current_2k_time || "Not recorded"}
@@ -67,7 +84,7 @@ GOAL TIMES:
 - 5K Goal: ${goals?.goal_5k_time || "Not set"}
 - 6K Goal: ${goals?.goal_6k_time || "Not set"}
 
-Provide a comprehensive, HONEST recruitment prediction. If data is missing, note that it limits accuracy. If times aren't competitive for higher divisions, be direct about it.`;
+Provide a comprehensive, HONEST recruitment prediction for ${genderCategory} rowing programs. If data is missing, note that it limits accuracy. If times aren't competitive for higher divisions, be direct about it.${gpa ? ` Factor the ${gpa} GPA into academic eligibility and school-specific predictions.` : " Note that GPA was not provided, which limits prediction accuracy for academic schools."}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
