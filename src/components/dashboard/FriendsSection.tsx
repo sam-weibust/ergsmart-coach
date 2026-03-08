@@ -53,7 +53,9 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
           .eq("friend_id", profile.id)
           .eq("status", "accepted"),
       ]);
-      return [...(initiated || []), ...(received || [])];
+      const all = [...(initiated || []), ...(received || [])];
+      // Filter out entries where the friend profile couldn't be loaded
+      return all.filter((f: any) => f.friend && f.friend.id);
     },
     enabled: !!profile?.id,
   });
