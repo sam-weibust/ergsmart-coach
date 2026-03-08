@@ -25,6 +25,7 @@ import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
 import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
+import ForumSection from "@/components/dashboard/forum/ForumSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
