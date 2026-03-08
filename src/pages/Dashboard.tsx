@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -24,6 +24,7 @@ import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
+import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -197,6 +198,13 @@ const Dashboard = () => {
                 <span>Awards</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="recruit" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <GraduationCap className="h-4 w-4" />
+                <span>Recruit</span>
+              </TabsTrigger>
+              <TabsTrigger
                 value="profile" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
@@ -278,6 +286,10 @@ const Dashboard = () => {
 
             <TabsContent value="awards" className="mt-0">
               <AwardsSection profile={profile} />
+            </TabsContent>
+
+            <TabsContent value="recruit" className="mt-0">
+              <RecruitmentSection profile={profile} />
             </TabsContent>
 
             <TabsContent value="profile" className="mt-0">
