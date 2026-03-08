@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import RecruitEmailSection from "./RecruitEmailSection";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   GraduationCap, Loader2, AlertTriangle, Trophy, Target,
-  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History
+  TrendingUp, School, Lightbulb, Info, RefreshCw, ChevronDown, ChevronUp, Clock, History, Mail
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -67,6 +68,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const [loading, setLoading] = useState(false);
   const [tiersOpen, setTiersOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedSchoolForEmail, setSelectedSchoolForEmail] = useState<{ school: string; division: string; chance: string } | null>(null);
   const [gpa, setGpa] = useState("");
   const [gender, setGender] = useState<"mens" | "womens">("mens");
   const [current2k, setCurrent2k] = useState("");
@@ -271,6 +273,23 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     acc[group].push(school);
     return acc;
   }, {} as Record<string, SchoolPrediction[]>);
+
+  // If viewing email campaign for a school, show that instead
+  if (selectedSchoolForEmail) {
+    return (
+      <RecruitEmailSection
+        school={selectedSchoolForEmail.school}
+        division={selectedSchoolForEmail.division}
+        chance={selectedSchoolForEmail.chance}
+        profile={activeProfile}
+        goals={{ current_2k_time: current2k, current_5k_time: current5k, current_6k_time: current6k }}
+        gpa={gpa}
+        gender={gender}
+        predictionData={prediction}
+        onClose={() => setSelectedSchoolForEmail(null)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -614,6 +633,15 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
                               </div>
                             </div>
                             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{school.notes}</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-7 text-xs gap-1.5 w-full"
+                              onClick={() => setSelectedSchoolForEmail({ school: school.school, division: school.division, chance: level })}
+                            >
+                              <Mail className="h-3 w-3" />
+                              Email Coach
+                            </Button>
                           </div>
                         ))}
                       </div>
