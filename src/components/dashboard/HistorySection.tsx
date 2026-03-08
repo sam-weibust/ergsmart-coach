@@ -80,9 +80,14 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                         {new Date(workout.workout_date).toLocaleDateString()}
                       </p>
                     </div>
-                    {workout.distance && (
-                      <span className="text-lg font-bold">{workout.distance}m</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {workout.distance && (
+                        <span className="text-lg font-bold">{workout.distance}m</span>
+                      )}
+                      {profile?.id && (
+                        <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     {workout.duration && <span>Time: {workout.duration}</span>}
