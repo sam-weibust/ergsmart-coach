@@ -69,6 +69,11 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const [showHistory, setShowHistory] = useState(false);
   const [gpa, setGpa] = useState("");
   const [gender, setGender] = useState<"mens" | "womens">("mens");
+  const [current2k, setCurrent2k] = useState("");
+  const [current5k, setCurrent5k] = useState("");
+  const [current6k, setCurrent6k] = useState("");
+  const [timesInitialized, setTimesInitialized] = useState(false);
+  const [savingTimes, setSavingTimes] = useState(false);
 
   // Refetch profile fresh every time this section mounts
   const { data: freshProfile } = useQuery({
@@ -133,6 +138,49 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     }
   }, [latestPrediction]);
 
+  // Initialize times from goals
+  useEffect(() => {
+    if (goals && !timesInitialized) {
+      setCurrent2k(goals.current_2k_time || "");
+      setCurrent5k(goals.current_5k_time || "");
+      setCurrent6k(goals.current_6k_time || "");
+      setTimesInitialized(true);
+    }
+  }, [goals, timesInitialized]);
+
+  // Save times to user_goals
+  const saveTimes = async () => {
+    if (!activeProfile) return;
+    setSavingTimes(true);
+    try {
+      const { data: existing } = await supabase
+        .from("user_goals")
+        .select("id")
+        .eq("user_id", activeProfile.id)
+        .maybeSingle();
+
+      const payload = {
+        current_2k_time: current2k || null,
+        current_5k_time: current5k || null,
+        current_6k_time: current6k || null,
+      };
+
+      if (existing) {
+        await supabase.from("user_goals").update(payload).eq("user_id", activeProfile.id);
+      } else {
+        await supabase.from("user_goals").insert({ user_id: activeProfile.id, ...payload });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["user-goals-recruit"] });
+      queryClient.invalidateQueries({ queryKey: ["user-goals"] });
+      toast({ title: "Times saved", description: "Your erg times have been updated." });
+    } catch {
+      toast({ title: "Error", description: "Failed to save times.", variant: "destructive" });
+    } finally {
+      setSavingTimes(false);
+    }
+  };
+
   // Detect if profile/goals changed since last prediction
   const hasProfileChanged = useMemo(() => {
     if (!latestPrediction || !activeProfile) return false;
@@ -144,13 +192,13 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
       snap?.age !== activeProfile.age ||
       snap?.gpa !== gpa ||
       snap?.gender !== gender ||
-      goalSnap?.current_2k_time !== goals?.current_2k_time ||
-      goalSnap?.current_5k_time !== goals?.current_5k_time ||
-      goalSnap?.current_6k_time !== goals?.current_6k_time
+      goalSnap?.current_2k_time !== (current2k || null) ||
+      goalSnap?.current_5k_time !== (current5k || null) ||
+      goalSnap?.current_6k_time !== (current6k || null)
     );
-  }, [latestPrediction, activeProfile, goals, gpa, gender]);
+  }, [latestPrediction, activeProfile, gpa, gender, current2k, current5k, current6k]);
 
-  const hasMinimumData = activeProfile && (goals?.current_2k_time || goals?.current_5k_time || goals?.current_6k_time);
+  const hasMinimumData = activeProfile && (current2k || current5k || current6k);
 
   // Convert metric for display
   const displayWeight = activeProfile?.weight ? Math.round(activeProfile.weight * 2.20462) : null;
@@ -159,10 +207,20 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
 
   const generatePrediction = async () => {
     if (!activeProfile) return;
+    // Save times first
+    await saveTimes();
     setLoading(true);
     try {
+      const localGoals = {
+        current_2k_time: current2k || null,
+        current_5k_time: current5k || null,
+        current_6k_time: current6k || null,
+        goal_2k_time: goals?.goal_2k_time || null,
+        goal_5k_time: goals?.goal_5k_time || null,
+        goal_6k_time: goals?.goal_6k_time || null,
+      };
       const { data, error } = await supabase.functions.invoke("predict-recruitment", {
-        body: { profile: activeProfile, goals, gpa, gender },
+        body: { profile: activeProfile, goals: localGoals, gpa, gender },
       });
 
       if (error) throw error;
@@ -185,11 +243,11 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
             gpa,
             gender,
           },
-          goals_snapshot: goals ? {
-            current_2k_time: goals.current_2k_time,
-            current_5k_time: goals.current_5k_time,
-            current_6k_time: goals.current_6k_time,
-          } : null,
+          goals_snapshot: {
+            current_2k_time: current2k || null,
+            current_5k_time: current5k || null,
+            current_6k_time: current6k || null,
+          },
         } as any);
 
       if (saveError) console.error("Failed to save prediction:", saveError);
@@ -234,7 +292,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
         <CardContent className="space-y-4">
           {/* Current Metrics Display */}
           {activeProfile && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Weight</p>
                 <p className="font-bold text-sm">{displayWeight ? `${displayWeight} lbs` : "—"}</p>
@@ -242,10 +300,6 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Height</p>
                 <p className="font-bold text-sm">{displayHeight || "—"}</p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">2K Time</p>
-                <p className="font-bold text-sm">{goals?.current_2k_time || "—"}</p>
               </div>
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Age</p>
@@ -257,6 +311,55 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               </div>
             </div>
           )}
+
+          {/* Erg Times - Editable */}
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Erg Times</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={saveTimes}
+                disabled={savingTimes}
+                className="text-xs h-7"
+              >
+                {savingTimes ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Save Times
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="recruit-2k" className="text-[10px] text-muted-foreground uppercase">2K Time</Label>
+                <Input
+                  id="recruit-2k"
+                  placeholder="e.g. 6:30"
+                  value={current2k}
+                  onChange={(e) => setCurrent2k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recruit-5k" className="text-[10px] text-muted-foreground uppercase">5K Time</Label>
+                <Input
+                  id="recruit-5k"
+                  placeholder="e.g. 18:00"
+                  value={current5k}
+                  onChange={(e) => setCurrent5k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recruit-6k" className="text-[10px] text-muted-foreground uppercase">6K Time</Label>
+                <Input
+                  id="recruit-6k"
+                  placeholder="e.g. 22:00"
+                  value={current6k}
+                  onChange={(e) => setCurrent6k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* GPA & Gender Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30 border border-border">
