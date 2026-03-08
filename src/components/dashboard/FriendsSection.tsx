@@ -518,26 +518,11 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
               {friendships.length === 0 ? (
                 <p className="text-center text-muted-foreground py-6 text-sm">Add friends to start messaging</p>
               ) : (
-                <div className="space-y-2">
-                  {friendships.map((friendship: any) => (
-                    <button
-                      key={friendship.id}
-                      onClick={() => setDmFriend(friendship.friend)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-accent/50 transition-colors text-left"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                        {(friendship.friend.full_name || friendship.friend.username || "U").charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold truncate">
-                          {friendship.friend.full_name || friendship.friend.username || "User"}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">{friendship.friend.email}</p>
-                      </div>
-                      <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </button>
-                  ))}
-                </div>
+                <DmFriendList
+                  friendships={friendships}
+                  profileId={profile?.id}
+                  onSelectFriend={(friend: any) => setDmFriend(friend)}
+                />
               )}
             </CardContent>
           </Card>
