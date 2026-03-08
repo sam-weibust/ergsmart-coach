@@ -192,13 +192,13 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
       snap?.age !== activeProfile.age ||
       snap?.gpa !== gpa ||
       snap?.gender !== gender ||
-      goalSnap?.current_2k_time !== goals?.current_2k_time ||
-      goalSnap?.current_5k_time !== goals?.current_5k_time ||
-      goalSnap?.current_6k_time !== goals?.current_6k_time
+      goalSnap?.current_2k_time !== (current2k || null) ||
+      goalSnap?.current_5k_time !== (current5k || null) ||
+      goalSnap?.current_6k_time !== (current6k || null)
     );
-  }, [latestPrediction, activeProfile, goals, gpa, gender]);
+  }, [latestPrediction, activeProfile, gpa, gender, current2k, current5k, current6k]);
 
-  const hasMinimumData = activeProfile && (goals?.current_2k_time || goals?.current_5k_time || goals?.current_6k_time);
+  const hasMinimumData = activeProfile && (current2k || current5k || current6k);
 
   // Convert metric for display
   const displayWeight = activeProfile?.weight ? Math.round(activeProfile.weight * 2.20462) : null;
@@ -207,10 +207,20 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
 
   const generatePrediction = async () => {
     if (!activeProfile) return;
+    // Save times first
+    await saveTimes();
     setLoading(true);
     try {
+      const localGoals = {
+        current_2k_time: current2k || null,
+        current_5k_time: current5k || null,
+        current_6k_time: current6k || null,
+        goal_2k_time: goals?.goal_2k_time || null,
+        goal_5k_time: goals?.goal_5k_time || null,
+        goal_6k_time: goals?.goal_6k_time || null,
+      };
       const { data, error } = await supabase.functions.invoke("predict-recruitment", {
-        body: { profile: activeProfile, goals, gpa, gender },
+        body: { profile: activeProfile, goals: localGoals, gpa, gender },
       });
 
       if (error) throw error;
