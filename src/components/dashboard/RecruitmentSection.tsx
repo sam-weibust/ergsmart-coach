@@ -138,6 +138,49 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     }
   }, [latestPrediction]);
 
+  // Initialize times from goals
+  useEffect(() => {
+    if (goals && !timesInitialized) {
+      setCurrent2k(goals.current_2k_time || "");
+      setCurrent5k(goals.current_5k_time || "");
+      setCurrent6k(goals.current_6k_time || "");
+      setTimesInitialized(true);
+    }
+  }, [goals, timesInitialized]);
+
+  // Save times to user_goals
+  const saveTimes = async () => {
+    if (!activeProfile) return;
+    setSavingTimes(true);
+    try {
+      const { data: existing } = await supabase
+        .from("user_goals")
+        .select("id")
+        .eq("user_id", activeProfile.id)
+        .maybeSingle();
+
+      const payload = {
+        current_2k_time: current2k || null,
+        current_5k_time: current5k || null,
+        current_6k_time: current6k || null,
+      };
+
+      if (existing) {
+        await supabase.from("user_goals").update(payload).eq("user_id", activeProfile.id);
+      } else {
+        await supabase.from("user_goals").insert({ user_id: activeProfile.id, ...payload });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["user-goals-recruit"] });
+      queryClient.invalidateQueries({ queryKey: ["user-goals"] });
+      toast({ title: "Times saved", description: "Your erg times have been updated." });
+    } catch {
+      toast({ title: "Error", description: "Failed to save times.", variant: "destructive" });
+    } finally {
+      setSavingTimes(false);
+    }
+  };
+
   // Detect if profile/goals changed since last prediction
   const hasProfileChanged = useMemo(() => {
     if (!latestPrediction || !activeProfile) return false;
