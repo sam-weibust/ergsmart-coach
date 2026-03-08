@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -25,6 +25,7 @@ import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
 import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
+import ForumSection from "@/components/dashboard/forum/ForumSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -242,6 +243,13 @@ const Dashboard = () => {
                 <span>Ask</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="forum" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <MessagesSquare className="h-4 w-4" />
+                <span>Forum</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="devices" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
@@ -312,6 +320,10 @@ const Dashboard = () => {
 
             <TabsContent value="ask" className="mt-0">
               <AskSection />
+            </TabsContent>
+
+            <TabsContent value="forum" className="mt-0">
+              <ForumSection />
             </TabsContent>
 
             <TabsContent value="devices" className="mt-0">

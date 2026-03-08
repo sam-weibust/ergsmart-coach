@@ -105,6 +105,170 @@ export type Database = {
           },
         ]
       }
+      forum_categories: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          last_post_at: string | null
+          name: string
+          post_count: number | null
+          topic_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          last_post_at?: string | null
+          name: string
+          post_count?: number | null
+          topic_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          last_post_at?: string | null
+          name?: string
+          post_count?: number | null
+          topic_count?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      forum_posts: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          id: string
+          is_edited: boolean | null
+          parent_post_id: string | null
+          topic_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          id?: string
+          is_edited?: boolean | null
+          parent_post_id?: string | null
+          topic_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_edited?: boolean | null
+          parent_post_id?: string | null
+          topic_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forum_posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_posts_parent_post_id_fkey"
+            columns: ["parent_post_id"]
+            isOneToOne: false
+            referencedRelation: "forum_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_posts_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "forum_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forum_topics: {
+        Row: {
+          author_id: string
+          category_id: string
+          content: string
+          created_at: string
+          id: string
+          is_locked: boolean | null
+          is_pinned: boolean | null
+          last_post_at: string | null
+          last_post_author_id: string | null
+          reply_count: number | null
+          title: string
+          updated_at: string
+          view_count: number | null
+        }
+        Insert: {
+          author_id: string
+          category_id: string
+          content: string
+          created_at?: string
+          id?: string
+          is_locked?: boolean | null
+          is_pinned?: boolean | null
+          last_post_at?: string | null
+          last_post_author_id?: string | null
+          reply_count?: number | null
+          title: string
+          updated_at?: string
+          view_count?: number | null
+        }
+        Update: {
+          author_id?: string
+          category_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_locked?: boolean | null
+          is_pinned?: boolean | null
+          last_post_at?: string | null
+          last_post_author_id?: string | null
+          reply_count?: number | null
+          title?: string
+          updated_at?: string
+          view_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forum_topics_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_topics_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "forum_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_topics_last_post_author_id_fkey"
+            columns: ["last_post_author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       friend_invites: {
         Row: {
           created_at: string
