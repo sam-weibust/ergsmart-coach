@@ -292,7 +292,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
         <CardContent className="space-y-4">
           {/* Current Metrics Display */}
           {activeProfile && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Weight</p>
                 <p className="font-bold text-sm">{displayWeight ? `${displayWeight} lbs` : "—"}</p>
@@ -300,10 +300,6 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Height</p>
                 <p className="font-bold text-sm">{displayHeight || "—"}</p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">2K Time</p>
-                <p className="font-bold text-sm">{goals?.current_2k_time || "—"}</p>
               </div>
               <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-center">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Age</p>
@@ -315,6 +311,55 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               </div>
             </div>
           )}
+
+          {/* Erg Times - Editable */}
+          <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Erg Times</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={saveTimes}
+                disabled={savingTimes}
+                className="text-xs h-7"
+              >
+                {savingTimes ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Save Times
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="recruit-2k" className="text-[10px] text-muted-foreground uppercase">2K Time</Label>
+                <Input
+                  id="recruit-2k"
+                  placeholder="e.g. 6:30"
+                  value={current2k}
+                  onChange={(e) => setCurrent2k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recruit-5k" className="text-[10px] text-muted-foreground uppercase">5K Time</Label>
+                <Input
+                  id="recruit-5k"
+                  placeholder="e.g. 18:00"
+                  value={current5k}
+                  onChange={(e) => setCurrent5k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recruit-6k" className="text-[10px] text-muted-foreground uppercase">6K Time</Label>
+                <Input
+                  id="recruit-6k"
+                  placeholder="e.g. 22:00"
+                  value={current6k}
+                  onChange={(e) => setCurrent6k(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* GPA & Gender Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30 border border-border">
