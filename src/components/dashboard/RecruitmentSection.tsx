@@ -633,6 +633,15 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
                               </div>
                             </div>
                             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{school.notes}</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-7 text-xs gap-1.5 w-full"
+                              onClick={() => setSelectedSchoolForEmail({ school: school.school, division: school.division, chance: level })}
+                            >
+                              <Mail className="h-3 w-3" />
+                              Email Coach
+                            </Button>
                           </div>
                         ))}
                       </div>
