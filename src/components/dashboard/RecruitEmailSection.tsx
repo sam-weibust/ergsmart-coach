@@ -65,14 +65,28 @@ const RecruitEmailSection = ({
   const generateEmails = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-recruit-emails", {
-        body: {
-          school, division, profile, goals, gpa, gender,
-          prediction: predictionData ? { predicted_tier: predictionData.predicted_tier, chance } : null,
-        },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-recruit-emails`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            school, division, profile, goals, gpa, gender,
+            prediction: predictionData ? { predicted_tier: predictionData.predicted_tier, chance } : null,
+          }),
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        toast({ title: "Error", description: errData.error || `Request failed (${response.status})`, variant: "destructive" });
+        return;
+      }
+
+      const data = await response.json();
       if (data?.error) {
         toast({ title: "Error", description: data.error, variant: "destructive" });
         return;
