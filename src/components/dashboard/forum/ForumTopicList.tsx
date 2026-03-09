@@ -20,6 +20,8 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
   const [showNewTopic, setShowNewTopic] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: topics, isLoading } = useQuery({
