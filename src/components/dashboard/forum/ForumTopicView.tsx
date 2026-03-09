@@ -304,9 +304,25 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
                         </div>
                       </div>
                     ) : (
-                      <div className="mt-1.5 text-sm text-foreground whitespace-pre-wrap break-words">
-                        {post.content}
-                      </div>
+                      <>
+                        <div className="mt-1.5 text-sm text-foreground whitespace-pre-wrap break-words">
+                          {post.content}
+                        </div>
+                        {/* Display images */}
+                        {post.images && post.images.length > 0 && (
+                          <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                            {post.images.map((imageUrl, index) => (
+                              <img
+                                key={index}
+                                src={imageUrl}
+                                alt={`Image ${index + 1}`}
+                                className="w-full h-32 object-cover rounded-md border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(imageUrl, '_blank')}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   {currentUser?.id === post.author_id && editingPostId !== post.id && (
