@@ -1,6 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Calculator, Upload, ShieldCheck } from "lucide-react";
-import { ErgPredictor } from "./ErgPredictor";
+import { Trophy, Upload, ShieldCheck } from "lucide-react";
 import { GlobalLeaderboard } from "./GlobalLeaderboard";
 import { SubmitVerifiedTime } from "./SubmitVerifiedTime";
 import { TimeVerificationAdmin } from "./TimeVerificationAdmin";
@@ -30,14 +29,10 @@ export const LeaderboardSection = () => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="leaderboard" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-flex">
           <TabsTrigger value="leaderboard" className="gap-2">
             <Trophy className="h-4 w-4" />
             <span className="hidden sm:inline">Leaderboard</span>
-          </TabsTrigger>
-          <TabsTrigger value="predictor" className="gap-2">
-            <Calculator className="h-4 w-4" />
-            <span className="hidden sm:inline">Predictor</span>
           </TabsTrigger>
           <TabsTrigger value="submit" className="gap-2">
             <Upload className="h-4 w-4" />
@@ -53,10 +48,6 @@ export const LeaderboardSection = () => {
 
         <TabsContent value="leaderboard" className="space-y-4">
           <GlobalLeaderboard />
-        </TabsContent>
-
-        <TabsContent value="predictor" className="space-y-4">
-          <ErgPredictor />
         </TabsContent>
 
         <TabsContent value="submit" className="space-y-4">
