@@ -177,6 +177,49 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
               rows={4}
               maxLength={10000}
             />
+            
+            {/* Image Upload */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <label htmlFor="image-upload" className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent/50 transition-colors">
+                    <ImagePlus className="h-4 w-4" />
+                    <span>{isUploading ? "Uploading..." : "Add Images"}</span>
+                  </div>
+                </label>
+                <input
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                />
+                <span className="text-xs text-muted-foreground">Max 5MB per image</span>
+              </div>
+
+              {/* Preview uploaded images */}
+              {uploadedImages.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {uploadedImages.map((url, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={url}
+                        alt={`Upload ${index + 1}`}
+                        className="w-full h-20 object-cover rounded-md border"
+                      />
+                      <button
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-2 -right-2 h-6 w-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowNewTopic(false)}>
                 Cancel
