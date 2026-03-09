@@ -360,7 +360,7 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
       {/* Reply form */}
       {!isLocked && (
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-3">
             <div className="flex gap-3">
               <Textarea
                 placeholder="Write a reply..."
@@ -373,12 +373,53 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
               <Button
                 size="icon"
                 onClick={() => addReply.mutate()}
-                disabled={!reply.trim() || addReply.isPending}
+                disabled={!reply.trim() || addReply.isPending || isUploading}
                 className="shrink-0 self-end"
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+            
+            {/* Image Upload for replies */}
+            <div className="flex items-center gap-3">
+              <label htmlFor="reply-image-upload" className="cursor-pointer">
+                <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent/50 transition-colors">
+                  <ImagePlus className="h-4 w-4" />
+                  <span>{isUploading ? "Uploading..." : "Add Images"}</span>
+                </div>
+              </label>
+              <input
+                id="reply-image-upload"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+              />
+              <span className="text-xs text-muted-foreground">Max 5MB per image</span>
+            </div>
+
+            {/* Preview reply images */}
+            {replyImages.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {replyImages.map((url, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={url}
+                      alt={`Upload ${index + 1}`}
+                      className="w-full h-16 object-cover rounded border"
+                    />
+                    <button
+                      onClick={() => removeReplyImage(index)}
+                      className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
