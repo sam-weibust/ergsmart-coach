@@ -27,6 +27,7 @@ import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
 import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
 import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
+import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
 
 const Dashboard = () => {
   const navigate = useNavigate();
