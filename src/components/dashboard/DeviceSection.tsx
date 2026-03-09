@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle, Link, Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { BluetoothLe, BleDevice } from "@capacitor-community/bluetooth-le";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DeviceConnection {
   name: string;
@@ -14,17 +15,47 @@ interface DeviceConnection {
   device?: BleDevice;
 }
 
+interface C2Connection {
+  id: string;
+  c2_user_id: string;
+  last_sync_at: string | null;
+}
+
 const DeviceSection = () => {
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<DeviceConnection[]>([]);
   const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
   const [isNative, setIsNative] = useState(false);
+  const [c2Connection, setC2Connection] = useState<C2Connection | null>(null);
+  const [isConnectingC2, setIsConnectingC2] = useState(false);
+  const [isSyncingC2, setIsSyncingC2] = useState(false);
 
   useEffect(() => {
     setIsNative(Capacitor.isNativePlatform());
     checkBluetoothStatus();
+    checkC2Connection();
   }, []);
+
+  const checkC2Connection = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('c2_connections')
+        .select('*')
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking C2 connection:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setC2Connection(data[0]);
+      }
+    } catch (error) {
+      console.error('Error checking C2 connection:', error);
+    }
+  };
 
   const checkBluetoothStatus = async () => {
     if (Capacitor.isNativePlatform()) {
@@ -229,6 +260,93 @@ const DeviceSection = () => {
     }
   };
 
+  const connectC2Logbook = async () => {
+    setIsConnectingC2(true);
+    try {
+      // Get auth URL
+      const { data, error } = await supabase.functions.invoke('c2-logbook-auth', {
+        body: { action: 'get_auth_url' }
+      });
+
+      if (error) throw error;
+
+      // Open auth URL in new window
+      const authWindow = window.open(data.auth_url, 'c2_auth', 'width=500,height=600');
+      
+      // Listen for the auth completion
+      const checkAuthComplete = setInterval(async () => {
+        try {
+          if (authWindow?.closed) {
+            clearInterval(checkAuthComplete);
+            // Check if connection was successful
+            await checkC2Connection();
+            setIsConnectingC2(false);
+          }
+        } catch (error) {
+          console.log('Auth window check error:', error);
+        }
+      }, 1000);
+
+    } catch (error: any) {
+      setIsConnectingC2(false);
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Could not connect to C2 logbook",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const disconnectC2Logbook = async () => {
+    try {
+      const { error } = await supabase
+        .from('c2_connections')
+        .delete()
+        .eq('id', c2Connection?.id);
+
+      if (error) throw error;
+
+      setC2Connection(null);
+      toast({
+        title: "Disconnected",
+        description: "C2 logbook connection removed",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Disconnection Failed",
+        description: error.message || "Could not disconnect C2 logbook",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const syncC2Workouts = async () => {
+    if (!c2Connection) return;
+
+    setIsSyncingC2(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('c2-logbook-sync');
+
+      if (error) throw error;
+
+      toast({
+        title: "Sync Complete",
+        description: `Synced ${data.synced_count} new workouts from C2 logbook`,
+      });
+
+      // Update last sync time
+      await checkC2Connection();
+    } catch (error: any) {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Could not sync workouts from C2 logbook",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingC2(false);
+    }
+  };
+
   const connectedErg = devices.find(d => d.type === "erg" && d.connected);
   const connectedHR = devices.find(d => d.type === "heartRate" && d.connected);
   const availableErgs = devices.filter(d => d.type === "erg" && !d.connected);
@@ -383,24 +501,112 @@ const DeviceSection = () => {
         </CardContent>
       </Card>
 
+      {/* C2 Logbook Integration */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            ErgData App Connection
+            <Link className="h-5 w-5" />
+            Concept2 Logbook Integration
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Alternatively, use the Concept2 ErgData app to sync your workouts. Log workouts in ErgData, then manually enter the results here.
+            Connect your Concept2 logbook to automatically sync workouts from the official ErgData app and C2 logbook.
+          </p>
+
+          <div className="p-4 border rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="h-8 w-8 text-orange-500" />
+                <div>
+                  <h3 className="font-semibold">C2 Logbook</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {c2Connection 
+                      ? `Connected • Last sync: ${c2Connection.last_sync_at ? new Date(c2Connection.last_sync_at).toLocaleDateString() : 'Never'}`
+                      : "Not connected"
+                    }
+                  </p>
+                </div>
+              </div>
+              {c2Connection ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+            
+            {c2Connection ? (
+              <div className="space-y-2">
+                <Button 
+                  className="w-full"
+                  onClick={syncC2Workouts}
+                  disabled={isSyncingC2}
+                >
+                  {isSyncingC2 ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Syncing Workouts...
+                    </>
+                  ) : (
+                    'Sync Workouts'
+                  )}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={disconnectC2Logbook}
+                >
+                  Disconnect C2 Logbook
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                className="w-full"
+                onClick={connectC2Logbook}
+                disabled={isConnectingC2}
+              >
+                {isConnectingC2 ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Connect C2 Logbook'
+                )}
+              </Button>
+            )}
+          </div>
+
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <h4 className="font-medium mb-2">How it works:</h4>
+            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Connect your C2 logbook account (one-time setup)</li>
+              <li>Use ErgData app normally on your phone</li>
+              <li>Workouts automatically sync to your C2 logbook</li>
+              <li>Click "Sync Workouts" to import them here</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-5 w-5" />
+            Manual Entry Alternative
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            If you prefer not to connect your C2 logbook, you can still use ErgData and manually enter results.
           </p>
           <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-medium mb-2">How to sync with ErgData:</h4>
+            <h4 className="font-medium mb-2">Manual entry process:</h4>
             <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
               <li>Open the ErgData app on your phone</li>
               <li>Connect to your PM5 via Bluetooth</li>
               <li>Complete your workout</li>
-              <li>Enter your results in the Erg Workouts section</li>
+              <li>Manually enter results in the Erg Workouts section</li>
             </ol>
           </div>
         </CardContent>

@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      c2_connections: {
+        Row: {
+          access_token: string
+          c2_user_id: string
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          c2_user_id: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          c2_user_id?: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -98,6 +134,73 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "erg_workouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flagged_content: {
+        Row: {
+          content_id: string
+          content_preview: string | null
+          content_type: string
+          created_at: string
+          flagged_by: string | null
+          id: string
+          image_url: string | null
+          reason: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          content_preview?: string | null
+          content_type: string
+          created_at?: string
+          flagged_by?: string | null
+          id?: string
+          image_url?: string | null
+          reason: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          content_preview?: string | null
+          content_type?: string
+          created_at?: string
+          flagged_by?: string | null
+          id?: string
+          image_url?: string | null
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flagged_content_flagged_by_fkey"
+            columns: ["flagged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flagged_content_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flagged_content_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -417,6 +520,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "meal_plans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_warnings: {
+        Row: {
+          content_id: string | null
+          content_preview: string | null
+          content_type: string | null
+          created_at: string
+          id: string
+          is_automated: boolean | null
+          moderator_id: string | null
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          content_id?: string | null
+          content_preview?: string | null
+          content_type?: string | null
+          created_at?: string
+          id?: string
+          is_automated?: boolean | null
+          moderator_id?: string | null
+          reason: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string | null
+          content_preview?: string | null
+          content_type?: string | null
+          created_at?: string
+          id?: string
+          is_automated?: boolean | null
+          moderator_id?: string | null
+          reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_warnings_moderator_id_fkey"
+            columns: ["moderator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_warnings_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -909,6 +1063,50 @@ export type Database = {
           },
         ]
       }
+      user_moderation: {
+        Row: {
+          ban_reason: string | null
+          banned_at: string | null
+          banned_until: string | null
+          created_at: string
+          id: string
+          is_banned: boolean | null
+          updated_at: string
+          user_id: string
+          warning_count: number | null
+        }
+        Insert: {
+          ban_reason?: string | null
+          banned_at?: string | null
+          banned_until?: string | null
+          created_at?: string
+          id?: string
+          is_banned?: boolean | null
+          updated_at?: string
+          user_id: string
+          warning_count?: number | null
+        }
+        Update: {
+          ban_reason?: string | null
+          banned_at?: string | null
+          banned_until?: string | null
+          created_at?: string
+          id?: string
+          is_banned?: boolean | null
+          updated_at?: string
+          user_id?: string
+          warning_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_moderation_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -1033,6 +1231,7 @@ export type Database = {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean
       }
+      is_user_banned: { Args: { _user_id: string }; Returns: boolean }
       search_users_for_friend_request: {
         Args: { current_user_id: string; search_term: string }
         Returns: {
