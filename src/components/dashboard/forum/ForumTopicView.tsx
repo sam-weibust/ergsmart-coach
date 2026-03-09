@@ -76,6 +76,7 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
     onSuccess: () => {
       toast.success("Reply posted!");
       setReply("");
+      setReplyImages([]);
       queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
       queryClient.invalidateQueries({ queryKey: ["forum-topic", topicId] });
       queryClient.invalidateQueries({ queryKey: ["forum-topics"] });
