@@ -56,6 +56,28 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
         author_id: user.id,
       });
       if (error) throw error;
+
+      // If there are uploaded images, add them to the first post
+      if (uploadedImages.length > 0) {
+        const { data: topic } = await supabase
+          .from("forum_topics")
+          .select("id")
+          .eq("category_id", categoryId)
+          .eq("title", trimmedTitle)
+          .eq("author_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (topic) {
+          await supabase.from("forum_posts").insert({
+            topic_id: topic.id,
+            author_id: user.id,
+            content: "Images shared with this topic:",
+            images: uploadedImages,
+          });
+        }
+      }
     },
     onSuccess: () => {
       toast.success("Topic created!");
