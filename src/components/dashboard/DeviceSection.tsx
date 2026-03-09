@@ -87,7 +87,7 @@ const DeviceSection = () => {
         await BluetoothLe.requestLEScan({
           services,
           allowDuplicates: false,
-          scanMode: "lowPowerScan",
+          scanMode: 1, // Low power scan mode
         });
 
         // Listen for scan results
