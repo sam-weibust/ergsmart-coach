@@ -1128,6 +1128,75 @@ export type Database = {
         }
         Relationships: []
       }
+      verified_times: {
+        Row: {
+          category: string
+          created_at: string
+          distance: number
+          gender: string
+          id: string
+          rejection_reason: string | null
+          screenshot_url: string
+          submitted_at: string
+          time_achieved: string
+          updated_at: string
+          user_id: string
+          verification_status: string
+          verified_at: string | null
+          verified_by: string | null
+          weight_class: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          distance: number
+          gender: string
+          id?: string
+          rejection_reason?: string | null
+          screenshot_url: string
+          submitted_at?: string
+          time_achieved: string
+          updated_at?: string
+          user_id: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          weight_class?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          distance?: number
+          gender?: string
+          id?: string
+          rejection_reason?: string | null
+          screenshot_url?: string
+          submitted_at?: string
+          time_achieved?: string
+          updated_at?: string
+          user_id?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          weight_class?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verified_times_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verified_times_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_plans: {
         Row: {
           created_at: string | null
