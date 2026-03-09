@@ -227,7 +227,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
               <Button
                 size="sm"
                 onClick={() => createTopic.mutate()}
-                disabled={!newTitle.trim() || !newContent.trim() || createTopic.isPending}
+                disabled={!newTitle.trim() || !newContent.trim() || createTopic.isPending || isUploading}
               >
                 {createTopic.isPending ? "Posting..." : "Create Topic"}
               </Button>
