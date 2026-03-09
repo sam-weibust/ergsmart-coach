@@ -34,7 +34,28 @@ const DeviceSection = () => {
   useEffect(() => {
     setIsNative(Capacitor.isNativePlatform());
     checkBluetoothStatus();
+    checkC2Connection();
   }, []);
+
+  const checkC2Connection = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('c2_connections')
+        .select('*')
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking C2 connection:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setC2Connection(data[0]);
+      }
+    } catch (error) {
+      console.error('Error checking C2 connection:', error);
+    }
+  };
 
   const checkBluetoothStatus = async () => {
     if (Capacitor.isNativePlatform()) {
