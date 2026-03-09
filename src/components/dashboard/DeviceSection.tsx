@@ -260,6 +260,93 @@ const DeviceSection = () => {
     }
   };
 
+  const connectC2Logbook = async () => {
+    setIsConnectingC2(true);
+    try {
+      // Get auth URL
+      const { data, error } = await supabase.functions.invoke('c2-logbook-auth', {
+        body: { action: 'get_auth_url' }
+      });
+
+      if (error) throw error;
+
+      // Open auth URL in new window
+      const authWindow = window.open(data.auth_url, 'c2_auth', 'width=500,height=600');
+      
+      // Listen for the auth completion
+      const checkAuthComplete = setInterval(async () => {
+        try {
+          if (authWindow?.closed) {
+            clearInterval(checkAuthComplete);
+            // Check if connection was successful
+            await checkC2Connection();
+            setIsConnectingC2(false);
+          }
+        } catch (error) {
+          console.log('Auth window check error:', error);
+        }
+      }, 1000);
+
+    } catch (error: any) {
+      setIsConnectingC2(false);
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Could not connect to C2 logbook",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const disconnectC2Logbook = async () => {
+    try {
+      const { error } = await supabase
+        .from('c2_connections')
+        .delete()
+        .eq('id', c2Connection?.id);
+
+      if (error) throw error;
+
+      setC2Connection(null);
+      toast({
+        title: "Disconnected",
+        description: "C2 logbook connection removed",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Disconnection Failed",
+        description: error.message || "Could not disconnect C2 logbook",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const syncC2Workouts = async () => {
+    if (!c2Connection) return;
+
+    setIsSyncingC2(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('c2-logbook-sync');
+
+      if (error) throw error;
+
+      toast({
+        title: "Sync Complete",
+        description: `Synced ${data.synced_count} new workouts from C2 logbook`,
+      });
+
+      // Update last sync time
+      await checkC2Connection();
+    } catch (error: any) {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Could not sync workouts from C2 logbook",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingC2(false);
+    }
+  };
+
   const connectedErg = devices.find(d => d.type === "erg" && d.connected);
   const connectedHR = devices.find(d => d.type === "heartRate" && d.connected);
   const availableErgs = devices.filter(d => d.type === "erg" && !d.connected);
