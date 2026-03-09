@@ -20,6 +20,8 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
   const [reply, setReply] = useState("");
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [replyImages, setReplyImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
