@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, UserPlus, Trash2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,9 @@ import { Leaderboard } from "./Leaderboard";
 import { TeamGoals } from "./TeamGoals";
 import { MessageBoard } from "./MessageBoard";
 import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
+import { CoachComparison } from "./CoachComparison";
+import { TeamAnalytics } from "./TeamAnalytics";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface TeamsSectionProps {
   profile: any;
@@ -185,33 +188,39 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Coach Comparison Dashboard */}
       {isCoach && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-5 w-5" />
-              Create Team
-            </CardTitle>
-            <CardDescription className="text-sm">Form a team to track your athletes</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder="Team name"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-            />
-            <Input
-              placeholder="Description (optional)"
-              value={teamDescription}
-              onChange={(e) => setTeamDescription(e.target.value)}
-            />
-            <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending} className="w-full md:w-auto">
-              Create Team
-            </Button>
-          </CardContent>
-        </Card>
+        <CoachComparison />
       )}
+      
+      <div className="space-y-4">
+        {isCoach && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-5 w-5" />
+                Create Team
+              </CardTitle>
+              <CardDescription className="text-sm">Form a team to track your athletes</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                placeholder="Team name"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+              />
+              <Input
+                placeholder="Description (optional)"
+                value={teamDescription}
+                onChange={(e) => setTeamDescription(e.target.value)}
+              />
+              <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending} className="w-full md:w-auto">
+                Create Team
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Coached Teams */}
       {isCoach && teams?.coached && teams.coached.length > 0 && (
@@ -238,7 +247,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
               </CardHeader>
               
               {expandedTeam === team.id && (
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   {team.description && (
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
@@ -309,24 +318,65 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     )}
                   </div>
 
-                  {/* Team Workout Plans */}
-                  <TeamWorkoutPlanSection 
-                    teamId={team.id} 
-                    teamName={team.name} 
-                    profile={profile} 
-                  />
+                  {/* Team Management Tabs */}
+                  <Tabs defaultValue="overview" className="space-y-4">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                      <TabsTrigger value="plans">Plans</TabsTrigger>
+                      <TabsTrigger value="goals">Goals</TabsTrigger>
+                    </TabsList>
 
-                  {/* Leaderboard, Goals, Messages */}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Leaderboard teamId={team.id} teamName={team.name} />
-                    <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
-                  </div>
-                  
-                  <MessageBoard
-                    teamId={team.id}
-                    currentUserId={profile.id}
-                    title={`${team.name} Chat`}
-                  />
+                    <TabsContent value="overview" className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Leaderboard teamId={team.id} teamName={team.name} />
+                        <div className="space-y-4">
+                          <Card className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium">Team Stats</span>
+                              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Total Members:</span>
+                                <span className="font-medium">{team.team_members?.length || 0}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Active This Week:</span>
+                                <span className="font-medium">-</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Avg 2K Time:</span>
+                                <span className="font-medium">-</span>
+                              </div>
+                            </div>
+                          </Card>
+                        </div>
+                      </div>
+                      
+                      <MessageBoard
+                        teamId={team.id}
+                        currentUserId={profile.id}
+                        title={`${team.name} Chat`}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="analytics">
+                      <TeamAnalytics teamId={team.id} teamName={team.name} />
+                    </TabsContent>
+
+                    <TabsContent value="plans">
+                      <TeamWorkoutPlanSection 
+                        teamId={team.id} 
+                        teamName={team.name} 
+                        profile={profile} 
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="goals">
+                      <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
+                    </TabsContent>
+                  </Tabs>
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -418,6 +468,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           </CardContent>
         </Card>
       )}
+    </div>
     </div>
   );
 };
