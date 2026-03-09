@@ -150,6 +150,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          images: string[] | null
           is_edited: boolean | null
           parent_post_id: string | null
           topic_id: string
@@ -160,6 +161,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          images?: string[] | null
           is_edited?: boolean | null
           parent_post_id?: string | null
           topic_id: string
@@ -170,6 +172,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          images?: string[] | null
           is_edited?: boolean | null
           parent_post_id?: string | null
           topic_id?: string
