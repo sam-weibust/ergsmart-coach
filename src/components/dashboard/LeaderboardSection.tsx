@@ -29,14 +29,10 @@ export const LeaderboardSection = () => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="leaderboard" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-flex">
           <TabsTrigger value="leaderboard" className="gap-2">
             <Trophy className="h-4 w-4" />
             <span className="hidden sm:inline">Leaderboard</span>
-          </TabsTrigger>
-          <TabsTrigger value="predictor" className="gap-2">
-            <Calculator className="h-4 w-4" />
-            <span className="hidden sm:inline">Predictor</span>
           </TabsTrigger>
           <TabsTrigger value="submit" className="gap-2">
             <Upload className="h-4 w-4" />
