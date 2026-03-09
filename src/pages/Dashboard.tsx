@@ -316,6 +316,10 @@ const Dashboard = () => {
               <RecruitmentSection profile={profile} />
             </TabsContent>
 
+            <TabsContent value="predictor" className="mt-0">
+              <ErgPredictor />
+            </TabsContent>
+
             <TabsContent value="leaderboard" className="mt-0">
               <LeaderboardSection />
             </TabsContent>
