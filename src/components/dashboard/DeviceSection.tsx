@@ -27,6 +27,9 @@ const DeviceSection = () => {
   const [devices, setDevices] = useState<DeviceConnection[]>([]);
   const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
   const [isNative, setIsNative] = useState(false);
+  const [c2Connection, setC2Connection] = useState<C2Connection | null>(null);
+  const [isConnectingC2, setIsConnectingC2] = useState(false);
+  const [isSyncingC2, setIsSyncingC2] = useState(false);
 
   useEffect(() => {
     setIsNative(Capacitor.isNativePlatform());
