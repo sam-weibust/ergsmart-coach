@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, UserPlus, Trash2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
