@@ -469,6 +469,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
         </Card>
       )}
     </div>
+    </div>
   );
 };
 
