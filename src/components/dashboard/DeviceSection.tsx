@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle, Link, Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { BluetoothLe, BleDevice } from "@capacitor-community/bluetooth-le";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DeviceConnection {
   name: string;
