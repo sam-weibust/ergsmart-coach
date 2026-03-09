@@ -188,33 +188,39 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Coach Comparison Dashboard */}
       {isCoach && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-5 w-5" />
-              Create Team
-            </CardTitle>
-            <CardDescription className="text-sm">Form a team to track your athletes</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder="Team name"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-            />
-            <Input
-              placeholder="Description (optional)"
-              value={teamDescription}
-              onChange={(e) => setTeamDescription(e.target.value)}
-            />
-            <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending} className="w-full md:w-auto">
-              Create Team
-            </Button>
-          </CardContent>
-        </Card>
+        <CoachComparison />
       )}
+      
+      <div className="space-y-4">
+        {isCoach && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-5 w-5" />
+                Create Team
+              </CardTitle>
+              <CardDescription className="text-sm">Form a team to track your athletes</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                placeholder="Team name"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+              />
+              <Input
+                placeholder="Description (optional)"
+                value={teamDescription}
+                onChange={(e) => setTeamDescription(e.target.value)}
+              />
+              <Button onClick={() => createTeam.mutate()} disabled={createTeam.isPending} className="w-full md:w-auto">
+                Create Team
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Coached Teams */}
       {isCoach && teams?.coached && teams.coached.length > 0 && (
