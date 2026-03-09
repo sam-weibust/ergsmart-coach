@@ -247,7 +247,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
               </CardHeader>
               
               {expandedTeam === team.id && (
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   {team.description && (
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
@@ -318,24 +318,65 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     )}
                   </div>
 
-                  {/* Team Workout Plans */}
-                  <TeamWorkoutPlanSection 
-                    teamId={team.id} 
-                    teamName={team.name} 
-                    profile={profile} 
-                  />
+                  {/* Team Management Tabs */}
+                  <Tabs defaultValue="overview" className="space-y-4">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                      <TabsTrigger value="plans">Plans</TabsTrigger>
+                      <TabsTrigger value="goals">Goals</TabsTrigger>
+                    </TabsList>
 
-                  {/* Leaderboard, Goals, Messages */}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Leaderboard teamId={team.id} teamName={team.name} />
-                    <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
-                  </div>
-                  
-                  <MessageBoard
-                    teamId={team.id}
-                    currentUserId={profile.id}
-                    title={`${team.name} Chat`}
-                  />
+                    <TabsContent value="overview" className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Leaderboard teamId={team.id} teamName={team.name} />
+                        <div className="space-y-4">
+                          <Card className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium">Team Stats</span>
+                              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Total Members:</span>
+                                <span className="font-medium">{team.team_members?.length || 0}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Active This Week:</span>
+                                <span className="font-medium">-</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Avg 2K Time:</span>
+                                <span className="font-medium">-</span>
+                              </div>
+                            </div>
+                          </Card>
+                        </div>
+                      </div>
+                      
+                      <MessageBoard
+                        teamId={team.id}
+                        currentUserId={profile.id}
+                        title={`${team.name} Chat`}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="analytics">
+                      <TeamAnalytics teamId={team.id} teamName={team.name} />
+                    </TabsContent>
+
+                    <TabsContent value="plans">
+                      <TeamWorkoutPlanSection 
+                        teamId={team.id} 
+                        teamName={team.name} 
+                        profile={profile} 
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="goals">
+                      <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
+                    </TabsContent>
+                  </Tabs>
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
