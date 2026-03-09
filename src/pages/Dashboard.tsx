@@ -200,6 +200,13 @@ const Dashboard = () => {
                 <span>Awards</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="leaderboard" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <Medal className="h-4 w-4" />
+                <span>Rankings</span>
+              </TabsTrigger>
+              <TabsTrigger
                 value="recruit" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
