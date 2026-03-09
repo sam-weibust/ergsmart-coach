@@ -50,10 +50,6 @@ export const LeaderboardSection = () => {
           <GlobalLeaderboard />
         </TabsContent>
 
-        <TabsContent value="predictor" className="space-y-4">
-          <ErgPredictor />
-        </TabsContent>
-
         <TabsContent value="submit" className="space-y-4">
           <SubmitVerifiedTime />
           <MySubmissions />
