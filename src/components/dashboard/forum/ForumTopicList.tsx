@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, MessageSquare, Pin, Lock, Clock } from "lucide-react";
+import { ArrowLeft, Plus, MessageSquare, Pin, Lock, Clock, ImagePlus, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
@@ -20,6 +20,8 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
   const [showNewTopic, setShowNewTopic] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: topics, isLoading } = useQuery({
@@ -54,17 +56,95 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
         author_id: user.id,
       });
       if (error) throw error;
+
+      // If there are uploaded images, add them to the first post
+      if (uploadedImages.length > 0) {
+        const { data: topic } = await supabase
+          .from("forum_topics")
+          .select("id")
+          .eq("category_id", categoryId)
+          .eq("title", trimmedTitle)
+          .eq("author_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (topic) {
+          await supabase.from("forum_posts").insert({
+            topic_id: topic.id,
+            author_id: user.id,
+            content: "Images shared with this topic:",
+            images: uploadedImages,
+          });
+        }
+      }
     },
     onSuccess: () => {
       toast.success("Topic created!");
       setNewTitle("");
       setNewContent("");
+      setUploadedImages([]);
       setShowNewTopic(false);
       queryClient.invalidateQueries({ queryKey: ["forum-topics", categoryId] });
       queryClient.invalidateQueries({ queryKey: ["forum-categories"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setIsUploading(true);
+    const newImageUrls: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`${file.name} is not an image file`);
+          continue;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          toast.error(`${file.name} is too large (max 5MB)`);
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
+        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+        const { data, error } = await supabase.storage
+          .from('forum-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('forum-images')
+          .getPublicUrl(data.path);
+
+        newImageUrls.push(publicUrl);
+      }
+
+      setUploadedImages(prev => [...prev, ...newImageUrls]);
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+      // Reset the input
+      event.target.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <div className="space-y-4">
@@ -97,6 +177,49 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
               rows={4}
               maxLength={10000}
             />
+            
+            {/* Image Upload */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <label htmlFor="image-upload" className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent/50 transition-colors">
+                    <ImagePlus className="h-4 w-4" />
+                    <span>{isUploading ? "Uploading..." : "Add Images"}</span>
+                  </div>
+                </label>
+                <input
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                />
+                <span className="text-xs text-muted-foreground">Max 5MB per image</span>
+              </div>
+
+              {/* Preview uploaded images */}
+              {uploadedImages.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {uploadedImages.map((url, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={url}
+                        alt={`Upload ${index + 1}`}
+                        className="w-full h-20 object-cover rounded-md border"
+                      />
+                      <button
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-2 -right-2 h-6 w-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowNewTopic(false)}>
                 Cancel
@@ -104,7 +227,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
               <Button
                 size="sm"
                 onClick={() => createTopic.mutate()}
-                disabled={!newTitle.trim() || !newContent.trim() || createTopic.isPending}
+                disabled={!newTitle.trim() || !newContent.trim() || createTopic.isPending || isUploading}
               >
                 {createTopic.isPending ? "Posting..." : "Create Topic"}
               </Button>

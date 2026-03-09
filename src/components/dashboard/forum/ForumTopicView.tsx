@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Clock, Trash2, Edit2, Send } from "lucide-react";
+import { ArrowLeft, Clock, Trash2, Edit2, Send, ImagePlus, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +20,8 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
   const [reply, setReply] = useState("");
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [replyImages, setReplyImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -67,12 +69,14 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
         topic_id: topicId,
         author_id: currentUser.id,
         content: trimmed,
+        images: replyImages.length > 0 ? replyImages : null,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Reply posted!");
       setReply("");
+      setReplyImages([]);
       queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
       queryClient.invalidateQueries({ queryKey: ["forum-topic", topicId] });
       queryClient.invalidateQueries({ queryKey: ["forum-topics"] });
@@ -127,6 +131,60 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
     },
     onError: () => toast.error("Failed to delete topic"),
   });
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (!currentUser) return;
+
+    setIsUploading(true);
+    const newImageUrls: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`${file.name} is not an image file`);
+          continue;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          toast.error(`${file.name} is too large (max 5MB)`);
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
+        const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+        const { data, error } = await supabase.storage
+          .from('forum-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('forum-images')
+          .getPublicUrl(data.path);
+
+        newImageUrls.push(publicUrl);
+      }
+
+      setReplyImages(prev => [...prev, ...newImageUrls]);
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+      // Reset the input
+      event.target.value = '';
+    }
+  };
+
+  const removeReplyImage = (index: number) => {
+    setReplyImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   const getInitials = (author: any) => {
     const name = author?.full_name || author?.username || "?";
@@ -246,9 +304,25 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
                         </div>
                       </div>
                     ) : (
-                      <div className="mt-1.5 text-sm text-foreground whitespace-pre-wrap break-words">
-                        {post.content}
-                      </div>
+                      <>
+                        <div className="mt-1.5 text-sm text-foreground whitespace-pre-wrap break-words">
+                          {post.content}
+                        </div>
+                        {/* Display images */}
+                        {post.images && post.images.length > 0 && (
+                          <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                            {post.images.map((imageUrl, index) => (
+                              <img
+                                key={index}
+                                src={imageUrl}
+                                alt={`Image ${index + 1}`}
+                                className="w-full h-32 object-cover rounded-md border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(imageUrl, '_blank')}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   {currentUser?.id === post.author_id && editingPostId !== post.id && (
@@ -286,7 +360,7 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
       {/* Reply form */}
       {!isLocked && (
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-3">
             <div className="flex gap-3">
               <Textarea
                 placeholder="Write a reply..."
@@ -299,12 +373,53 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
               <Button
                 size="icon"
                 onClick={() => addReply.mutate()}
-                disabled={!reply.trim() || addReply.isPending}
+                disabled={!reply.trim() || addReply.isPending || isUploading}
                 className="shrink-0 self-end"
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+            
+            {/* Image Upload for replies */}
+            <div className="flex items-center gap-3">
+              <label htmlFor="reply-image-upload" className="cursor-pointer">
+                <div className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent/50 transition-colors">
+                  <ImagePlus className="h-4 w-4" />
+                  <span>{isUploading ? "Uploading..." : "Add Images"}</span>
+                </div>
+              </label>
+              <input
+                id="reply-image-upload"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+              />
+              <span className="text-xs text-muted-foreground">Max 5MB per image</span>
+            </div>
+
+            {/* Preview reply images */}
+            {replyImages.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {replyImages.map((url, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={url}
+                      alt={`Upload ${index + 1}`}
+                      className="w-full h-16 object-cover rounded border"
+                    />
+                    <button
+                      onClick={() => removeReplyImage(index)}
+                      className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
