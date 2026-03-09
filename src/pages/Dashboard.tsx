@@ -308,6 +308,10 @@ const Dashboard = () => {
               <RecruitmentSection profile={profile} />
             </TabsContent>
 
+            <TabsContent value="leaderboard" className="mt-0">
+              <LeaderboardSection />
+            </TabsContent>
+
             <TabsContent value="profile" className="mt-0">
               <ProfileSection />
             </TabsContent>
