@@ -132,6 +132,60 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
     onError: () => toast.error("Failed to delete topic"),
   });
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (!currentUser) return;
+
+    setIsUploading(true);
+    const newImageUrls: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`${file.name} is not an image file`);
+          continue;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          toast.error(`${file.name} is too large (max 5MB)`);
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
+        const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+        const { data, error } = await supabase.storage
+          .from('forum-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('forum-images')
+          .getPublicUrl(data.path);
+
+        newImageUrls.push(publicUrl);
+      }
+
+      setReplyImages(prev => [...prev, ...newImageUrls]);
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+      // Reset the input
+      event.target.value = '';
+    }
+  };
+
+  const removeReplyImage = (index: number) => {
+    setReplyImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const getInitials = (author: any) => {
     const name = author?.full_name || author?.username || "?";
     return name.slice(0, 2).toUpperCase();
