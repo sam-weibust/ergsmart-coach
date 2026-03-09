@@ -501,24 +501,112 @@ const DeviceSection = () => {
         </CardContent>
       </Card>
 
+      {/* C2 Logbook Integration */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            ErgData App Connection
+            <Link className="h-5 w-5" />
+            Concept2 Logbook Integration
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Alternatively, use the Concept2 ErgData app to sync your workouts. Log workouts in ErgData, then manually enter the results here.
+            Connect your Concept2 logbook to automatically sync workouts from the official ErgData app and C2 logbook.
+          </p>
+
+          <div className="p-4 border rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="h-8 w-8 text-orange-500" />
+                <div>
+                  <h3 className="font-semibold">C2 Logbook</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {c2Connection 
+                      ? `Connected • Last sync: ${c2Connection.last_sync_at ? new Date(c2Connection.last_sync_at).toLocaleDateString() : 'Never'}`
+                      : "Not connected"
+                    }
+                  </p>
+                </div>
+              </div>
+              {c2Connection ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+            
+            {c2Connection ? (
+              <div className="space-y-2">
+                <Button 
+                  className="w-full"
+                  onClick={syncC2Workouts}
+                  disabled={isSyncingC2}
+                >
+                  {isSyncingC2 ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Syncing Workouts...
+                    </>
+                  ) : (
+                    'Sync Workouts'
+                  )}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={disconnectC2Logbook}
+                >
+                  Disconnect C2 Logbook
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                className="w-full"
+                onClick={connectC2Logbook}
+                disabled={isConnectingC2}
+              >
+                {isConnectingC2 ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Connect C2 Logbook'
+                )}
+              </Button>
+            )}
+          </div>
+
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <h4 className="font-medium mb-2">How it works:</h4>
+            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Connect your C2 logbook account (one-time setup)</li>
+              <li>Use ErgData app normally on your phone</li>
+              <li>Workouts automatically sync to your C2 logbook</li>
+              <li>Click "Sync Workouts" to import them here</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-5 w-5" />
+            Manual Entry Alternative
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            If you prefer not to connect your C2 logbook, you can still use ErgData and manually enter results.
           </p>
           <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-medium mb-2">How to sync with ErgData:</h4>
+            <h4 className="font-medium mb-2">Manual entry process:</h4>
             <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
               <li>Open the ErgData app on your phone</li>
               <li>Connect to your PM5 via Bluetooth</li>
               <li>Complete your workout</li>
-              <li>Enter your results in the Erg Workouts section</li>
+              <li>Manually enter results in the Erg Workouts section</li>
             </ol>
           </div>
         </CardContent>
