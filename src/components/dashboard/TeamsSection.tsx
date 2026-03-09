@@ -22,6 +22,9 @@ import { Leaderboard } from "./Leaderboard";
 import { TeamGoals } from "./TeamGoals";
 import { MessageBoard } from "./MessageBoard";
 import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
+import { CoachComparison } from "./CoachComparison";
+import { TeamAnalytics } from "./TeamAnalytics";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface TeamsSectionProps {
   profile: any;
