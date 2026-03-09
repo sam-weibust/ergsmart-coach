@@ -83,6 +83,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
       toast.success("Topic created!");
       setNewTitle("");
       setNewContent("");
+      setUploadedImages([]);
       setShowNewTopic(false);
       queryClient.invalidateQueries({ queryKey: ["forum-topics", categoryId] });
       queryClient.invalidateQueries({ queryKey: ["forum-categories"] });
