@@ -91,6 +91,61 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setIsUploading(true);
+    const newImageUrls: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`${file.name} is not an image file`);
+          continue;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          toast.error(`${file.name} is too large (max 5MB)`);
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
+        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+        const { data, error } = await supabase.storage
+          .from('forum-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('forum-images')
+          .getPublicUrl(data.path);
+
+        newImageUrls.push(publicUrl);
+      }
+
+      setUploadedImages(prev => [...prev, ...newImageUrls]);
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+      // Reset the input
+      event.target.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
