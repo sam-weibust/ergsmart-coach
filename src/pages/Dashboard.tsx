@@ -201,6 +201,13 @@ const Dashboard = () => {
                 <span>Awards</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="predictor" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <Calculator className="h-4 w-4" />
+                <span>Predictor</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="leaderboard" 
                 className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
               >
