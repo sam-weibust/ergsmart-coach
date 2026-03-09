@@ -1,6 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Calculator, Upload, ShieldCheck } from "lucide-react";
-import { ErgPredictor } from "./ErgPredictor";
+import { Trophy, Upload, ShieldCheck } from "lucide-react";
 import { GlobalLeaderboard } from "./GlobalLeaderboard";
 import { SubmitVerifiedTime } from "./SubmitVerifiedTime";
 import { TimeVerificationAdmin } from "./TimeVerificationAdmin";
