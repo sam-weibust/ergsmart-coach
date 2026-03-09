@@ -1,26 +1,75 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle } from "lucide-react";
+import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { BluetoothLe, BleDevice } from "@capacitor-community/bluetooth-le";
 
 interface DeviceConnection {
   name: string;
   type: "erg" | "heartRate";
   connected: boolean;
+  deviceId?: string;
+  device?: BleDevice;
 }
 
 const DeviceSection = () => {
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<DeviceConnection[]>([]);
+  const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
+  const [isNative, setIsNative] = useState(false);
+
+  useEffect(() => {
+    setIsNative(Capacitor.isNativePlatform());
+    checkBluetoothStatus();
+  }, []);
+
+  const checkBluetoothStatus = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await BluetoothLe.initialize();
+        const enabled = await BluetoothLe.isEnabled();
+        setBluetoothEnabled(enabled.value);
+        
+        if (!enabled.value) {
+          toast({
+            title: "Bluetooth Disabled",
+            description: "Please enable Bluetooth in your device settings.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Bluetooth check failed:', error);
+      }
+    }
+  };
+
+  const enableBluetooth = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await BluetoothLe.enable();
+        setBluetoothEnabled(true);
+        toast({
+          title: "Bluetooth Enabled",
+          description: "You can now scan for devices.",
+        });
+      } catch (error) {
+        toast({
+          title: "Failed to Enable Bluetooth",
+          description: "Please enable Bluetooth manually in settings.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   const scanForDevices = async (type: "erg" | "heartRate") => {
-    const nav = navigator as any;
-    if (!nav.bluetooth) {
+    if (!bluetoothEnabled && isNative) {
       toast({
-        title: "Bluetooth Not Supported",
-        description: "Your browser doesn't support Web Bluetooth. Try Chrome or Edge.",
+        title: "Bluetooth Required",
+        description: "Please enable Bluetooth first.",
         variant: "destructive",
       });
       return;
@@ -29,62 +78,195 @@ const DeviceSection = () => {
     setIsScanning(true);
 
     try {
-      const serviceUUID = type === "erg" 
-        ? "ce060030-43e5-11e4-916c-0800200c9a66" // Concept2 PM5 service
-        : "0000180d-0000-1000-8000-00805f9b34fb"; // Heart Rate service
+      if (Capacitor.isNativePlatform()) {
+        // Native Capacitor Bluetooth
+        const services = type === "erg" 
+          ? ["ce060030-43e5-11e4-916c-0800200c9a66"] // Concept2 PM5 service
+          : ["0000180d-0000-1000-8000-00805f9b34fb"]; // Heart Rate service
 
-      const device = await nav.bluetooth.requestDevice({
-        filters: type === "erg" 
-          ? [{ services: [serviceUUID] }, { namePrefix: "PM5" }]
-          : [{ services: ["heart_rate"] }],
-        optionalServices: type === "erg" 
-          ? ["ce060030-43e5-11e4-916c-0800200c9a66"]
-          : ["heart_rate"],
-      });
-
-      if (device) {
-        const newDevice: DeviceConnection = {
-          name: device.name || (type === "erg" ? "Concept2 Erg" : "Heart Rate Monitor"),
-          type,
-          connected: true,
-        };
-
-        setDevices(prev => {
-          const filtered = prev.filter(d => d.type !== type);
-          return [...filtered, newDevice];
+        await BluetoothLe.requestLEScan({
+          services,
+          allowDuplicates: false,
+          scanMode: 1, // Low power scan mode
         });
 
-        toast({
-          title: "Device Connected",
-          description: `Successfully connected to ${newDevice.name}`,
+        // Listen for scan results
+        BluetoothLe.addListener('onScanResult', (result) => {
+          if (result.device) {
+            const newDevice: DeviceConnection = {
+              name: result.device.name || (type === "erg" ? "Concept2 Erg" : "Heart Rate Monitor"),
+              type,
+              connected: false,
+              deviceId: result.device.deviceId,
+              device: result.device,
+            };
+
+            setDevices(prev => {
+              const exists = prev.find(d => d.deviceId === result.device.deviceId);
+              if (!exists) {
+                return [...prev, newDevice];
+              }
+              return prev;
+            });
+          }
         });
+
+        // Stop scanning after 5 seconds
+        setTimeout(async () => {
+          await BluetoothLe.stopLEScan();
+          setIsScanning(false);
+        }, 5000);
+
+      } else {
+        // Fallback to Web Bluetooth for browser testing
+        const nav = navigator as any;
+        if (!nav.bluetooth) {
+          toast({
+            title: "Bluetooth Not Supported",
+            description: "Your browser doesn't support Web Bluetooth. Install the mobile app for full Bluetooth support.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const serviceUUID = type === "erg" 
+          ? "ce060030-43e5-11e4-916c-0800200c9a66" // Concept2 PM5 service
+          : "0000180d-0000-1000-8000-00805f9b34fb"; // Heart Rate service
+
+        const device = await nav.bluetooth.requestDevice({
+          filters: type === "erg" 
+            ? [{ services: [serviceUUID] }, { namePrefix: "PM5" }]
+            : [{ services: ["heart_rate"] }],
+          optionalServices: type === "erg" 
+            ? ["ce060030-43e5-11e4-916c-0800200c9a66"]
+            : ["heart_rate"],
+        });
+
+        if (device) {
+          const newDevice: DeviceConnection = {
+            name: device.name || (type === "erg" ? "Concept2 Erg" : "Heart Rate Monitor"),
+            type,
+            connected: false,
+            deviceId: device.id,
+          };
+
+          setDevices(prev => {
+            const filtered = prev.filter(d => d.deviceId !== device.id);
+            return [...filtered, newDevice];
+          });
+        }
+        setIsScanning(false);
       }
     } catch (error: any) {
+      setIsScanning(false);
       if (error.name !== "NotFoundError") {
         toast({
-          title: "Connection Failed",
-          description: error.message || "Could not connect to device",
+          title: "Scan Failed",
+          description: error.message || "Could not scan for devices",
           variant: "destructive",
         });
       }
-    } finally {
-      setIsScanning(false);
     }
   };
 
-  const disconnectDevice = (type: "erg" | "heartRate") => {
-    setDevices(prev => prev.filter(d => d.type !== type));
-    toast({
-      title: "Device Disconnected",
-      description: `${type === "erg" ? "Erg" : "Heart rate monitor"} disconnected`,
-    });
+  const connectToDevice = async (device: DeviceConnection) => {
+    if (!device.deviceId) return;
+
+    try {
+      if (Capacitor.isNativePlatform() && device.device) {
+        await BluetoothLe.connect({ deviceId: device.deviceId });
+        
+        setDevices(prev => 
+          prev.map(d => 
+            d.deviceId === device.deviceId 
+              ? { ...d, connected: true }
+              : d.type === device.type 
+                ? { ...d, connected: false } // Disconnect other devices of same type
+                : d
+          )
+        );
+
+        toast({
+          title: "Device Connected",
+          description: `Successfully connected to ${device.name}`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Could not connect to device",
+        variant: "destructive",
+      });
+    }
   };
 
-  const ergDevice = devices.find(d => d.type === "erg");
-  const hrDevice = devices.find(d => d.type === "heartRate");
+  const disconnectDevice = async (device: DeviceConnection) => {
+    if (!device.deviceId) return;
+
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await BluetoothLe.disconnect({ deviceId: device.deviceId });
+      }
+      
+      setDevices(prev => 
+        prev.map(d => 
+          d.deviceId === device.deviceId 
+            ? { ...d, connected: false }
+            : d
+        )
+      );
+
+      toast({
+        title: "Device Disconnected",
+        description: `${device.name} disconnected`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Disconnection Failed",
+        description: error.message || "Could not disconnect from device",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const connectedErg = devices.find(d => d.type === "erg" && d.connected);
+  const connectedHR = devices.find(d => d.type === "heartRate" && d.connected);
+  const availableErgs = devices.filter(d => d.type === "erg" && !d.connected);
+  const availableHRs = devices.filter(d => d.type === "heartRate" && !d.connected);
 
   return (
     <div className="space-y-6">
+      {/* Bluetooth Status */}
+      {isNative && (
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <Bluetooth className={`h-5 w-5 ${bluetoothEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
+              <span className="font-medium">
+                Bluetooth {bluetoothEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+            {!bluetoothEnabled && (
+              <Button onClick={enableBluetooth} size="sm">
+                Enable Bluetooth
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!isNative && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="flex items-center gap-3 p-4">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800 dark:text-amber-200">Limited Bluetooth Support</p>
+              <p className="text-amber-700 dark:text-amber-300">For full Bluetooth functionality, install the mobile app from the App Store or Google Play.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -105,32 +287,46 @@ const DeviceSection = () => {
                 <div>
                   <h3 className="font-semibold">Concept2 Erg (PM5)</h3>
                   <p className="text-sm text-muted-foreground">
-                    {ergDevice ? ergDevice.name : "Not connected"}
+                    {connectedErg ? connectedErg.name : "Not connected"}
                   </p>
                 </div>
               </div>
-              {ergDevice?.connected ? (
+              {connectedErg ? (
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
               ) : (
                 <XCircle className="h-5 w-5 text-muted-foreground" />
               )}
             </div>
-            {ergDevice?.connected ? (
+            
+            {connectedErg ? (
               <Button 
                 variant="outline" 
                 className="w-full"
-                onClick={() => disconnectDevice("erg")}
+                onClick={() => disconnectDevice(connectedErg)}
               >
                 Disconnect Erg
               </Button>
             ) : (
-              <Button 
-                className="w-full"
-                onClick={() => scanForDevices("erg")}
-                disabled={isScanning}
-              >
-                {isScanning ? "Scanning..." : "Connect Concept2 Erg"}
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  className="w-full"
+                  onClick={() => scanForDevices("erg")}
+                  disabled={isScanning || (!bluetoothEnabled && isNative)}
+                >
+                  {isScanning ? "Scanning..." : "Scan for Concept2 Erg"}
+                </Button>
+                
+                {availableErgs.map((device) => (
+                  <Button
+                    key={device.deviceId}
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => connectToDevice(device)}
+                  >
+                    Connect to {device.name}
+                  </Button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -142,32 +338,46 @@ const DeviceSection = () => {
                 <div>
                   <h3 className="font-semibold">Heart Rate Monitor</h3>
                   <p className="text-sm text-muted-foreground">
-                    {hrDevice ? hrDevice.name : "Not connected"}
+                    {connectedHR ? connectedHR.name : "Not connected"}
                   </p>
                 </div>
               </div>
-              {hrDevice?.connected ? (
+              {connectedHR ? (
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
               ) : (
                 <XCircle className="h-5 w-5 text-muted-foreground" />
               )}
             </div>
-            {hrDevice?.connected ? (
+            
+            {connectedHR ? (
               <Button 
                 variant="outline" 
                 className="w-full"
-                onClick={() => disconnectDevice("heartRate")}
+                onClick={() => disconnectDevice(connectedHR)}
               >
                 Disconnect Heart Rate Monitor
               </Button>
             ) : (
-              <Button 
-                className="w-full"
-                onClick={() => scanForDevices("heartRate")}
-                disabled={isScanning}
-              >
-                {isScanning ? "Scanning..." : "Connect Heart Rate Monitor"}
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  className="w-full"
+                  onClick={() => scanForDevices("heartRate")}
+                  disabled={isScanning || (!bluetoothEnabled && isNative)}
+                >
+                  {isScanning ? "Scanning..." : "Scan for Heart Rate Monitor"}
+                </Button>
+                
+                {availableHRs.map((device) => (
+                  <Button
+                    key={device.deviceId}
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => connectToDevice(device)}
+                  >
+                    Connect to {device.name}
+                  </Button>
+                ))}
+              </div>
             )}
           </div>
         </CardContent>
