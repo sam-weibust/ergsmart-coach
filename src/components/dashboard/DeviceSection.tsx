@@ -256,12 +256,12 @@ const DeviceSection = () => {
       )}
 
       {!isNative && (
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
           <CardContent className="flex items-center gap-3 p-4">
-            <AlertCircle className="h-5 w-5 text-amber-600" />
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <div className="text-sm">
-              <p className="font-medium text-amber-800">Limited Bluetooth Support</p>
-              <p className="text-amber-700">For full Bluetooth functionality, install the mobile app from the App Store or Google Play.</p>
+              <p className="font-medium text-amber-800 dark:text-amber-200">Limited Bluetooth Support</p>
+              <p className="text-amber-700 dark:text-amber-300">For full Bluetooth functionality, install the mobile app from the App Store or Google Play.</p>
             </div>
           </CardContent>
         </Card>
