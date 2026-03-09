@@ -15,6 +15,12 @@ interface DeviceConnection {
   device?: BleDevice;
 }
 
+interface C2Connection {
+  id: string;
+  c2_user_id: string;
+  last_sync_at: string | null;
+}
+
 const DeviceSection = () => {
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
