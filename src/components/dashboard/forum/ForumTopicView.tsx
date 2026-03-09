@@ -69,6 +69,7 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
         topic_id: topicId,
         author_id: currentUser.id,
         content: trimmed,
+        images: replyImages.length > 0 ? replyImages : null,
       });
       if (error) throw error;
     },
