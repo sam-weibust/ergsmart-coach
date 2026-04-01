@@ -28,6 +28,14 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
   const [intervalMode, setIntervalMode] = useState<"time" | "distance">("time");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const { connected, connecting, pm5Data, connect, disconnect, isSupported } = usePM5Bluetooth();
+
+  // Auto-populate from PM5 data
+  useEffect(() => {
+    if (pm5Data.distance) setWorkout(p => ({ ...p, distance: String(pm5Data.distance) }));
+    if (pm5Data.splitTime) setWorkout(p => ({ ...p, avg_split: pm5Data.splitTime! }));
+    if (pm5Data.elapsedTime) setWorkout(p => ({ ...p, duration: pm5Data.elapsedTime! }));
+  }, [pm5Data.distance, pm5Data.splitTime, pm5Data.elapsedTime]);
   const [workout, setWorkout] = useState({
     workout_type: "steady_state",
     distance: "",
