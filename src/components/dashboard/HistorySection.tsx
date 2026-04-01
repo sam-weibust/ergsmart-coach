@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Dumbbell } from "lucide-react";
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
+import { RacePaceBoat } from "./RacePaceBoat";
 
 interface HistorySectionProps {
   profile: any;
