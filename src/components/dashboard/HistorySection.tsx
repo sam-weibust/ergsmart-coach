@@ -99,6 +99,8 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                   {workout.notes && (
                     <p className="text-sm text-muted-foreground italic">{workout.notes}</p>
                   )}
+                  {/* Race Pace Boat */}
+                  <RacePaceBoat workout={workout} />
                 </div>
               ))
             )}

@@ -229,6 +229,20 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
               Log Erg Workout
             </CardTitle>
             <div className="flex gap-2">
+              {/* PM5 Bluetooth Connect */}
+              {isSupported && (
+                connected ? (
+                  <Button variant="outline" size="sm" onClick={disconnect} className="gap-1.5">
+                    <Bluetooth className="h-4 w-4 text-green-500" />
+                    <Badge variant="outline" className="text-green-600 border-green-500/30 text-xs px-1.5">Connected</Badge>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={connect} disabled={connecting} className="gap-1.5">
+                    {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bluetooth className="h-4 w-4" />}
+                    <span className="hidden sm:inline">Connect Erg</span>
+                  </Button>
+                )
+              )}
               <Button
                 variant="outline"
                 size="sm"

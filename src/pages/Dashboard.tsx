@@ -28,6 +28,7 @@ import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
 import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
+import RecoverySection from "@/components/dashboard/RecoverySection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
