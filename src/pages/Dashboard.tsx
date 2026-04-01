@@ -274,6 +274,13 @@ const Dashboard = () => {
                 <span className="hidden sm:inline">Devices</span>
                 <span className="sm:hidden">Sync</span>
               </TabsTrigger>
+              <TabsTrigger 
+                value="recovery" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <HeartPulse className="h-4 w-4" />
+                <span>Recovery</span>
+              </TabsTrigger>
             </TabsList>
           </div>
 
