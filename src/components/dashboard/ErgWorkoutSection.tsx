@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon } from "lucide-react";
+import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon, Bluetooth } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { toast as sonnerToast } from "sonner";
+import { usePM5Bluetooth } from "@/hooks/usePM5Bluetooth";
 
 interface ErgWorkoutSectionProps {
   profile: any;
