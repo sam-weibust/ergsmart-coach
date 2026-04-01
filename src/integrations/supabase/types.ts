@@ -773,6 +773,39 @@ export type Database = {
           },
         ]
       }
+      recovery_logs: {
+        Row: {
+          body_region: string
+          created_at: string
+          id: string
+          log_date: string
+          notes: string | null
+          severity: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body_region: string
+          created_at?: string
+          id?: string
+          log_date?: string
+          notes?: string | null
+          severity: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body_region?: string
+          created_at?: string
+          id?: string
+          log_date?: string
+          notes?: string | null
+          severity?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       recruitment_predictions: {
         Row: {
           created_at: string

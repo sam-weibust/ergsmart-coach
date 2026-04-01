@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -28,6 +28,7 @@ import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
 import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
+import RecoverySection from "@/components/dashboard/RecoverySection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -273,6 +274,13 @@ const Dashboard = () => {
                 <span className="hidden sm:inline">Devices</span>
                 <span className="sm:hidden">Sync</span>
               </TabsTrigger>
+              <TabsTrigger 
+                value="recovery" 
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
+              >
+                <HeartPulse className="h-4 w-4" />
+                <span>Recovery</span>
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -352,6 +360,10 @@ const Dashboard = () => {
 
             <TabsContent value="devices" className="mt-0">
               <DeviceSection />
+            </TabsContent>
+
+            <TabsContent value="recovery" className="mt-0">
+              <RecoverySection profile={profile} />
             </TabsContent>
           </div>
         </Tabs>

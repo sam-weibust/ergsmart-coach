@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { workoutType, workout, profile, recentWorkouts } = await req.json();
+    const { workoutType, workout, profile, recentWorkouts, recoveryLogs } = await req.json();
     
     console.log(`Analyzing ${workoutType} workout for user`);
     
@@ -53,7 +53,13 @@ User Profile:
 Recent workout history (last 5):
 ${recentWorkouts?.length > 0 ? recentWorkouts.map((w: any) => 
   `- ${w.workout_type}: ${w.distance || 'N/A'}m in ${w.duration || 'N/A'} @ ${w.avg_split || 'N/A'}`
-).join('\n') : 'No recent workouts'}`;
+).join('\n') : 'No recent workouts'}
+
+Recent injury/recovery logs (last 7 days):
+${recoveryLogs?.length > 0 ? recoveryLogs.map((r: any) => 
+  `- ${r.log_date}: ${r.body_region}, severity ${r.severity}/5${r.notes ? ` (${r.notes})` : ''}`
+).join('\n') : 'No recent recovery issues'}
+${recoveryLogs?.some((r: any) => r.severity >= 4) ? '\n⚠️ IMPORTANT: User has recent severe injury/pain. Recommend rest or modification.' : ''}`;
 
     } else if (workoutType === "strength") {
       systemPrompt = `You are an expert strength and conditioning coach. Analyze the user's strength workout and provide personalized feedback. Focus on form, progression, and rowing-specific benefits. Be encouraging but also provide actionable insights.

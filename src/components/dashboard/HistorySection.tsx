@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Dumbbell } from "lucide-react";
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
+import { RacePaceBoat } from "./RacePaceBoat";
 
 interface HistorySectionProps {
   profile: any;
@@ -98,6 +99,8 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                   {workout.notes && (
                     <p className="text-sm text-muted-foreground italic">{workout.notes}</p>
                   )}
+                  {/* Race Pace Boat */}
+                  <RacePaceBoat workout={workout} />
                 </div>
               ))
             )}

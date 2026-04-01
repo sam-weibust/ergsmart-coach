@@ -42,7 +42,7 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
 
   // Simulate progress updates during generation
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (generationProgress.totalBatches > 0 && generationProgress.currentBatch < generationProgress.totalBatches) {
       interval = setInterval(() => {
         setGenerationProgress(prev => {

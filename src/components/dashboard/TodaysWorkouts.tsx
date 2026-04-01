@@ -170,8 +170,15 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
           .order("workout_date", { ascending: false })
           .limit(5);
 
+        const { data: recoveryLogs } = await supabase
+          .from("recovery_logs")
+          .select("*")
+          .eq("user_id", profile.id)
+          .gte("log_date", new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
+          .order("log_date", { ascending: false });
+
         const { data: fbData } = await supabase.functions.invoke("analyze-workout", {
-          body: { workoutType: "erg", workout: { ...workoutData, id: data.id }, profile, recentWorkouts: recentWorkouts || [] },
+          body: { workoutType: "erg", workout: { ...workoutData, id: data.id }, profile, recentWorkouts: recentWorkouts || [], recoveryLogs: recoveryLogs || [] },
         });
         if (fbData?.feedback) setErgFeedback(fbData.feedback);
       } catch {}

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon } from "lucide-react";
+import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon, Bluetooth } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { toast as sonnerToast } from "sonner";
+import { usePM5Bluetooth } from "@/hooks/usePM5Bluetooth";
 
 interface ErgWorkoutSectionProps {
   profile: any;
@@ -26,6 +28,14 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
   const [intervalMode, setIntervalMode] = useState<"time" | "distance">("time");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const { connected, connecting, pm5Data, connect, disconnect, isSupported } = usePM5Bluetooth();
+
+  // Auto-populate from PM5 data
+  useEffect(() => {
+    if (pm5Data.distance) setWorkout(p => ({ ...p, distance: String(pm5Data.distance) }));
+    if (pm5Data.splitTime) setWorkout(p => ({ ...p, avg_split: pm5Data.splitTime! }));
+    if (pm5Data.elapsedTime) setWorkout(p => ({ ...p, duration: pm5Data.elapsedTime! }));
+  }, [pm5Data.distance, pm5Data.splitTime, pm5Data.elapsedTime]);
   const [workout, setWorkout] = useState({
     workout_type: "steady_state",
     distance: "",
@@ -219,6 +229,20 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
               Log Erg Workout
             </CardTitle>
             <div className="flex gap-2">
+              {/* PM5 Bluetooth Connect */}
+              {isSupported && (
+                connected ? (
+                  <Button variant="outline" size="sm" onClick={disconnect} className="gap-1.5">
+                    <Bluetooth className="h-4 w-4 text-green-500" />
+                    <Badge variant="outline" className="text-green-600 border-green-500/30 text-xs px-1.5">Connected</Badge>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={connect} disabled={connecting} className="gap-1.5">
+                    {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bluetooth className="h-4 w-4" />}
+                    <span className="hidden sm:inline">Connect Erg</span>
+                  </Button>
+                )
+              )}
               <Button
                 variant="outline"
                 size="sm"
