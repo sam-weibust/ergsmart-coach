@@ -22,7 +22,7 @@ export function usePM5Bluetooth() {
   const [pm5Data, setPm5Data] = useState<PM5Data>({
     strokeRate: null, splitTime: null, distance: null, watts: null, heartRate: null, elapsedTime: null,
   });
-  const deviceRef = useRef<BluetoothDevice | null>(null);
+  const deviceRef = useRef<any>(null);
 
   const isSupported = typeof navigator !== "undefined" && "bluetooth" in navigator;
 
