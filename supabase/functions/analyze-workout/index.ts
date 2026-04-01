@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { workoutType, workout, profile, recentWorkouts } = await req.json();
+    const { workoutType, workout, profile, recentWorkouts, recoveryLogs } = await req.json();
     
     console.log(`Analyzing ${workoutType} workout for user`);
     
