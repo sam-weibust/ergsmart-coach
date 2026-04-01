@@ -361,6 +361,10 @@ const Dashboard = () => {
             <TabsContent value="devices" className="mt-0">
               <DeviceSection />
             </TabsContent>
+
+            <TabsContent value="recovery" className="mt-0">
+              <RecoverySection profile={profile} />
+            </TabsContent>
           </div>
         </Tabs>
       </main>
