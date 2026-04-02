@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, Flame, Target, Dumbbell, Timer, Users, Calendar, Zap, Award, Star, Medal } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StreakFreeze } from "./StreakFreeze";
 
 interface AwardsSectionProps {
   profile: any;
