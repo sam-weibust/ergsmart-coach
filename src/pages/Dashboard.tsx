@@ -298,6 +298,7 @@ const Dashboard = () => {
                 <Separator className="my-2" />
                 <h2 className="text-lg font-semibold text-foreground">Custom Workout</h2>
                 <ErgWorkoutSection profile={profile} />
+                <MultiPieceSession profile={profile} />
                 <MultiSetStrengthForm profile={profile} />
               </div>
             </TabsContent>

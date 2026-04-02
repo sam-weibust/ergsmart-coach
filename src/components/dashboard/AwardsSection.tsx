@@ -444,6 +444,14 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
                         );
                       })}
                     </div>
+                    {/* Streak freeze button */}
+                    {achievement.id === "streak" && (
+                      <StreakFreeze
+                        profile={profile}
+                        currentStreak={achievement.currentValue}
+                        uniqueDaysLogged={stats?.uniqueDaysLogged || 0}
+                      />
+                    )}
                   </div>
                 </div>
               </CardContent>
