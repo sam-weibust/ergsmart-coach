@@ -125,8 +125,10 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       strengthWorkouts?.forEach(w => workoutDays.add(w.workout_date));
       const uniqueDaysLogged = workoutDays.size;
 
-      // Calculate streak
-      const allDates = Array.from(workoutDays).sort().reverse();
+      // Calculate streak (factor in streak freezes)
+      const freezeSet = new Set(streakFreezes || []);
+      const allDatesAndFreezes = new Set([...Array.from(workoutDays), ...Array.from(freezeSet)]);
+      const allDates = Array.from(allDatesAndFreezes).sort().reverse();
       let currentStreak = 0;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -134,11 +136,7 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       for (let i = 0; i < allDates.length; i++) {
         const workoutDate = new Date(allDates[i]);
         workoutDate.setHours(0, 0, 0, 0);
-        const expectedDate = new Date(today);
-        expectedDate.setDate(today.getDate() - i);
-        expectedDate.setHours(0, 0, 0, 0);
 
-        // Allow for yesterday if today hasn't been logged yet
         if (i === 0) {
           const yesterday = new Date(today);
           yesterday.setDate(today.getDate() - 1);
