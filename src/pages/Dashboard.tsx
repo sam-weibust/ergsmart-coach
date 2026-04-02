@@ -28,7 +28,9 @@ import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
 import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
+import { SplitCalculator } from "@/components/dashboard/SplitCalculator";
 import RecoverySection from "@/components/dashboard/RecoverySection";
+import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 
 const Dashboard = () => {
   const navigate = useNavigate();
