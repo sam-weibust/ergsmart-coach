@@ -94,6 +94,7 @@ export type Database = {
           id: string
           notes: string | null
           rest_periods: string | null
+          session_id: string | null
           user_id: string
           warmup_duration: string | null
           workout_date: string
@@ -110,6 +111,7 @@ export type Database = {
           id?: string
           notes?: string | null
           rest_periods?: string | null
+          session_id?: string | null
           user_id: string
           warmup_duration?: string | null
           workout_date?: string
@@ -126,6 +128,7 @@ export type Database = {
           id?: string
           notes?: string | null
           rest_periods?: string | null
+          session_id?: string | null
           user_id?: string
           warmup_duration?: string | null
           workout_date?: string
@@ -841,6 +844,30 @@ export type Database = {
           },
         ]
       }
+      streak_freezes: {
+        Row: {
+          created_at: string
+          freeze_date: string
+          id: string
+          used: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          freeze_date: string
+          id?: string
+          used?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          freeze_date?: string
+          id?: string
+          used?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       strength_workouts: {
         Row: {
           cooldown_notes: string | null
@@ -1229,6 +1256,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      workout_annotations: {
+        Row: {
+          athlete_id: string
+          coach_id: string
+          created_at: string
+          id: string
+          note: string
+          workout_id: string
+          workout_type: string
+        }
+        Insert: {
+          athlete_id: string
+          coach_id: string
+          created_at?: string
+          id?: string
+          note: string
+          workout_id: string
+          workout_type: string
+        }
+        Update: {
+          athlete_id?: string
+          coach_id?: string
+          created_at?: string
+          id?: string
+          note?: string
+          workout_id?: string
+          workout_type?: string
+        }
+        Relationships: []
       }
       workout_plans: {
         Row: {
