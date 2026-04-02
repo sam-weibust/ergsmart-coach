@@ -75,20 +75,29 @@ const getTier = (value: number, tiers: Achievement["tiers"]): { current: TierLev
 };
 
 export const AwardsSection = ({ profile }: AwardsSectionProps) => {
+  const { data: streakFreezes } = useQuery({
+    queryKey: ["streak-freezes-for-calc", profile?.id],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data } = await supabase.from("streak_freezes").select("freeze_date").eq("user_id", user.id);
+      return (data || []).map((f: any) => f.freeze_date);
+    },
+    enabled: !!profile?.id,
+  });
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["achievement-stats", profile?.id],
+    queryKey: ["achievement-stats", profile?.id, streakFreezes],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
-      // Get all erg workouts
       const { data: ergWorkouts } = await supabase
         .from("erg_workouts")
         .select("*")
         .eq("user_id", user.id)
         .order("workout_date", { ascending: true });
 
-      // Get all strength workouts
       const { data: strengthWorkouts } = await supabase
         .from("strength_workouts")
         .select("*")
