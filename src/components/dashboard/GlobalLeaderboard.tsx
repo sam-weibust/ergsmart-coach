@@ -192,6 +192,11 @@ export const GlobalLeaderboard = () => {
           </Select>
         </div>
 
+        {/* Percentile Rank Badge */}
+        {leaderboard && leaderboard.length > 0 && (
+          <PercentileRankBadge leaderboard={leaderboard} />
+        )}
+
         {/* Leaderboard Table */}
         <div className="rounded-xl border border-border overflow-hidden">
           <Table>
