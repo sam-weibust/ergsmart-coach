@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, Flame, Target, Dumbbell, Timer, Users, Calendar, Zap, Award, Star, Medal } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StreakFreeze } from "./StreakFreeze";
 
 interface AwardsSectionProps {
   profile: any;
@@ -74,20 +75,29 @@ const getTier = (value: number, tiers: Achievement["tiers"]): { current: TierLev
 };
 
 export const AwardsSection = ({ profile }: AwardsSectionProps) => {
+  const { data: streakFreezes } = useQuery({
+    queryKey: ["streak-freezes-for-calc", profile?.id],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data } = await supabase.from("streak_freezes").select("freeze_date").eq("user_id", user.id);
+      return (data || []).map((f: any) => f.freeze_date);
+    },
+    enabled: !!profile?.id,
+  });
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["achievement-stats", profile?.id],
+    queryKey: ["achievement-stats", profile?.id, streakFreezes],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
-      // Get all erg workouts
       const { data: ergWorkouts } = await supabase
         .from("erg_workouts")
         .select("*")
         .eq("user_id", user.id)
         .order("workout_date", { ascending: true });
 
-      // Get all strength workouts
       const { data: strengthWorkouts } = await supabase
         .from("strength_workouts")
         .select("*")
@@ -115,8 +125,10 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       strengthWorkouts?.forEach(w => workoutDays.add(w.workout_date));
       const uniqueDaysLogged = workoutDays.size;
 
-      // Calculate streak
-      const allDates = Array.from(workoutDays).sort().reverse();
+      // Calculate streak (factor in streak freezes)
+      const freezeSet = new Set(streakFreezes || []);
+      const allDatesAndFreezes = new Set([...Array.from(workoutDays), ...Array.from(freezeSet)]);
+      const allDates = Array.from(allDatesAndFreezes).sort().reverse();
       let currentStreak = 0;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -124,11 +136,7 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       for (let i = 0; i < allDates.length; i++) {
         const workoutDate = new Date(allDates[i]);
         workoutDate.setHours(0, 0, 0, 0);
-        const expectedDate = new Date(today);
-        expectedDate.setDate(today.getDate() - i);
-        expectedDate.setHours(0, 0, 0, 0);
 
-        // Allow for yesterday if today hasn't been logged yet
         if (i === 0) {
           const yesterday = new Date(today);
           yesterday.setDate(today.getDate() - 1);
@@ -436,6 +444,14 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
                         );
                       })}
                     </div>
+                    {/* Streak freeze button */}
+                    {achievement.id === "streak" && (
+                      <StreakFreeze
+                        profile={profile}
+                        currentStreak={achievement.currentValue}
+                        uniqueDaysLogged={stats?.uniqueDaysLogged || 0}
+                      />
+                    )}
                   </div>
                 </div>
               </CardContent>

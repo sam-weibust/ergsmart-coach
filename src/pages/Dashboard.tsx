@@ -28,7 +28,9 @@ import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
 import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
+import { SplitCalculator } from "@/components/dashboard/SplitCalculator";
 import RecoverySection from "@/components/dashboard/RecoverySection";
+import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -296,6 +298,7 @@ const Dashboard = () => {
                 <Separator className="my-2" />
                 <h2 className="text-lg font-semibold text-foreground">Custom Workout</h2>
                 <ErgWorkoutSection profile={profile} />
+                <MultiPieceSession profile={profile} />
                 <MultiSetStrengthForm profile={profile} />
               </div>
             </TabsContent>
@@ -325,7 +328,10 @@ const Dashboard = () => {
             </TabsContent>
 
             <TabsContent value="predictor" className="mt-0">
-              <ErgPredictor />
+              <div className="space-y-6">
+                <ErgPredictor />
+                <SplitCalculator />
+              </div>
             </TabsContent>
 
             <TabsContent value="leaderboard" className="mt-0">

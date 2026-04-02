@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award, User, Filter, ShieldCheck } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PercentileRankBadge } from "./PercentileRankBadge";
 
 const CATEGORIES = [
   { value: "all", label: "All Categories" },
@@ -190,6 +191,11 @@ export const GlobalLeaderboard = () => {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Percentile Rank Badge */}
+        {leaderboard && leaderboard.length > 0 && (
+          <PercentileRankBadge leaderboard={leaderboard} />
+        )}
 
         {/* Leaderboard Table */}
         <div className="rounded-xl border border-border overflow-hidden">
