@@ -327,7 +327,10 @@ const Dashboard = () => {
             </TabsContent>
 
             <TabsContent value="predictor" className="mt-0">
-              <ErgPredictor />
+              <div className="space-y-6">
+                <ErgPredictor />
+                <SplitCalculator />
+              </div>
             </TabsContent>
 
             <TabsContent value="leaderboard" className="mt-0">
