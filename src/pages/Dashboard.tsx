@@ -35,11 +35,11 @@ import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("plans");
 
   useEffect(() => {
     checkUser();
     
-    // Listen for auth state changes (including session expiry)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
         navigate("/auth");
@@ -89,7 +89,6 @@ const Dashboard = () => {
 
   const isCoach = (profile as any)?.user_type === "coach";
 
-  // Check if user is a member of any team (for rowers to see Teams tab)
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
     queryFn: async () => {
@@ -120,6 +119,14 @@ const Dashboard = () => {
     );
   }
 
+  const mobileNavItems = [
+    { value: "plans", icon: Calendar, label: "Training" },
+    { value: "log", icon: PlusCircle, label: "Log" },
+    { value: "history", icon: History, label: "History" },
+    { value: "stats", icon: BarChart3, label: "Stats" },
+    { value: "ask", icon: MessageSquare, label: "Ask" },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-subtle">
       {/* Header */}
@@ -149,137 +156,81 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6 pb-24 md:pb-8 animate-fade-in">
-        <Tabs defaultValue="plans" className="space-y-6">
-          {/* Tab Navigation */}
-          <div className="bg-card rounded-2xl p-2 shadow-card border border-border">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          {/* Desktop Tab Navigation - hidden on mobile */}
+          <div className="hidden md:block bg-card rounded-2xl p-2 shadow-card border border-border">
             <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent h-auto p-0 gap-1.5">
-              <TabsTrigger 
-                value="plans" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="plans" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Calendar className="h-4 w-4" />
-                <span className="hidden sm:inline">Training</span>
-                <span className="sm:hidden">Plans</span>
+                <span>Training</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="log" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="log" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <PlusCircle className="h-4 w-4" />
                 <span>Log</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="meals" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="meals" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <UtensilsCrossed className="h-4 w-4" />
                 <span>Meals</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="history" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="history" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <History className="h-4 w-4" />
                 <span>History</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="stats" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="stats" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <BarChart3 className="h-4 w-4" />
                 <span>Stats</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="compare" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="compare" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <GitCompare className="h-4 w-4" />
                 <span>Compare</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="awards" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="awards" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Trophy className="h-4 w-4" />
                 <span>Awards</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="predictor" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="predictor" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Calculator className="h-4 w-4" />
                 <span>Predictor</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="leaderboard" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="leaderboard" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Medal className="h-4 w-4" />
                 <span>Rankings</span>
               </TabsTrigger>
-              <TabsTrigger
-                value="recruit" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="recruit" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <GraduationCap className="h-4 w-4" />
                 <span>Recruit</span>
               </TabsTrigger>
-              <TabsTrigger
-                value="profile" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="profile" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <User className="h-4 w-4" />
                 <span>Profile</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="friends" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="friends" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <MessageCircle className="h-4 w-4" />
                 <span>Friends</span>
               </TabsTrigger>
               {isOnTeam && (
-                <TabsTrigger 
-                  value="teams" 
-                  className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-                >
+                <TabsTrigger value="teams" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                   <UsersRound className="h-4 w-4" />
                   <span>Teams</span>
                 </TabsTrigger>
               )}
-              <TabsTrigger 
-                value="critique" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="critique" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Eye className="h-4 w-4" />
                 <span>Critique</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="ask" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="ask" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <MessageSquare className="h-4 w-4" />
                 <span>Ask</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="forum" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="forum" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <MessagesSquare className="h-4 w-4" />
                 <span>Forum</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="devices" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="devices" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Bluetooth className="h-4 w-4" />
-                <span className="hidden sm:inline">Devices</span>
-                <span className="sm:hidden">Sync</span>
+                <span>Devices</span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="recovery" 
-                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
-              >
+              <TabsTrigger value="recovery" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <HeartPulse className="h-4 w-4" />
                 <span>Recovery</span>
               </TabsTrigger>
@@ -374,6 +325,26 @@ const Dashboard = () => {
           </div>
         </Tabs>
       </main>
+
+      {/* Mobile Bottom Nav - Bug fix #6 */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-card border-t border-border shadow-lg">
+        <div className="flex justify-around items-center h-16 px-2">
+          {mobileNavItems.map((item) => (
+            <button
+              key={item.value}
+              onClick={() => setActiveTab(item.value)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
+                activeTab === item.value
+                  ? "text-primary"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
