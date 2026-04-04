@@ -84,12 +84,13 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
       const splitSeconds = intervalToSeconds(w.avg_split);
       if (splitSeconds === 0) return;
 
-      // Categorize by distance
+      // Categorize by distance (±5% tolerance)
       let category = "";
-      if (w.distance >= 1900 && w.distance <= 2100) category = "2K";
-      else if (w.distance >= 4900 && w.distance <= 5100) category = "5K";
-      else if (w.distance >= 5900 && w.distance <= 6100) category = "6K";
-      else if (w.distance >= 9900 && w.distance <= 10100) category = "10K";
+      const d = w.distance;
+      if (d >= 2000 * 0.95 && d <= 2000 * 1.05) category = "2K";
+      else if (d >= 5000 * 0.95 && d <= 5000 * 1.05) category = "5K";
+      else if (d >= 6000 * 0.95 && d <= 6000 * 1.05) category = "6K";
+      else if (d >= 10000 * 0.95 && d <= 10000 * 1.05) category = "10K";
       
       if (category) {
         if (!prs[category] || splitSeconds < intervalToSeconds(prs[category].avg_split)) {
