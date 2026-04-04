@@ -1,18 +1,34 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle, AlertCircle, Link, Loader2 } from "lucide-react";
-import { Capacitor } from "@capacitor/core";
-import { BluetoothLe, BleDevice } from "@capacitor-community/bluetooth-le";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle,
+  AlertCircle, Link, Loader2, Zap, Timer, Gauge, RotateCcw,
+} from "lucide-react";
 
-interface DeviceConnection {
-  name: string;
-  type: "erg" | "heartRate";
-  connected: boolean;
-  deviceId?: string;
-  device?: BleDevice;
+// ── Concept2 PM5 BLE UUIDs ────────────────────────────────────────────────────
+// Primary service
+const C2_SERVICE           = "ce060000-43e5-11e4-916c-0800200c9a66";
+// Rowing status characteristic — distance, elapsed time, state, stroke rate, HR, calories
+const C2_ROWING_STATUS     = "ce060031-43e5-11e4-916c-0800200c9a66";
+// Additional rowing data — pace / power
+const C2_ROWING_ADDITIONAL = "ce060039-43e5-11e4-916c-0800200c9a66";
+// Standard BLE Heart Rate service
+const HR_SERVICE           = "heart_rate";
+const HR_MEASUREMENT       = "heart_rate_measurement";
+
+interface ErgData {
+  distance: number;
+  elapsedTime: number;
+  splitPace: number;  // tenths of second per 500m
+  strokeRate: number;
+  power: number;
+  calories: number;
+  heartRate: number;
+  workoutState: number; // 0=idle 1=countdown 2=rowing 3=paused 4=finished
 }
 
 interface C2Connection {
@@ -21,596 +37,435 @@ interface C2Connection {
   last_sync_at: string | null;
 }
 
+function parseErgStatus(dv: DataView): Partial<ErgData> {
+  try {
+    return {
+      elapsedTime:  dv.getUint16(0, true) + dv.getUint8(2) * 65536,
+      distance:     (dv.getUint16(3, true) + dv.getUint8(5) * 65536) / 10,
+      workoutState: dv.getUint8(8),
+      strokeRate:   dv.getUint8(9),
+      heartRate:    dv.getUint8(10),
+      calories:     dv.getUint16(13, true),
+    };
+  } catch { return {}; }
+}
+
+function parseErgAdditional(dv: DataView): Partial<ErgData> {
+  try {
+    return {
+      splitPace: dv.getUint16(0, true),
+      power:     dv.getUint16(3, true),
+    };
+  } catch { return {}; }
+}
+
+function formatPace(tenths: number): string {
+  if (!tenths || tenths <= 0 || tenths > 60000) return "--:--";
+  const s = tenths / 10;
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(1).padStart(4, "0");
+  return `${m}:${sec}`;
+}
+
+function formatTime(tenths: number): string {
+  const s = Math.floor(tenths / 10);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  return `${m}:${String(sec).padStart(2,"0")}`;
+}
+
+const STATE_LABELS = ["Idle","Countdown","Rowing","Paused","Finished","--"];
+
 const DeviceSection = () => {
   const { toast } = useToast();
-  const [isScanning, setIsScanning] = useState(false);
-  const [devices, setDevices] = useState<DeviceConnection[]>([]);
-  const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
-  const [isNative, setIsNative] = useState(false);
+
+  const [webBtSupported, setWebBtSupported] = useState(false);
+  const [ergDevice,   setErgDevice]   = useState<BluetoothDevice | null>(null);
+  const [hrDevice,    setHrDevice]    = useState<BluetoothDevice | null>(null);
+  const [ergConnected,    setErgConnected]    = useState(false);
+  const [hrConnected,     setHrConnected]     = useState(false);
+  const [ergConnecting,   setErgConnecting]   = useState(false);
+  const [hrConnecting,    setHrConnecting]    = useState(false);
+  const [ergData,    setErgData]    = useState<Partial<ErgData>>({});
+  const [heartRate,  setHeartRate]  = useState<number | null>(null);
   const [c2Connection, setC2Connection] = useState<C2Connection | null>(null);
   const [isConnectingC2, setIsConnectingC2] = useState(false);
-  const [isSyncingC2, setIsSyncingC2] = useState(false);
+  const [isSyncingC2,    setIsSyncingC2]    = useState(false);
+
+  const ergServerRef = useRef<BluetoothRemoteGATTServer | null>(null);
+  const hrServerRef  = useRef<BluetoothRemoteGATTServer | null>(null);
 
   useEffect(() => {
-    setIsNative(Capacitor.isNativePlatform());
-    checkBluetoothStatus();
+    setWebBtSupported("bluetooth" in navigator);
     checkC2Connection();
   }, []);
 
   const checkC2Connection = async () => {
     try {
-      const { data, error } = await supabase
-        .from('c2_connections')
-        .select('*')
-        .limit(1);
-
-      if (error) {
-        console.error('Error checking C2 connection:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        setC2Connection(data[0]);
-      }
-    } catch (error) {
-      console.error('Error checking C2 connection:', error);
-    }
-  };
-
-  const checkBluetoothStatus = async () => {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        await BluetoothLe.initialize();
-        const enabled = await BluetoothLe.isEnabled();
-        setBluetoothEnabled(enabled.value);
-        
-        if (!enabled.value) {
-          toast({
-            title: "Bluetooth Disabled",
-            description: "Please enable Bluetooth in your device settings.",
-            variant: "destructive",
-          });
-        }
-      } catch (error) {
-        console.error('Bluetooth check failed:', error);
-      }
-    }
-  };
-
-  const enableBluetooth = async () => {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        await BluetoothLe.enable();
-        setBluetoothEnabled(true);
-        toast({
-          title: "Bluetooth Enabled",
-          description: "You can now scan for devices.",
-        });
-      } catch (error) {
-        toast({
-          title: "Failed to Enable Bluetooth",
-          description: "Please enable Bluetooth manually in settings.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const scanForDevices = async (type: "erg" | "heartRate") => {
-    if (!bluetoothEnabled && isNative) {
-      toast({
-        title: "Bluetooth Required",
-        description: "Please enable Bluetooth first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsScanning(true);
-
-    try {
-      if (Capacitor.isNativePlatform()) {
-        // Native Capacitor Bluetooth
-        const services = type === "erg" 
-          ? ["ce060030-43e5-11e4-916c-0800200c9a66"] // Concept2 PM5 service
-          : ["0000180d-0000-1000-8000-00805f9b34fb"]; // Heart Rate service
-
-        await BluetoothLe.requestLEScan({
-          services,
-          allowDuplicates: false,
-          scanMode: 1, // Low power scan mode
-        });
-
-        // Listen for scan results
-        BluetoothLe.addListener('onScanResult', (result) => {
-          if (result.device) {
-            const newDevice: DeviceConnection = {
-              name: result.device.name || (type === "erg" ? "Concept2 Erg" : "Heart Rate Monitor"),
-              type,
-              connected: false,
-              deviceId: result.device.deviceId,
-              device: result.device,
-            };
-
-            setDevices(prev => {
-              const exists = prev.find(d => d.deviceId === result.device.deviceId);
-              if (!exists) {
-                return [...prev, newDevice];
-              }
-              return prev;
-            });
-          }
-        });
-
-        // Stop scanning after 5 seconds
-        setTimeout(async () => {
-          await BluetoothLe.stopLEScan();
-          setIsScanning(false);
-        }, 5000);
-
-      } else {
-        // Fallback to Web Bluetooth for browser testing
-        const nav = navigator as any;
-        if (!nav.bluetooth) {
-          toast({
-            title: "Bluetooth Not Supported",
-            description: "Your browser doesn't support Web Bluetooth. Install the mobile app for full Bluetooth support.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const serviceUUID = type === "erg" 
-          ? "ce060030-43e5-11e4-916c-0800200c9a66" // Concept2 PM5 service
-          : "0000180d-0000-1000-8000-00805f9b34fb"; // Heart Rate service
-
-        const device = await nav.bluetooth.requestDevice({
-          filters: type === "erg" 
-            ? [{ services: [serviceUUID] }, { namePrefix: "PM5" }]
-            : [{ services: ["heart_rate"] }],
-          optionalServices: type === "erg" 
-            ? ["ce060030-43e5-11e4-916c-0800200c9a66"]
-            : ["heart_rate"],
-        });
-
-        if (device) {
-          const newDevice: DeviceConnection = {
-            name: device.name || (type === "erg" ? "Concept2 Erg" : "Heart Rate Monitor"),
-            type,
-            connected: false,
-            deviceId: device.id,
-          };
-
-          setDevices(prev => {
-            const filtered = prev.filter(d => d.deviceId !== device.id);
-            return [...filtered, newDevice];
-          });
-        }
-        setIsScanning(false);
-      }
-    } catch (error: any) {
-      setIsScanning(false);
-      if (error.name !== "NotFoundError") {
-        toast({
-          title: "Scan Failed",
-          description: error.message || "Could not scan for devices",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const connectToDevice = async (device: DeviceConnection) => {
-    if (!device.deviceId) return;
-
-    try {
-      if (Capacitor.isNativePlatform() && device.device) {
-        await BluetoothLe.connect({ deviceId: device.deviceId });
-        
-        setDevices(prev => 
-          prev.map(d => 
-            d.deviceId === device.deviceId 
-              ? { ...d, connected: true }
-              : d.type === device.type 
-                ? { ...d, connected: false } // Disconnect other devices of same type
-                : d
-          )
-        );
-
-        toast({
-          title: "Device Connected",
-          description: `Successfully connected to ${device.name}`,
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Connection Failed",
-        description: error.message || "Could not connect to device",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const disconnectDevice = async (device: DeviceConnection) => {
-    if (!device.deviceId) return;
-
-    try {
-      if (Capacitor.isNativePlatform()) {
-        await BluetoothLe.disconnect({ deviceId: device.deviceId });
-      }
-      
-      setDevices(prev => 
-        prev.map(d => 
-          d.deviceId === device.deviceId 
-            ? { ...d, connected: false }
-            : d
-        )
-      );
-
-      toast({
-        title: "Device Disconnected",
-        description: `${device.name} disconnected`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Disconnection Failed",
-        description: error.message || "Could not disconnect from device",
-        variant: "destructive",
-      });
-    }
+      const { data } = await supabase.from("c2_connections").select("*").limit(1);
+      if (data?.length) setC2Connection(data[0]);
+    } catch {}
   };
 
   const connectC2Logbook = async () => {
     setIsConnectingC2(true);
     try {
-      // Get auth URL
-      const { data, error } = await supabase.functions.invoke('c2-logbook-auth', {
-        body: { action: 'get_auth_url' }
+      const { data, error } = await supabase.functions.invoke("c2-logbook-auth", {
+        body: { action: "get_auth_url" },
       });
-
       if (error) throw error;
-
-      // Open auth URL in new window
-      const authWindow = window.open(data.auth_url, 'c2_auth', 'width=500,height=600');
-      
-      // Listen for the auth completion
-      const checkAuthComplete = setInterval(async () => {
-        try {
-          if (authWindow?.closed) {
-            clearInterval(checkAuthComplete);
-            // Check if connection was successful
-            await checkC2Connection();
-            setIsConnectingC2(false);
-          }
-        } catch (error) {
-          console.log('Auth window check error:', error);
+      const win = window.open(data.auth_url, "c2_auth", "width=500,height=600");
+      const poll = setInterval(async () => {
+        if (win?.closed) {
+          clearInterval(poll);
+          await checkC2Connection();
+          setIsConnectingC2(false);
         }
       }, 1000);
-
-    } catch (error: any) {
+    } catch (e: any) {
       setIsConnectingC2(false);
-      toast({
-        title: "Connection Failed",
-        description: error.message || "Could not connect to C2 logbook",
-        variant: "destructive",
-      });
+      toast({ title: "Connection Failed", description: e.message, variant: "destructive" });
     }
   };
 
   const disconnectC2Logbook = async () => {
     try {
-      const { error } = await supabase
-        .from('c2_connections')
-        .delete()
-        .eq('id', c2Connection?.id);
-
-      if (error) throw error;
-
+      await supabase.from("c2_connections").delete().eq("id", c2Connection?.id);
       setC2Connection(null);
-      toast({
-        title: "Disconnected",
-        description: "C2 logbook connection removed",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Disconnection Failed",
-        description: error.message || "Could not disconnect C2 logbook",
-        variant: "destructive",
-      });
+      toast({ title: "C2 Logbook disconnected" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
     }
   };
 
   const syncC2Workouts = async () => {
-    if (!c2Connection) return;
-
     setIsSyncingC2(true);
     try {
-      const { data, error } = await supabase.functions.invoke('c2-logbook-sync');
-
+      const { data, error } = await supabase.functions.invoke("c2-logbook-sync");
       if (error) throw error;
-
-      toast({
-        title: "Sync Complete",
-        description: `Synced ${data.synced_count} new workouts from C2 logbook`,
-      });
-
-      // Update last sync time
+      toast({ title: "Sync Complete", description: `Synced ${data.synced_count} new workouts` });
       await checkC2Connection();
-    } catch (error: any) {
-      toast({
-        title: "Sync Failed",
-        description: error.message || "Could not sync workouts from C2 logbook",
-        variant: "destructive",
-      });
+    } catch (e: any) {
+      toast({ title: "Sync Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSyncingC2(false);
     }
   };
 
-  const connectedErg = devices.find(d => d.type === "erg" && d.connected);
-  const connectedHR = devices.find(d => d.type === "heartRate" && d.connected);
-  const availableErgs = devices.filter(d => d.type === "erg" && !d.connected);
-  const availableHRs = devices.filter(d => d.type === "heartRate" && !d.connected);
+  const connectErg = useCallback(async () => {
+    if (!webBtSupported) return;
+    setErgConnecting(true);
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [
+          { services: [C2_SERVICE] },
+          { namePrefix: "PM5" },
+          { namePrefix: "Concept2" },
+        ],
+        optionalServices: [C2_SERVICE],
+      });
+
+      device.addEventListener("gattserverdisconnected", () => {
+        setErgConnected(false);
+        setErgData({});
+        toast({ title: "Erg disconnected" });
+      });
+
+      const server = await device.gatt!.connect();
+      ergServerRef.current = server;
+      const service = await server.getPrimaryService(C2_SERVICE);
+
+      // Subscribe to rowing status
+      try {
+        const sc = await service.getCharacteristic(C2_ROWING_STATUS);
+        await sc.startNotifications();
+        sc.addEventListener("characteristicvaluechanged", (e: any) => {
+          setErgData(prev => ({ ...prev, ...parseErgStatus(e.target.value) }));
+        });
+      } catch {}
+
+      // Subscribe to pace / power
+      try {
+        const ac = await service.getCharacteristic(C2_ROWING_ADDITIONAL);
+        await ac.startNotifications();
+        ac.addEventListener("characteristicvaluechanged", (e: any) => {
+          setErgData(prev => ({ ...prev, ...parseErgAdditional(e.target.value) }));
+        });
+      } catch {}
+
+      setErgDevice(device);
+      setErgConnected(true);
+      toast({ title: "PM5 Connected", description: device.name || "Concept2 Erg" });
+    } catch (e: any) {
+      if (e.name !== "NotFoundError") {
+        toast({ title: "Connection Failed", description: e.message || "Could not connect to erg", variant: "destructive" });
+      }
+    } finally {
+      setErgConnecting(false);
+    }
+  }, [webBtSupported, toast]);
+
+  const disconnectErg = useCallback(() => {
+    try { ergServerRef.current?.disconnect(); } catch {}
+    setErgConnected(false);
+    setErgDevice(null);
+    setErgData({});
+  }, []);
+
+  const connectHR = useCallback(async () => {
+    if (!webBtSupported) return;
+    setHrConnecting(true);
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [{ services: [HR_SERVICE] }],
+        optionalServices: [HR_SERVICE],
+      });
+
+      device.addEventListener("gattserverdisconnected", () => {
+        setHrConnected(false);
+        setHeartRate(null);
+        toast({ title: "HR monitor disconnected" });
+      });
+
+      const server = await device.gatt!.connect();
+      hrServerRef.current = server;
+      const service = await server.getPrimaryService(HR_SERVICE);
+      const char    = await service.getCharacteristic(HR_MEASUREMENT);
+      await char.startNotifications();
+
+      char.addEventListener("characteristicvaluechanged", (e: any) => {
+        const dv = e.target.value as DataView;
+        const isUint16 = dv.getUint8(0) & 0x1;
+        const hr = isUint16 ? dv.getUint16(1, true) : dv.getUint8(1);
+        setHeartRate(hr);
+        setErgData(prev => ({ ...prev, heartRate: hr }));
+      });
+
+      setHrDevice(device);
+      setHrConnected(true);
+      toast({ title: "HR Monitor Connected", description: device.name || "Heart Rate Monitor" });
+    } catch (e: any) {
+      if (e.name !== "NotFoundError") {
+        toast({ title: "Connection Failed", description: e.message || "Could not connect to HR monitor", variant: "destructive" });
+      }
+    } finally {
+      setHrConnecting(false);
+    }
+  }, [webBtSupported, toast]);
+
+  const disconnectHR = useCallback(() => {
+    try { hrServerRef.current?.disconnect(); } catch {}
+    setHrConnected(false);
+    setHrDevice(null);
+    setHeartRate(null);
+  }, []);
+
+  const stateLabel = STATE_LABELS[ergData.workoutState ?? 5];
+  const isRowing   = ergData.workoutState === 2;
 
   return (
     <div className="space-y-6">
-      {/* Bluetooth Status */}
-      {isNative && (
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <Bluetooth className={`h-5 w-5 ${bluetoothEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
-              <span className="font-medium">
-                Bluetooth {bluetoothEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-            {!bluetoothEnabled && (
-              <Button onClick={enableBluetooth} size="sm">
-                Enable Bluetooth
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      {!isNative && (
+      {/* Browser support warning */}
+      {!webBtSupported && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
-          <CardContent className="flex items-center gap-3 p-4">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <div className="text-sm">
-              <p className="font-medium text-amber-800 dark:text-amber-200">Limited Bluetooth Support</p>
-              <p className="text-amber-700 dark:text-amber-300">For full Bluetooth functionality, install the mobile app from the App Store or Google Play.</p>
+              <p className="font-medium text-amber-800 dark:text-amber-200">Web Bluetooth not available</p>
+              <p className="text-amber-700 dark:text-amber-300 mt-1">
+                Requires Chrome or Edge on desktop, or Chrome on Android.
+                Not supported in Firefox, Safari, or iOS browsers.
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
+      {/* PM5 Live Connection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bluetooth className="h-5 w-5" />
-            Device Connections
+            <Activity className="h-5 w-5 text-primary" />
+            Concept2 PM5 — Live Data
           </CardTitle>
+          <CardDescription>
+            Connect directly to your PM5 via Bluetooth for real-time splits, power, and stroke rate.
+            Works in Chrome and Edge.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Connect your Concept2 erg or heart rate monitor via Bluetooth to track your workouts.
-          </p>
-
-          {/* Concept2 Erg Connection */}
-          <div className="p-4 border rounded-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Activity className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold">Concept2 Erg (PM5)</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {connectedErg ? connectedErg.name : "Not connected"}
-                  </p>
-                </div>
-              </div>
-              {connectedErg ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              ) : (
-                <XCircle className="h-5 w-5 text-muted-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full transition-colors ${ergConnected ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+              <span className="font-medium text-sm">
+                {ergConnected ? (ergDevice?.name || "Concept2 Erg") : "Not connected"}
+              </span>
+              {ergConnected && (
+                <Badge variant="outline" className={isRowing
+                  ? "border-green-500/40 bg-green-500/10 text-green-600"
+                  : "border-muted text-muted-foreground"
+                }>
+                  {stateLabel}
+                </Badge>
               )}
             </div>
-            
-            {connectedErg ? (
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => disconnectDevice(connectedErg)}
-              >
-                Disconnect Erg
-              </Button>
+            {ergConnected ? (
+              <Button variant="outline" size="sm" onClick={disconnectErg}>Disconnect</Button>
             ) : (
-              <div className="space-y-2">
-                <Button 
-                  className="w-full"
-                  onClick={() => scanForDevices("erg")}
-                  disabled={isScanning || (!bluetoothEnabled && isNative)}
-                >
-                  {isScanning ? "Scanning..." : "Scan for Concept2 Erg"}
-                </Button>
-                
-                {availableErgs.map((device) => (
-                  <Button
-                    key={device.deviceId}
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => connectToDevice(device)}
-                  >
-                    Connect to {device.name}
-                  </Button>
-                ))}
-              </div>
+              <Button size="sm" onClick={connectErg} disabled={ergConnecting || !webBtSupported}>
+                {ergConnecting
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting...</>
+                  : <><Bluetooth className="h-4 w-4 mr-2" />Connect PM5</>
+                }
+              </Button>
             )}
           </div>
 
-          {/* Heart Rate Monitor Connection */}
-          <div className="p-4 border rounded-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Heart className="h-8 w-8 text-red-500" />
-                <div>
-                  <h3 className="font-semibold">Heart Rate Monitor</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {connectedHR ? connectedHR.name : "Not connected"}
-                  </p>
+          {/* Live metrics grid */}
+          {ergConnected && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t">
+              {[
+                { label: "Time",        icon: <Timer className="h-3 w-3" />,    value: ergData.elapsedTime ? formatTime(ergData.elapsedTime) : "--:--",         accent: false },
+                { label: "Distance",    icon: <Activity className="h-3 w-3" />, value: ergData.distance ? `${Math.round(ergData.distance)}m` : "---m",          accent: false },
+                { label: "Split /500m", icon: <Gauge className="h-3 w-3" />,    value: formatPace(ergData.splitPace ?? 0),                                      accent: true  },
+                { label: "Stroke Rate", icon: <RotateCcw className="h-3 w-3" />,value: ergData.strokeRate ? `${ergData.strokeRate} spm` : "-- spm",            accent: false },
+                { label: "Power",       icon: <Zap className="h-3 w-3" />,      value: ergData.power ? `${ergData.power} W` : "-- W",                          accent: false },
+                { label: "Heart Rate",  icon: <Heart className="h-3 w-3 text-red-500" />, value: (ergData.heartRate || heartRate) ? `${ergData.heartRate || heartRate} bpm` : "-- bpm", accent: false },
+              ].map(({ label, icon, value, accent }) => (
+                <div key={label} className={`p-3 rounded-xl text-center ${accent ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}>
+                  <div className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1">
+                    {icon} {label}
+                  </div>
+                  <div className={`text-xl font-mono font-bold ${accent ? "text-primary" : ""}`}>{value}</div>
                 </div>
-              </div>
-              {connectedHR ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              ) : (
-                <XCircle className="h-5 w-5 text-muted-foreground" />
+              ))}
+            </div>
+          )}
+
+          {!ergConnected && webBtSupported && (
+            <div className="p-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">How to connect:</p>
+              <ol className="list-decimal list-inside space-y-0.5">
+                <li>Wake your PM5 and enable Bluetooth on this device</li>
+                <li>Click "Connect PM5" and pick your erg from the browser popup</li>
+                <li>Start rowing — data appears automatically</li>
+              </ol>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Heart Rate Monitor */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Heart className="h-5 w-5 text-red-500" />
+            Heart Rate Monitor
+          </CardTitle>
+          <CardDescription>
+            Connect a separate BLE heart rate strap if needed. Data merges automatically into the PM5 display above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full ${hrConnected ? "bg-red-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+              <span className="font-medium text-sm">
+                {hrConnected ? (hrDevice?.name || "HR Monitor") : "Not connected"}
+              </span>
+              {hrConnected && heartRate && (
+                <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-red-600 font-mono">
+                  {heartRate} bpm
+                </Badge>
               )}
             </div>
-            
-            {connectedHR ? (
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => disconnectDevice(connectedHR)}
-              >
-                Disconnect Heart Rate Monitor
-              </Button>
+            {hrConnected ? (
+              <Button variant="outline" size="sm" onClick={disconnectHR}>Disconnect</Button>
             ) : (
-              <div className="space-y-2">
-                <Button 
-                  className="w-full"
-                  onClick={() => scanForDevices("heartRate")}
-                  disabled={isScanning || (!bluetoothEnabled && isNative)}
-                >
-                  {isScanning ? "Scanning..." : "Scan for Heart Rate Monitor"}
-                </Button>
-                
-                {availableHRs.map((device) => (
-                  <Button
-                    key={device.deviceId}
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => connectToDevice(device)}
-                  >
-                    Connect to {device.name}
-                  </Button>
-                ))}
-              </div>
+              <Button size="sm" variant="outline" onClick={connectHR} disabled={hrConnecting || !webBtSupported}>
+                {hrConnecting
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting...</>
+                  : <><Bluetooth className="h-4 w-4 mr-2" />Connect HR Monitor</>
+                }
+              </Button>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* C2 Logbook Integration */}
+      {/* C2 Logbook Sync */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Link className="h-5 w-5" />
-            Concept2 Logbook Integration
+            Concept2 Logbook Sync
           </CardTitle>
+          <CardDescription>
+            Import your existing workout history from the official Concept2 logbook.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Connect your Concept2 logbook to automatically sync workouts from the official ErgData app and C2 logbook.
-          </p>
-
-          <div className="p-4 border rounded-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Activity className="h-8 w-8 text-orange-500" />
-                <div>
-                  <h3 className="font-semibold">C2 Logbook</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {c2Connection 
-                      ? `Connected • Last sync: ${c2Connection.last_sync_at ? new Date(c2Connection.last_sync_at).toLocaleDateString() : 'Never'}`
-                      : "Not connected"
-                    }
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {c2Connection
+                ? <CheckCircle2 className="h-5 w-5 text-green-500" />
+                : <XCircle className="h-5 w-5 text-muted-foreground" />}
+              <div>
+                <p className="font-medium text-sm">{c2Connection ? "Connected" : "Not connected"}</p>
+                {c2Connection && (
+                  <p className="text-xs text-muted-foreground">
+                    Last sync: {c2Connection.last_sync_at
+                      ? new Date(c2Connection.last_sync_at).toLocaleDateString()
+                      : "Never"}
                   </p>
-                </div>
+                )}
               </div>
-              {c2Connection ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              ) : (
-                <XCircle className="h-5 w-5 text-muted-foreground" />
-              )}
             </div>
-            
             {c2Connection ? (
-              <div className="space-y-2">
-                <Button 
-                  className="w-full"
-                  onClick={syncC2Workouts}
-                  disabled={isSyncingC2}
-                >
-                  {isSyncingC2 ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Syncing Workouts...
-                    </>
-                  ) : (
-                    'Sync Workouts'
-                  )}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={syncC2Workouts} disabled={isSyncingC2}>
+                  {isSyncingC2 ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sync Now"}
                 </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={disconnectC2Logbook}
-                >
-                  Disconnect C2 Logbook
-                </Button>
+                <Button size="sm" variant="outline" onClick={disconnectC2Logbook}>Disconnect</Button>
               </div>
             ) : (
-              <Button 
-                className="w-full"
-                onClick={connectC2Logbook}
-                disabled={isConnectingC2}
-              >
-                {isConnectingC2 ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect C2 Logbook'
-                )}
+              <Button size="sm" onClick={connectC2Logbook} disabled={isConnectingC2}>
+                {isConnectingC2
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting...</>
+                  : "Connect Logbook"}
               </Button>
             )}
           </div>
-
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-medium mb-2">How it works:</h4>
-            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>Connect your C2 logbook account (one-time setup)</li>
-              <li>Use ErgData app normally on your phone</li>
-              <li>Workouts automatically sync to your C2 logbook</li>
-              <li>Click "Sync Workouts" to import them here</li>
+          <div className="p-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground mb-1">How it works:</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>Authenticate with your Concept2 account (one-time)</li>
+              <li>Row normally with ErgData — it syncs to your C2 logbook</li>
+              <li>Click "Sync Now" to pull those workouts into CrewSync</li>
             </ol>
           </div>
         </CardContent>
       </Card>
 
+      {/* Manual fallback */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Manual Entry Alternative
+            No Bluetooth? No Problem
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <p className="text-sm text-muted-foreground">
-            If you prefer not to connect your C2 logbook, you can still use ErgData and manually enter results.
+            In the <strong>Log</strong> tab, tap the camera icon to photograph your PM5 screen —
+            AI reads the numbers automatically. Or just type them in manually.
           </p>
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-medium mb-2">Manual entry process:</h4>
-            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>Open the ErgData app on your phone</li>
-              <li>Connect to your PM5 via Bluetooth</li>
-              <li>Complete your workout</li>
-              <li>Manually enter results in the Erg Workouts section</li>
-            </ol>
-          </div>
         </CardContent>
       </Card>
+
     </div>
   );
 };
