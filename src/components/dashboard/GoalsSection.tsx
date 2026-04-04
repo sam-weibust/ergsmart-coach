@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
@@ -53,7 +54,6 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
 
   const formatInterval = (interval: string | null) => {
     if (!interval) return "";
-    // Format HH:MM:SS to MM:SS.S
     const match = interval.match(/(\d{2}):(\d{2}):(\d{2})/);
     if (match) {
       const [, hours, minutes, seconds] = match;
@@ -65,7 +65,6 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
 
   const parseTimeToInterval = (time: string) => {
     if (!time) return null;
-    // Parse MM:SS or MM:SS.S format
     const parts = time.split(":");
     if (parts.length !== 2) return null;
     
@@ -75,6 +74,46 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
     if (isNaN(minutes) || isNaN(seconds)) return null;
     
     return `00:${minutes.toString().padStart(2, '0')}:${Math.floor(seconds).toString().padStart(2, '0')}`;
+  };
+
+  const timeToSeconds = (time: string): number => {
+    if (!time) return 0;
+    const parts = time.split(":");
+    if (parts.length !== 2) return 0;
+    const minutes = parseInt(parts[0]);
+    const seconds = parseFloat(parts[1]);
+    if (isNaN(minutes) || isNaN(seconds)) return 0;
+    return minutes * 60 + seconds;
+  };
+
+  const getProgress = (currentTime: string, goalTime: string) => {
+    const currentSeconds = timeToSeconds(currentTime);
+    const goalSeconds = timeToSeconds(goalTime);
+    if (!currentSeconds || !goalSeconds) return null;
+
+    // Goal reached (lower is better in rowing)
+    if (currentSeconds <= goalSeconds) {
+      return { percent: 100, delta: 0, reached: true };
+    }
+
+    const worstReasonableSeconds = currentSeconds + 60;
+    const percent = Math.max(0, Math.min(100, ((worstReasonableSeconds - currentSeconds) / (worstReasonableSeconds - goalSeconds)) * 100));
+    const delta = currentSeconds - goalSeconds;
+    return { percent, delta, reached: false };
+  };
+
+  const ProgressDisplay = ({ current, goal }: { current: string; goal: string }) => {
+    const progress = getProgress(current, goal);
+    if (!progress) return null;
+
+    return (
+      <div className="space-y-1 mt-2">
+        <Progress value={progress.percent} className="h-2" />
+        <p className={`text-xs font-medium ${progress.reached ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+          {progress.reached ? "Goal reached! 🎉" : `${progress.delta.toFixed(1)}s to go`}
+        </p>
+      </div>
+    );
   };
 
   const handleSave = async () => {
@@ -140,6 +179,7 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
                 onChange={(e) => setGoals({ ...goals, goal_2k_time: e.target.value })}
               />
             </div>
+            <ProgressDisplay current={goals.current_2k_time} goal={goals.goal_2k_time} />
           </div>
 
           <div className="space-y-4">
@@ -162,6 +202,7 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
                 onChange={(e) => setGoals({ ...goals, goal_5k_time: e.target.value })}
               />
             </div>
+            <ProgressDisplay current={goals.current_5k_time} goal={goals.goal_5k_time} />
           </div>
 
           <div className="space-y-4">
@@ -184,6 +225,7 @@ const GoalsSection = ({ profile }: GoalsSectionProps) => {
                 onChange={(e) => setGoals({ ...goals, goal_6k_time: e.target.value })}
               />
             </div>
+            <ProgressDisplay current={goals.current_6k_time} goal={goals.goal_6k_time} />
           </div>
         </div>
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Users, Trophy, TrendingUp, ArrowUp, ArrowDown, Minus, Eye, EyeOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -39,20 +39,36 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
 
   const isCoach = profile?.user_type === "coach";
 
-  // Get friends
+  // Bug fix #5: fetch friendships in both directions
   const { data: friends } = useQuery({
     queryKey: ["friends-for-comparison"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data } = await supabase
-        .from("friendships")
-        .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email)")
-        .eq("user_id", user.id)
-        .eq("status", "accepted");
+      // Fetch both directions
+      const [res1, res2] = await Promise.all([
+        supabase
+          .from("friendships")
+          .select("*, friend:profiles!friendships_friend_id_fkey(id, full_name, email)")
+          .eq("user_id", user.id)
+          .eq("status", "accepted"),
+        supabase
+          .from("friendships")
+          .select("*, friend:profiles!friendships_user_id_fkey(id, full_name, email)")
+          .eq("friend_id", user.id)
+          .eq("status", "accepted"),
+      ]);
 
-      return data || [];
+      const allFriends = [...(res1.data || []), ...(res2.data || [])];
+      // Deduplicate by friend id
+      const seen = new Set<string>();
+      return allFriends.filter(f => {
+        const friendId = f.friend?.id;
+        if (!friendId || seen.has(friendId)) return false;
+        seen.add(friendId);
+        return true;
+      });
     },
   });
 
@@ -83,7 +99,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - parseInt(dateRange));
 
-      // Get user IDs to compare
       let userIds: string[] = [user.id];
       let users: { id: string; name: string }[] = [{ id: user.id, name: "You" }];
 
@@ -106,7 +121,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
         }
       }
 
-      // Get erg workouts for all users
       const { data: ergWorkouts } = await supabase
         .from("erg_workouts")
         .select("*")
@@ -114,7 +128,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
         .gte("workout_date", startDate.toISOString().split("T")[0])
         .order("workout_date", { ascending: true });
 
-      // Get strength workouts for all users
       const { data: strengthWorkouts } = await supabase
         .from("strength_workouts")
         .select("*")
@@ -122,36 +135,27 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
         .gte("workout_date", startDate.toISOString().split("T")[0])
         .order("workout_date", { ascending: true });
 
-      // Get user goals for 2K times
       const { data: goals } = await supabase
         .from("user_goals")
         .select("*")
         .in("user_id", userIds);
 
-      // Process data for comparison
       const userStats = users.map((u) => {
         const userErg = ergWorkouts?.filter((w) => w.user_id === u.id) || [];
         const userStrength = strengthWorkouts?.filter((w) => w.user_id === u.id) || [];
         const userGoal = goals?.find((g) => g.user_id === u.id);
 
-        // Calculate best 2K (lowest split for test workouts)
         const testWorkouts = userErg.filter((w) => w.workout_type === "test");
         const best2kSeconds = testWorkouts.reduce((best, w) => {
           const seconds = parseIntervalToSeconds(w.avg_split as string);
           return seconds && (best === 0 || seconds < best) ? seconds : best;
         }, 0);
 
-        // Total meters
         const totalMeters = userErg.reduce((sum, w) => sum + (w.distance || 0), 0);
-
-        // Total workout count
         const totalWorkouts = userErg.length + userStrength.length;
-
-        // Average weekly workouts
         const weeksInRange = parseInt(dateRange) / 7;
         const avgWeeklyWorkouts = totalWorkouts / weeksInRange;
 
-        // Current 2K from goals
         const current2k = userGoal?.current_2k_time 
           ? parseIntervalToSeconds(userGoal.current_2k_time as string) 
           : best2kSeconds;
@@ -169,7 +173,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
         };
       });
 
-      // Create weekly volume chart data
       const weeklyData: any[] = [];
       const weeksCount = Math.ceil(parseInt(dateRange) / 7);
       
@@ -198,14 +201,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
     },
     enabled: !!profile?.id && (comparisonType === "friends" || (comparisonType === "team" && !!selectedTeamId)),
   });
-
-  const getTrendIcon = (value: number, isLowerBetter = false) => {
-    if (value === 0) return <Minus className="h-4 w-4 text-muted-foreground" />;
-    if (isLowerBetter) {
-      return value < 0 ? <ArrowUp className="h-4 w-4 text-primary" /> : <ArrowDown className="h-4 w-4 text-destructive" />;
-    }
-    return value > 0 ? <ArrowUp className="h-4 w-4 text-primary" /> : <ArrowDown className="h-4 w-4 text-destructive" />;
-  };
 
   return (
     <div className="space-y-4">
@@ -290,7 +285,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
 
               <TabsContent value="leaderboard">
                 <div className="space-y-4">
-                  {/* 2K Leaderboard */}
                   <div className="border rounded-lg p-4">
                     <h4 className="font-semibold flex items-center gap-2 mb-3">
                       <Trophy className="h-4 w-4 text-primary" />
@@ -324,7 +318,6 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
                     </div>
                   </div>
 
-                  {/* Volume Leaderboard */}
                   <div className="border rounded-lg p-4">
                     <h4 className="font-semibold flex items-center gap-2 mb-3">
                       <TrendingUp className="h-4 w-4 text-primary" />

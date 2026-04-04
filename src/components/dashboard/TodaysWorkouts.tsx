@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Activity, Dumbbell, Sparkles, CalendarCheck, Flower2 } from "lucide-react";
+import { Loader2, Activity, Dumbbell, Sparkles, CalendarCheck, Flower2, AlertTriangle, Calendar } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 
 interface TodaysWorkoutsProps {
@@ -30,12 +30,13 @@ const getZoneColor = (zone: string) => {
 
 const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [savingErg, setSavingErg] = useState(false);
   const [savingStrength, setSavingStrength] = useState(false);
   const [ergFeedback, setErgFeedback] = useState<any>(null);
   const [strengthFeedback, setStrengthFeedback] = useState<any>(null);
+  const [planParseError, setPlanParseError] = useState(false);
 
-  // Erg form - only fields the user needs to fill in
   const [ergActuals, setErgActuals] = useState({
     avg_split: "",
     avg_heart_rate: "",
@@ -43,12 +44,10 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     notes: "",
   });
 
-  // Strength form - weights/reps achieved per exercise
   const [strengthActuals, setStrengthActuals] = useState<
     Array<{ exercise: string; sets: string; reps: string; weight: string }>
   >([]);
 
-  // Fetch the most recent plan
   const { data: latestPlan } = useQuery({
     queryKey: ["latest-workout-plan"],
     queryFn: async () => {
@@ -68,43 +67,49 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     enabled: !!profile,
   });
 
-  // Compute today's workout from the plan
+  // Bug fix #8: wrap in try/catch
   const todaysPlan = useMemo(() => {
-    if (!latestPlan?.workout_data || !latestPlan?.created_at) return null;
+    setPlanParseError(false);
+    try {
+      if (!latestPlan?.workout_data || !latestPlan?.created_at) return null;
 
-    const weeks = Array.isArray(latestPlan.workout_data) ? latestPlan.workout_data as any[] : [];
-    if (weeks.length === 0 || weeks[0]?.fileUrl) return null;
+      const weeks = Array.isArray(latestPlan.workout_data) ? latestPlan.workout_data as any[] : [];
+      if (weeks.length === 0 || weeks[0]?.fileUrl) return null;
 
-    const planStart = new Date(latestPlan.created_at);
-    const today = new Date();
-    const diffMs = today.getTime() - planStart.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const planStart = new Date(latestPlan.created_at);
+      const today = new Date();
+      const diffMs = today.getTime() - planStart.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) return null;
+      if (diffDays < 0) return null;
 
-    const weekIndex = Math.floor(diffDays / 7);
-    const dayIndex = diffDays % 7; // 0-6
+      const weekIndex = Math.floor(diffDays / 7);
+      const dayIndex = diffDays % 7;
 
-    if (weekIndex >= weeks.length) return null;
+      if (weekIndex >= weeks.length) return null;
 
-    const week = weeks[weekIndex];
-    const days = week?.days;
-    if (!days || !Array.isArray(days)) return null;
+      const week = weeks[weekIndex];
+      const days = week?.days;
+      if (!days || !Array.isArray(days)) return null;
 
-    const dayPlan = days[dayIndex];
-    if (!dayPlan) return null;
+      const dayPlan = days[dayIndex];
+      if (!dayPlan) return null;
 
-    return {
-      weekNumber: week.week || weekIndex + 1,
-      phase: week.phase || "",
-      dayNumber: dayPlan.day || dayIndex + 1,
-      ergWorkout: dayPlan.ergWorkout || null,
-      strengthWorkout: dayPlan.strengthWorkout || null,
-      yogaSession: dayPlan.yogaSession || null,
-    };
+      return {
+        weekNumber: week.week || weekIndex + 1,
+        phase: week.phase || "",
+        dayNumber: dayPlan.day || dayIndex + 1,
+        ergWorkout: dayPlan.ergWorkout || null,
+        strengthWorkout: dayPlan.strengthWorkout || null,
+        yogaSession: dayPlan.yogaSession || null,
+      };
+    } catch (e) {
+      console.error("Error parsing today's plan:", e);
+      setPlanParseError(true);
+      return null;
+    }
   }, [latestPlan]);
 
-  // Initialize strength actuals when plan changes
   useEffect(() => {
     if (todaysPlan?.strengthWorkout?.exercises) {
       setStrengthActuals(
@@ -118,7 +123,67 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     }
   }, [todaysPlan]);
 
-  if (!todaysPlan) return null;
+  // Bug fix #8: Show parse error card
+  if (planParseError) {
+    return (
+      <Card className="border-yellow-500/30 bg-yellow-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-yellow-600">
+            <AlertTriangle className="h-5 w-5" />
+            Plan Reading Issue
+          </CardTitle>
+          <CardDescription>
+            There was an issue reading today's plan — try regenerating it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["latest-workout-plan"] });
+              setPlanParseError(false);
+            }}
+          >
+            Regenerate
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Bug fix #2: empty state onboarding
+  if (!todaysPlan) {
+    const hasNoPlan = !latestPlan;
+    const planExpired = !!latestPlan && !todaysPlan;
+
+    return (
+      <Card className="border-muted">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-muted-foreground" />
+            No Active Training Plan
+          </CardTitle>
+          <CardDescription>
+            {hasNoPlan
+              ? "You haven't generated a training plan yet. Create one to get personalized daily workouts, rest days, and progression."
+              : "Your previous training plan has ended. Generate a new one to keep your training on track."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => {
+              // Navigate to Plans tab by clicking it
+              const plansTab = document.querySelector('[value="plans"]') as HTMLButtonElement;
+              if (plansTab) plansTab.click();
+            }}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Generate a Plan
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const { ergWorkout, strengthWorkout, yogaSession, weekNumber, phase, dayNumber } = todaysPlan;
   const isRestDay = !ergWorkout && !strengthWorkout && !!yogaSession;
@@ -128,12 +193,10 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     setSavingErg(true);
 
     try {
-      // Build workout type from zone
       const workoutType = ergWorkout.zone
         ? `${ergWorkout.zone.toLowerCase()}_${ergWorkout.description?.toLowerCase().includes("interval") ? "intervals" : "steady_state"}`
         : "steady_state";
 
-      // Parse duration to extract distance if mentioned
       const durationStr = ergWorkout.duration || "";
       const distanceMatch = ergWorkout.description?.match(/(\d{3,5})\s*m/);
 
@@ -161,7 +224,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
 
       toast({ title: "Erg workout logged!", description: "Analyzing performance..." });
 
-      // Get AI feedback
       try {
         const { data: recentWorkouts } = await supabase
           .from("erg_workouts")
@@ -224,7 +286,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
 
       toast({ title: "Strength workout logged!", description: `${validExercises.length} exercise(s) saved.` });
 
-      // Get AI feedback
       try {
         const { data: recentWorkouts } = await supabase
           .from("strength_workouts")
@@ -277,7 +338,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         </CardHeader>
       </Card>
 
-      {/* Rest Day / Yoga */}
       {isRestDay && yogaSession && (
         <Card>
           <CardHeader>
@@ -298,7 +358,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         </Card>
       )}
 
-      {/* Erg Workout */}
       {ergWorkout && (
         <div className="space-y-4">
           {ergFeedback && <WorkoutFeedback feedback={ergFeedback} onDismiss={() => setErgFeedback(null)} />}
@@ -316,7 +375,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
               <CardDescription>{ergWorkout.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Pre-filled plan details (read-only context) */}
               <div className="p-3 rounded-lg bg-muted/50 space-y-1 text-sm">
                 {ergWorkout.duration && <div><span className="font-medium">Duration:</span> {ergWorkout.duration}</div>}
                 {ergWorkout.targetSplit && <div><span className="font-medium">Target Split:</span> {ergWorkout.targetSplit}</div>}
@@ -328,7 +386,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
 
               <Separator />
 
-              {/* User inputs - just their actual numbers */}
               <div className="space-y-1">
                 <p className="text-sm font-medium text-primary">Your Actuals</p>
               </div>
@@ -382,7 +439,6 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         </div>
       )}
 
-      {/* Strength Workout */}
       {strengthWorkout && strengthWorkout.exercises?.length > 0 && (
         <div className="space-y-4">
           {strengthFeedback && <WorkoutFeedback feedback={strengthFeedback} onDismiss={() => setStrengthFeedback(null)} />}
@@ -436,7 +492,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
                         <Label className="text-xs">Weight (lbs)</Label>
                         <Input
                           type="number"
-                          placeholder={planned?.weight || "—"}
+                          placeholder={planned?.weight || "135"}
                           value={ex.weight}
                           onChange={(e) => updateStrengthActual(index, "weight", e.target.value)}
                         />
@@ -447,14 +503,16 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
               })}
 
               {strengthWorkout.cooldownNotes && (
-                <p className="text-xs text-muted-foreground">Cooldown: {strengthWorkout.cooldownNotes}</p>
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium">Cooldown:</span> {strengthWorkout.cooldownNotes}
+                </p>
               )}
 
               <Button onClick={handleLogStrength} disabled={savingStrength} className="w-full">
                 {savingStrength ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
                 ) : (
-                  `Log ${strengthActuals.length} Exercise${strengthActuals.length !== 1 ? "s" : ""}`
+                  "Log Strength Workout"
                 )}
               </Button>
             </CardContent>

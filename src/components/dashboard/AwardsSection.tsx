@@ -126,28 +126,27 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       const uniqueDaysLogged = workoutDays.size;
 
       // Calculate streak (factor in streak freezes)
+      // Bug fix #7: normalize all dates to UTC midnight
       const freezeSet = new Set(streakFreezes || []);
       const allDatesAndFreezes = new Set([...Array.from(workoutDays), ...Array.from(freezeSet)]);
       const allDates = Array.from(allDatesAndFreezes).sort().reverse();
       let currentStreak = 0;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const today = new Date(todayStr + 'T00:00:00Z');
 
       for (let i = 0; i < allDates.length; i++) {
-        const workoutDate = new Date(allDates[i]);
-        workoutDate.setHours(0, 0, 0, 0);
+        const workoutDate = new Date(allDates[i] + 'T00:00:00Z');
 
         if (i === 0) {
           const yesterday = new Date(today);
-          yesterday.setDate(today.getDate() - 1);
+          yesterday.setUTCDate(today.getUTCDate() - 1);
           if (workoutDate.getTime() === today.getTime() || workoutDate.getTime() === yesterday.getTime()) {
             currentStreak = 1;
           } else {
             break;
           }
         } else {
-          const prevWorkoutDate = new Date(allDates[i - 1]);
-          prevWorkoutDate.setHours(0, 0, 0, 0);
+          const prevWorkoutDate = new Date(allDates[i - 1] + 'T00:00:00Z');
           const dayDiff = (prevWorkoutDate.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24);
           if (dayDiff === 1) {
             currentStreak++;

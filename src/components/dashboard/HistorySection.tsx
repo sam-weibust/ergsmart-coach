@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Activity, Dumbbell, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
 import { RacePaceBoat } from "./RacePaceBoat";
 import { WorkoutAnnotations } from "./WorkoutAnnotations";
@@ -14,13 +15,15 @@ interface HistorySectionProps {
 }
 
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
+const PAGE_SIZE = 10;
 
 const HistorySection = ({ profile }: HistorySectionProps) => {
   const [ergWorkouts, setErgWorkouts] = useState<any[]>([]);
   const [strengthWorkouts, setStrengthWorkouts] = useState<any[]>([]);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [ergPage, setErgPage] = useState(0);
+  const [strengthPage, setStrengthPage] = useState(0);
 
-  // Check if user is a coach of the workout owner's team
   const { data: coachInfo } = useQuery({
     queryKey: ["coach-check", profile?.id],
     queryFn: async () => {
@@ -70,7 +73,6 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     });
   };
 
-  // Group erg workouts: hide individual multi_piece rows, show summaries
   const displayErgWorkouts = (() => {
     const summarySessionIds = new Set(
       ergWorkouts.filter(w => w.workout_type === "multi_piece_summary").map(w => w.session_id)
@@ -84,7 +86,15 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const getPiecesForSession = (sessionId: string) =>
     ergWorkouts.filter(w => w.workout_type === "multi_piece" && w.session_id === sessionId);
 
-  // CSV Export
+  // Pagination
+  const ergTotal = displayErgWorkouts.length;
+  const ergPageCount = Math.ceil(ergTotal / PAGE_SIZE);
+  const pagedErgWorkouts = displayErgWorkouts.slice(ergPage * PAGE_SIZE, (ergPage + 1) * PAGE_SIZE);
+
+  const strengthTotal = strengthWorkouts.length;
+  const strengthPageCount = Math.ceil(strengthTotal / PAGE_SIZE);
+  const pagedStrengthWorkouts = strengthWorkouts.slice(strengthPage * PAGE_SIZE, (strengthPage + 1) * PAGE_SIZE);
+
   const exportCSV = async (type: "erg" | "strength") => {
     if (type === "erg") {
       const { data } = await supabase.from("erg_workouts").select("*").eq("user_id", profile.id).order("workout_date", { ascending: false });
@@ -110,6 +120,23 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const PaginationControls = ({ page, pageCount, setPage }: { page: number; pageCount: number; setPage: (p: number) => void }) => {
+    if (pageCount <= 1) return null;
+    return (
+      <div className="flex items-center justify-between pt-4">
+        <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
+          Previous
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          Page {page + 1} of {pageCount}
+        </span>
+        <Button variant="outline" size="sm" disabled={page >= pageCount - 1} onClick={() => setPage(page + 1)}>
+          Next
+        </Button>
+      </div>
+    );
   };
 
   return (
@@ -139,68 +166,81 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
             {displayErgWorkouts.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No erg workouts logged yet.</p>
             ) : (
-              displayErgWorkouts.map((workout) => {
-                const isMultiSummary = workout.workout_type === "multi_piece_summary";
-                const expanded = isMultiSummary && expandedSessions.has(workout.session_id);
-                const pieces = isMultiSummary ? getPiecesForSession(workout.session_id) : [];
+              <>
+                {pagedErgWorkouts.map((workout) => {
+                  const isMultiSummary = workout.workout_type === "multi_piece_summary";
+                  const expanded = isMultiSummary && expandedSessions.has(workout.session_id);
+                  const pieces = isMultiSummary ? getPiecesForSession(workout.session_id) : [];
 
-                return (
-                  <div key={workout.id}>
-                    <div className="p-4 border rounded-lg space-y-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold capitalize flex items-center gap-2">
-                            {isMultiSummary ? "Multi-Piece Session" : workout.workout_type.replace("_", " ")}
-                            {isMultiSummary && (
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleSession(workout.session_id)}>
-                                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                              </Button>
-                            )}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(workout.workout_date).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {workout.distance && <span className="text-lg font-bold">{workout.distance}m</span>}
-                          {profile?.id && <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {workout.duration && <span>Time: {workout.duration}</span>}
-                        {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
-                        {workout.avg_heart_rate && <span>Avg HR: {workout.avg_heart_rate} bpm</span>}
-                        {workout.calories && <span>Calories: {workout.calories}</span>}
-                      </div>
-                      {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
-                      <RacePaceBoat workout={workout} />
-                      <WorkoutAnnotations
-                        workoutId={workout.id}
-                        workoutType="erg"
-                        athleteId={workout.user_id}
-                        isCoach={coachInfo?.isCoach || false}
-                        coachId={coachInfo?.coachId}
-                      />
-                    </div>
-                    {/* Expanded pieces */}
-                    {expanded && pieces.length > 0 && (
-                      <div className="ml-6 mt-1 space-y-1">
-                        {pieces.map((p: any) => (
-                          <div key={p.id} className="p-2 border-l-2 border-primary/30 pl-3 text-sm bg-muted/20 rounded-r">
-                            <div className="flex gap-4 flex-wrap">
-                              {p.distance && <span>{p.distance}m</span>}
-                              {p.duration && <span>{p.duration}</span>}
-                              {p.avg_split && <span>Split: {p.avg_split}</span>}
-                              {p.avg_heart_rate && <span>HR: {p.avg_heart_rate}</span>}
+                  return (
+                    <div key={workout.id}>
+                      <Collapsible>
+                        <div className="p-4 border rounded-lg space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2">
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                  <ChevronDown className="h-4 w-4 transition-transform data-[state=open]:rotate-180" />
+                                </Button>
+                              </CollapsibleTrigger>
+                              <div>
+                                <h3 className="font-semibold capitalize flex items-center gap-2">
+                                  {isMultiSummary ? "Multi-Piece Session" : workout.workout_type.replace("_", " ")}
+                                  {isMultiSummary && (
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleSession(workout.session_id)}>
+                                      {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    </Button>
+                                  )}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(workout.workout_date).toLocaleDateString()}
+                                </p>
+                              </div>
                             </div>
-                            {p.notes && <p className="text-muted-foreground italic text-xs">{p.notes}</p>}
+                            <div className="flex items-center gap-2">
+                              {workout.distance && <span className="text-lg font-bold">{workout.distance}m</span>}
+                              {profile?.id && <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />}
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+                          <CollapsibleContent className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              {workout.duration && <span>Time: {workout.duration}</span>}
+                              {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
+                              {workout.avg_heart_rate && <span>Avg HR: {workout.avg_heart_rate} bpm</span>}
+                              {workout.calories && <span>Calories: {workout.calories}</span>}
+                            </div>
+                            {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
+                            <RacePaceBoat workout={workout} />
+                            <WorkoutAnnotations
+                              workoutId={workout.id}
+                              workoutType="erg"
+                              athleteId={workout.user_id}
+                              isCoach={coachInfo?.isCoach || false}
+                              coachId={coachInfo?.coachId}
+                            />
+                          </CollapsibleContent>
+                        </div>
+                      </Collapsible>
+                      {expanded && pieces.length > 0 && (
+                        <div className="ml-6 mt-1 space-y-1">
+                          {pieces.map((p: any) => (
+                            <div key={p.id} className="p-2 border-l-2 border-primary/30 pl-3 text-sm bg-muted/20 rounded-r">
+                              <div className="flex gap-4 flex-wrap">
+                                {p.distance && <span>{p.distance}m</span>}
+                                {p.duration && <span>{p.duration}</span>}
+                                {p.avg_split && <span>Split: {p.avg_split}</span>}
+                                {p.avg_heart_rate && <span>HR: {p.avg_heart_rate}</span>}
+                              </div>
+                              {p.notes && <p className="text-muted-foreground italic text-xs">{p.notes}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <PaginationControls page={ergPage} pageCount={ergPageCount} setPage={setErgPage} />
+              </>
             )}
           </TabsContent>
 
@@ -213,31 +253,45 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
             {strengthWorkouts.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No strength workouts logged yet.</p>
             ) : (
-              strengthWorkouts.map((workout) => (
-                <div key={workout.id} className="p-4 border rounded-lg space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{workout.exercise}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(workout.workout_date).toLocaleDateString()}
-                      </p>
+              <>
+                {pagedStrengthWorkouts.map((workout) => (
+                  <Collapsible key={workout.id}>
+                    <div className="p-4 border rounded-lg space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <div>
+                            <h3 className="font-semibold">{workout.exercise}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(workout.workout_date).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
+                          {profile?.id && <ShareWorkoutDialog workoutId={workout.id} workoutType="strength" userId={profile.id} />}
+                        </div>
+                      </div>
+                      <CollapsibleContent className="space-y-2">
+                        <p className="text-sm">{workout.sets} sets × {workout.reps} reps</p>
+                        {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
+                        <WorkoutAnnotations
+                          workoutId={workout.id}
+                          workoutType="strength"
+                          athleteId={workout.user_id}
+                          isCoach={coachInfo?.isCoach || false}
+                          coachId={coachInfo?.coachId}
+                        />
+                      </CollapsibleContent>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold">{kgToLbs(workout.weight)} lbs</span>
-                      {profile?.id && <ShareWorkoutDialog workoutId={workout.id} workoutType="strength" userId={profile.id} />}
-                    </div>
-                  </div>
-                  <p className="text-sm">{workout.sets} sets × {workout.reps} reps</p>
-                  {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
-                  <WorkoutAnnotations
-                    workoutId={workout.id}
-                    workoutType="strength"
-                    athleteId={workout.user_id}
-                    isCoach={coachInfo?.isCoach || false}
-                    coachId={coachInfo?.coachId}
-                  />
-                </div>
-              ))
+                  </Collapsible>
+                ))}
+                <PaginationControls page={strengthPage} pageCount={strengthPageCount} setPage={setStrengthPage} />
+              </>
             )}
           </TabsContent>
         </Tabs>
