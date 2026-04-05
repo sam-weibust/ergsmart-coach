@@ -9,26 +9,21 @@ import {
   AlertCircle, Link, Loader2, Zap, Timer, Gauge, RotateCcw,
 } from "lucide-react";
 
-// ── Concept2 PM5 BLE UUIDs ────────────────────────────────────────────────────
-// Primary service
 const C2_SERVICE           = "ce060000-43e5-11e4-916c-0800200c9a66";
-// Rowing status characteristic — distance, elapsed time, state, stroke rate, HR, calories
 const C2_ROWING_STATUS     = "ce060031-43e5-11e4-916c-0800200c9a66";
-// Additional rowing data — pace / power
 const C2_ROWING_ADDITIONAL = "ce060039-43e5-11e4-916c-0800200c9a66";
-// Standard BLE Heart Rate service
 const HR_SERVICE           = "heart_rate";
 const HR_MEASUREMENT       = "heart_rate_measurement";
 
 interface ErgData {
   distance: number;
   elapsedTime: number;
-  splitPace: number;  // tenths of second per 500m
+  splitPace: number;
   strokeRate: number;
   power: number;
   calories: number;
   heartRate: number;
-  workoutState: number; // 0=idle 1=countdown 2=rowing 3=paused 4=finished
+  workoutState: number;
 }
 
 interface C2Connection {
@@ -76,38 +71,94 @@ function formatTime(tenths: number): string {
   return `${m}:${String(sec).padStart(2,"0")}`;
 }
 
+function formatDuration(tenths: number): string {
+  const totalSec = Math.floor(tenths / 10);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 const STATE_LABELS = ["Idle","Countdown","Rowing","Paused","Finished","--"];
 
 const DeviceSection = () => {
   const { toast } = useToast();
 
   const [webBtSupported, setWebBtSupported] = useState(false);
-  const [ergDevice,   setErgDevice]   = useState<BluetoothDevice | null>(null);
-  const [hrDevice,    setHrDevice]    = useState<BluetoothDevice | null>(null);
-  const [ergConnected,    setErgConnected]    = useState(false);
-  const [hrConnected,     setHrConnected]     = useState(false);
-  const [ergConnecting,   setErgConnecting]   = useState(false);
-  const [hrConnecting,    setHrConnecting]    = useState(false);
-  const [ergData,    setErgData]    = useState<Partial<ErgData>>({});
-  const [heartRate,  setHeartRate]  = useState<number | null>(null);
+  const [ergDevice, setErgDevice] = useState<any>(null);
+  const [hrDevice, setHrDevice] = useState<any>(null);
+  const [ergConnected, setErgConnected] = useState(false);
+  const [hrConnected, setHrConnected] = useState(false);
+  const [ergConnecting, setErgConnecting] = useState(false);
+  const [hrConnecting, setHrConnecting] = useState(false);
+  const [ergData, setErgData] = useState<Partial<ErgData>>({});
+  const [heartRate, setHeartRate] = useState<number | null>(null);
   const [c2Connection, setC2Connection] = useState<C2Connection | null>(null);
   const [isConnectingC2, setIsConnectingC2] = useState(false);
-  const [isSyncingC2,    setIsSyncingC2]    = useState(false);
+  const [isSyncingC2, setIsSyncingC2] = useState(false);
 
-  const ergServerRef = useRef<BluetoothRemoteGATTServer | null>(null);
-  const hrServerRef  = useRef<BluetoothRemoteGATTServer | null>(null);
+  const ergServerRef = useRef<any>(null);
+  const hrServerRef = useRef<any>(null);
+  const prevWorkoutState = useRef<number | undefined>(undefined);
+  const autoSavedRef = useRef(false);
 
-  useEffect(() => {
-    setWebBtSupported("bluetooth" in navigator);
-    checkC2Connection();
-  }, []);
-
-  const checkC2Connection = async () => {
+  const checkC2Connection = useCallback(async () => {
     try {
       const { data } = await supabase.from("c2_connections").select("*").limit(1);
       if (data?.length) setC2Connection(data[0]);
     } catch {}
-  };
+  }, []);
+
+  useEffect(() => {
+    setWebBtSupported("bluetooth" in navigator);
+    checkC2Connection();
+
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "c2_auth_success") {
+        checkC2Connection();
+        setIsConnectingC2(false);
+        toast({ title: "C2 Logbook Connected" });
+      } else if (e.data?.type === "c2_auth_error") {
+        setIsConnectingC2(false);
+        toast({ title: "C2 Auth Failed", description: e.data.error || "Unknown error", variant: "destructive" });
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [checkC2Connection, toast]);
+
+  // Auto-save when workout finishes
+  useEffect(() => {
+    const prev = prevWorkoutState.current;
+    const curr = ergData.workoutState;
+    prevWorkoutState.current = curr;
+
+    if (prev === 2 && curr === 4 && !autoSavedRef.current && ergData.distance && ergData.elapsedTime) {
+      autoSavedRef.current = true;
+      const dist = Math.round(ergData.distance);
+      const dur = formatDuration(ergData.elapsedTime);
+      const avgSplitTenths = (ergData.elapsedTime / ergData.distance) * 500;
+      const avgSplit = formatPace(avgSplitTenths);
+
+      (async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          await supabase.from("erg_workouts").insert({
+            user_id: user.id,
+            workout_type: "steady_state",
+            distance: dist,
+            duration: dur,
+            avg_split: avgSplit,
+            avg_heart_rate: ergData.heartRate || null,
+            calories: ergData.calories || null,
+          });
+          toast({ title: "Workout auto-saved from PM5" });
+        } catch (e: any) {
+          toast({ title: "Auto-save failed", description: e.message, variant: "destructive" });
+        }
+      })();
+    }
+  }, [ergData.workoutState, ergData.distance, ergData.elapsedTime, ergData.heartRate, ergData.calories, toast]);
 
   const connectC2Logbook = async () => {
     setIsConnectingC2(true);
@@ -116,14 +167,8 @@ const DeviceSection = () => {
         body: { action: "get_auth_url" },
       });
       if (error) throw error;
-      const win = window.open(data.auth_url, "c2_auth", "width=500,height=600");
-      const poll = setInterval(async () => {
-        if (win?.closed) {
-          clearInterval(poll);
-          await checkC2Connection();
-          setIsConnectingC2(false);
-        }
-      }, 1000);
+      window.open(data.auth_url, "c2_auth", "width=500,height=600");
+      // Success/failure handled by postMessage listener
     } catch (e: any) {
       setIsConnectingC2(false);
       toast({ title: "Connection Failed", description: e.message, variant: "destructive" });
@@ -157,6 +202,8 @@ const DeviceSection = () => {
   const connectErg = useCallback(async () => {
     if (!webBtSupported) return;
     setErgConnecting(true);
+    autoSavedRef.current = false;
+    prevWorkoutState.current = undefined;
     try {
       const device = await (navigator as any).bluetooth.requestDevice({
         filters: [
@@ -177,7 +224,6 @@ const DeviceSection = () => {
       ergServerRef.current = server;
       const service = await server.getPrimaryService(C2_SERVICE);
 
-      // Subscribe to rowing status
       try {
         const sc = await service.getCharacteristic(C2_ROWING_STATUS);
         await sc.startNotifications();
@@ -186,7 +232,6 @@ const DeviceSection = () => {
         });
       } catch {}
 
-      // Subscribe to pace / power
       try {
         const ac = await service.getCharacteristic(C2_ROWING_ADDITIONAL);
         await ac.startNotifications();
@@ -232,7 +277,7 @@ const DeviceSection = () => {
       const server = await device.gatt!.connect();
       hrServerRef.current = server;
       const service = await server.getPrimaryService(HR_SERVICE);
-      const char    = await service.getCharacteristic(HR_MEASUREMENT);
+      const char = await service.getCharacteristic(HR_MEASUREMENT);
       await char.startNotifications();
 
       char.addEventListener("characteristicvaluechanged", (e: any) => {
@@ -263,12 +308,10 @@ const DeviceSection = () => {
   }, []);
 
   const stateLabel = STATE_LABELS[ergData.workoutState ?? 5];
-  const isRowing   = ergData.workoutState === 2;
+  const isRowing = ergData.workoutState === 2;
 
   return (
     <div className="space-y-6">
-
-      {/* Browser support warning */}
       {!webBtSupported && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
           <CardContent className="flex items-start gap-3 p-4">
@@ -284,7 +327,6 @@ const DeviceSection = () => {
         </Card>
       )}
 
-      {/* PM5 Live Connection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -293,7 +335,6 @@ const DeviceSection = () => {
           </CardTitle>
           <CardDescription>
             Connect directly to your PM5 via Bluetooth for real-time splits, power, and stroke rate.
-            Works in Chrome and Edge.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -324,15 +365,14 @@ const DeviceSection = () => {
             )}
           </div>
 
-          {/* Live metrics grid */}
           {ergConnected && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t">
               {[
-                { label: "Time",        icon: <Timer className="h-3 w-3" />,    value: ergData.elapsedTime ? formatTime(ergData.elapsedTime) : "--:--",         accent: false },
-                { label: "Distance",    icon: <Activity className="h-3 w-3" />, value: ergData.distance ? `${Math.round(ergData.distance)}m` : "---m",          accent: false },
-                { label: "Split /500m", icon: <Gauge className="h-3 w-3" />,    value: formatPace(ergData.splitPace ?? 0),                                      accent: true  },
-                { label: "Stroke Rate", icon: <RotateCcw className="h-3 w-3" />,value: ergData.strokeRate ? `${ergData.strokeRate} spm` : "-- spm",            accent: false },
-                { label: "Power",       icon: <Zap className="h-3 w-3" />,      value: ergData.power ? `${ergData.power} W` : "-- W",                          accent: false },
+                { label: "Time",        icon: <Timer className="h-3 w-3" />,     value: ergData.elapsedTime ? formatTime(ergData.elapsedTime) : "--:--",         accent: false },
+                { label: "Distance",    icon: <Activity className="h-3 w-3" />,  value: ergData.distance ? `${Math.round(ergData.distance)}m` : "---m",          accent: false },
+                { label: "Split /500m", icon: <Gauge className="h-3 w-3" />,     value: formatPace(ergData.splitPace ?? 0),                                      accent: true  },
+                { label: "Stroke Rate", icon: <RotateCcw className="h-3 w-3" />, value: ergData.strokeRate ? `${ergData.strokeRate} spm` : "-- spm",             accent: false },
+                { label: "Power",       icon: <Zap className="h-3 w-3" />,       value: ergData.power ? `${ergData.power} W` : "-- W",                           accent: false },
                 { label: "Heart Rate",  icon: <Heart className="h-3 w-3 text-red-500" />, value: (ergData.heartRate || heartRate) ? `${ergData.heartRate || heartRate} bpm` : "-- bpm", accent: false },
               ].map(({ label, icon, value, accent }) => (
                 <div key={label} className={`p-3 rounded-xl text-center ${accent ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}>
@@ -358,7 +398,6 @@ const DeviceSection = () => {
         </CardContent>
       </Card>
 
-      {/* Heart Rate Monitor */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -396,7 +435,6 @@ const DeviceSection = () => {
         </CardContent>
       </Card>
 
-      {/* C2 Logbook Sync */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -450,7 +488,6 @@ const DeviceSection = () => {
         </CardContent>
       </Card>
 
-      {/* Manual fallback */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -465,7 +502,6 @@ const DeviceSection = () => {
           </p>
         </CardContent>
       </Card>
-
     </div>
   );
 };
