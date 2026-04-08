@@ -4,7 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -13,56 +14,194 @@ serve(async (req) => {
   }
 
   try {
-    // Verify JWT authentication
+    // -----------------------------
+    // AUTHENTICATION
+    // -----------------------------
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      console.error("Missing or invalid authorization header");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
     });
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    
+    const { data: claimsData, error: claimsError } =
+      await supabase.auth.getClaims(token);
+
     if (claimsError || !claimsData?.claims) {
-      console.error("JWT verification failed:", claimsError);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("Authenticated user:", claimsData.claims.sub);
 
+    // -----------------------------
+    // INPUT VALIDATION
+    // -----------------------------
     const { imageBase64, fileType } = await req.json();
 
-    // Input validation
     if (!imageBase64) {
       return new Response(
         JSON.stringify({ error: "No image data provided" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
     if (!imageBase64.startsWith("data:")) {
       return new Response(
         JSON.stringify({ error: "Invalid image format - must be data URL" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    // Limit image size (10MB)
-    const maxSize = 10 * 1024 * 1024;
-    if (imageBase64.length > maxSize) {
+    if (imageBase64.length > 10 * 1024 * 1024) {
+      return new Response(
+        JSON.stringify({ error: "Image too large (max 10MB)" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // -----------------------------
+    // ANTHROPIC SETUP
+    // -----------------------------
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
+    }
+
+    // Extract base64 data from data URL
+    const base64Data = imageBase64.split(",")[1];
+    const mime = imageBase64.match(/^data:(.*?);base64/)?.[1] || "image/png";
+
+    const imageBlock = {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: mime,
+        data: base64Data,
+      },
+    };
+
+    const systemPrompt = `
+You are a workout plan parser. Analyze images of workout/training plans and extract structured data.
+
+Return ONLY valid JSON in this exact format:
+{
+  "weeks": [
+    {
+      "week": 1,
+      "phase": "Phase name or difficulty",
+      "days": [
+        {
+          "day": 1,
+          "ergWorkout": {
+            "zone": "UT2 | UT1 | TR | AT | Training",
+            "description": "Full workout description including warmup, main workout, rest intervals, rates, cooldown",
+            "duration": "Total duration if visible",
+            "notes": "Any additional notes"
+          },
+          "strengthWorkout": {
+            "focus": "Muscle group or workout focus",
+            "exercises": [{"name": "Exercise name", "sets": 3, "reps": 10}],
+            "notes": "Any notes"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Extract ALL weeks and days visible
+- Identify rowing zones (UT2, UT1, TR, AT)
+- Include warmup, main workout, rest periods, stroke rates, cooldown
+- If a day is strength-only, put it in strengthWorkout
+- If nothing is readable, return {"weeks": []}
+- Respond ONLY with JSON, no commentary.
+`;
+
+    const userPrompt = `Extract the structured workout plan from this ${fileType || "image"}. Return ONLY JSON.`;
+
+
+    // -----------------------------
+    // CALL ANTHROPIC
+    // -----------------------------
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-latest",
+        max_tokens: 8192,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: [imageBlock, { type: "text", text: userPrompt }] },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Anthropic error:", err);
+      throw new Error(`Anthropic API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text;
+
+    if (!text) {
+      throw new Error("No response from AI");
+    }
+
+    // -----------------------------
+    // PARSE JSON
+    // -----------------------------
+    let parsedPlan;
+    try {
+      const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      parsedPlan = JSON.parse(clean);
+    } catch (e) {
+      console.error("Failed to parse AI response:", text);
+      throw new Error("Failed to parse workout plan from image");
+    }
+
+    return new Response(
+      JSON.stringify({ plan: parsedPlan.weeks || [] }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("Error parsing workout image:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+if (imageBase64.length > maxSize) {
       return new Response(
         JSON.stringify({ error: "Image too large (max 10MB)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
