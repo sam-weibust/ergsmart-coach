@@ -13,38 +13,40 @@ serve(async (req) => {
 
   try {
     // Verify authentication
-    const authHeader = req.headers.get('Authorization');
+    const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
-        status: 401, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: authHeader } } }
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
-        status: 401, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const { weight, height, experience, goals } = await req.json();
-    
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
+
+    // ⭐ USE ANTHROPIC KEY
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY not configured");
     }
 
-    const systemPrompt = `You are an expert strength and conditioning coach specializing in rowing performance.
+    const systemPrompt = `
+You are an expert strength and conditioning coach specializing in rowing performance.
 
-Generate 5 strength workout options in JSON format:
+Return ONLY valid JSON in this format:
 {
   "suggestions": [
     {
@@ -55,13 +57,64 @@ Generate 5 strength workout options in JSON format:
       "notes": "Brief guidance on form and purpose"
     }
   ]
-}`;
+}
+`;
 
-    const userPrompt = `Suggest 5 strength exercises for today's workout for:
-- Weight: ${weight}kg, Height: ${height}cm
+    const userPrompt = `
+Suggest 5 strength exercises for today's workout for:
+- Weight: ${weight}kg
+- Height: ${height}cm
 - Experience: ${experience}
 - Goals: ${goals}
 
+Focus on exercises that support rowing performance.
+Return ONLY valid JSON.
+`;
+
+    // ⭐ CALL ANTHROPIC
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-latest",
+        max_tokens: 2048,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Anthropic error:", response.status, errorText);
+      throw new Error(`Anthropic error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text;
+
+    if (!text) throw new Error("No response from AI");
+
+    const suggestions = JSON.parse(text);
+
+    return new Response(
+      JSON.stringify({ suggestions: suggestions.suggestions }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("Error in generate-strength:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
 Focus on exercises that support rowing performance.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
