@@ -2,7 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -11,84 +12,107 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
-
     const { imageBase64, mimeType } = await req.json();
 
     if (!imageBase64) {
       return new Response(
         JSON.stringify({ error: "No image provided" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are a nutrition label parser. Extract nutritional information from food packaging photos or nutrition labels.
+    // ⭐ USE ANTHROPIC KEY
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
+    }
 
-Return JSON in this exact format:
+    console.log("Parsing nutrition label");
+
+    // Anthropic image block format
+    const imageBlock = {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: mimeType || "image/jpeg",
+        data: imageBase64,
+      },
+    };
+
+    const systemPrompt = `
+You are a nutrition label parser. Extract nutritional information from food packaging photos or nutrition labels.
+
+Return ONLY valid JSON in this exact format:
 {
   "name": "Product name if visible, otherwise describe the food",
   "serving_size": "serving size if visible",
   "calories": number,
-  "protein": number (in grams),
-  "carbs": number (in grams),
-  "fats": number (in grams)
+  "protein": number,
+  "carbs": number,
+  "fats": number
 }
 
-If you cannot determine a value, use 0. Always return valid JSON. Extract per-serving values when available.`
-          },
+Rules:
+- If a value is missing or unreadable, return 0.
+- Extract per‑serving values when available.
+- Never include commentary — ONLY return JSON.
+`;
+
+    const userPrompt = `
+Extract the nutritional information from this food/nutrition label image.
+Return ONLY the JSON.
+`;
+
+    // ⭐ CALL ANTHROPIC
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-latest",
+        max_tokens: 2048,
+        messages: [
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract the nutritional information from this food/nutrition label image. Return only the JSON."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`
-                }
-              }
-            ]
-          }
+            content: [imageBlock, { type: "text", text: userPrompt }],
+          },
         ],
-        response_format: { type: "json_object" }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("Anthropic error:", response.status, errorText);
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const nutrition = JSON.parse(data.choices[0].message.content);
+    const text = data.content?.[0]?.text;
 
-    return new Response(
-      JSON.stringify(nutrition),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (!text) {
+      throw new Error("No response from AI");
+    }
+
+    const nutrition = JSON.parse(text);
+
+    return new Response(JSON.stringify(nutrition), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Error parsing nutrition label:", error);
-    const errorMessage = error instanceof Error ? error.message : "An error occurred";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : "An error occurred";
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
+
