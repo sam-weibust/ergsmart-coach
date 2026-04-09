@@ -21,7 +21,7 @@ serve(async (req) => {
       });
     }
 
-    // ⭐ USE ANTHROPIC KEY
+    // Anthropic key
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY is not configured");
@@ -29,11 +29,108 @@ serve(async (req) => {
 
     console.log("Parsing erg monitor screen photo");
 
-    // Anthropic requires base64 images in this format:
-    // { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "..." } }
-    // We assume the frontend sends raw base64 WITHOUT data URL prefix.
+    // Anthropic image block
     const imageBlock = {
       type: "image",
+      source: {
+        type: "base64",
+        media_type: "image/jpeg",
+        data: imageBase64,
+      },
+    };
+
+    const userPrompt = `
+You are analyzing a photo of a Concept2 erg monitor screen (PM5/PM3) showing workout results.
+
+Extract ALL visible workout data.
+
+Return ONLY valid JSON with this structure:
+{
+  "workout_type": "steady_state" | "intervals" | "sprint" | "test",
+  "distance": <number in meters or null>,
+  "duration": "<HH:MM:SS or MM:SS or null>",
+  "avg_split": "<M:SS.s per 500m or null>",
+  "avg_heart_rate": <number or null>,
+  "calories": <number or null>,
+  "notes": "<any other visible info>"
+}
+
+Rules:
+- distance must be in meters
+- duration must be HH:MM:SS or MM:SS
+- avg_split must be M:SS.s
+- If the screen shows a 2K, 5K, 6K, or 10K test piece → workout_type = "test"
+- If intervals → workout_type = "intervals"
+- Include stroke rate in notes if visible
+- If unreadable → null
+- Respond ONLY with JSON, no commentary.
+`;
+
+    // Anthropic call
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-latest",
+        max_tokens: 2048,
+        messages: [
+          {
+            role: "user",
+            content: [
+              imageBlock,
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Anthropic error: ${response.status} - ${errorText}`);
+
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      throw new Error(`Anthropic API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text;
+
+    if (!text) {
+      throw new Error("No response from AI");
+    }
+
+    console.log("Successfully parsed erg screen");
+
+    const parsed = JSON.parse(text);
+
+    return new Response(JSON.stringify({ workout: parsed }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("Error parsing erg screen:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
       source: {
         type: "base64",
         media_type: "image/jpeg",
