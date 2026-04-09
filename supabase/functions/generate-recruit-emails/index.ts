@@ -22,7 +22,7 @@ serve(async (req) => {
       prediction,
     } = await req.json();
 
-    // ⭐ USE ANTHROPIC KEY
+    // Anthropic key
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY)
       throw new Error("ANTHROPIC_API_KEY is not configured");
@@ -34,6 +34,130 @@ serve(async (req) => {
     const heightInches = profile.height
       ? Math.round(profile.height / 2.54)
       : null;
+    const heightFeetStr = heightInches
+      ? `${Math.floor(heightInches / 12)}'${heightInches % 12}"`
+      : "Unknown";
+
+    // SYSTEM PROMPT
+    const systemPrompt = `
+You are a college rowing recruitment expert who helps athletes craft professional outreach emails to coaches.
+
+You must return ONLY valid JSON matching this structure:
+
+{
+  "coaches": [
+    {
+      "name": "string",
+      "title": "string",
+      "email": "string",
+      "confidence": "verified | likely | pattern-based",
+      "notes": "string"
+    }
+  ],
+  "general_email": "string or null",
+  "email_campaign": [
+    {
+      "sequence_number": number,
+      "email_type": "string",
+      "timing": "string",
+      "subject": "string",
+      "body": "string",
+      "tips": "string"
+    }
+  ],
+  "campaign_tips": ["string", "string", "string"]
+}
+
+RULES:
+- Coach emails MUST be realistic and follow institutional .edu patterns.
+- NEVER fabricate personal emails.
+- Provide 2–4 coaches.
+- Provide a 4‑email recruitment sequence.
+- Keep emails concise, professional, and realistic.
+`;
+
+    // USER PROMPT
+    const userPrompt = `
+Generate coach contact information and a full recruitment email campaign for:
+
+SCHOOL: ${school} (${division}) - ${genderCategory} Rowing
+
+ATHLETE PROFILE:
+- Gender/Category: ${genderCategory}
+- Age: ${profile.age || "Unknown"}
+- Height: ${heightFeetStr}
+- Weight: ${weightLbs ? weightLbs + " lbs" : "Unknown"}
+- Experience: ${profile.experience_level || "Unknown"}
+- GPA: ${gpa || "Not provided"}
+- 2K Time: ${goals?.current_2k_time || "Not recorded"}
+- 5K Time: ${goals?.current_5k_time || "Not recorded"}
+- 6K Time: ${goals?.current_6k_time || "Not recorded"}
+${prediction ? `- Predicted Tier: ${prediction.predicted_tier}` : ""}
+${prediction ? `- Chance at this school: ${prediction.chance}` : ""}
+
+Return ONLY valid JSON following the schema.
+`;
+
+    // CALL ANTHROPIC
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-latest",
+        max_tokens: 4096,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.error("Anthropic error:", response.status, t);
+
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({
+            error: "Rate limit exceeded. Please try again later.",
+          }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      throw new Error("Anthropic API error");
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text;
+
+    if (!text) throw new Error("No response from AI");
+
+    const result = JSON.parse(text);
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("generate-recruit-emails error:", e);
+    return new Response(
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});
     const heightFeetStr = heightInches
       ? `${Math.floor(heightInches / 12)}'${heightInches % 12}"`
       : "Unknown";
