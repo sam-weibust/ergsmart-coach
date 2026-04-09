@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,247 +13,142 @@ serve(async (req) => {
   }
 
   try {
-    const { frames, notes } = await req.json();
-
-    if (!frames || !Array.isArray(frames) || frames.length === 0) {
-      return new Response(JSON.stringify({ error: "No video frames provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Anthropic key
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    console.log(`Analyzing ${frames.length} frames for rowing form critique`);
-
-    // Convert URLs to Anthropic image blocks
-    const imageBlocks = frames.map((url: string) => ({
-      type: "image",
-      source: { type: "url", url },
-    }));
-
-    const userPrompt = `
-Analyze these rowing frames. ${notes ? `The rower notes: "${notes}".` : ""}
-
-Provide a JSON critique with this structure:
-{
-  "overallScore": <number 1-10>,
-  "phase": "catch" | "drive" | "finish" | "recovery" | "multiple",
-  "summary": "1-2 sentence overall assessment",
-  "strengths": ["good thing 1", "good thing 2"],
-  "issues": [
-    { "area": "body part/phase", "problem": "what's wrong", "fix": "how to fix it" }
-  ],
-  "drills": ["drill 1", "drill 2"],
-  "priorityFix": "The single most important thing to work on first"
-}
-`;
-
-    // Anthropic request
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
-        max_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert rowing coach specializing in technique analysis. Provide precise, actionable feedback.",
-          },
-          {
-            role: "user",
-            content: [...imageBlocks, { type: "text", text: userPrompt }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Anthropic error:", response.status, errorText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      throw new Error(`Anthropic error: ${response.status}`);
+    // Auth
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const data = await response.json();
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
 
-    const text = data.content?.[0]?.text;
-    if (!text) throw new Error("No response from AI");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    const critique = JSON.parse(text);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    console.log("Successfully analyzed rowing form");
+    const { messages, image_base64 } = await req.json();
 
-    return new Response(JSON.stringify({ critique }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!image_base64) {
+      return new Response(JSON.stringify({ error: "Missing image_base64" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const systemPrompt = `
+You are CrewSync AI — an expert rowing technique analyst.
+
+You analyze:
+- Body position
+- Sequencing
+- Stroke length
+- Posture
+- Handle path
+- Slide control
+- Drive mechanics
+- Recovery flow
+
+Your output must be:
+- Supportive but honest
+- Specific and actionable
+- Focused on technique
+- Written in clean markdown
+
+Return feedback in this structure:
+
+### Technique Summary
+(2–3 sentences)
+
+### Key Issues
+- **Issue** — what’s wrong
+- **Issue** — what’s wrong
+
+### Fixes
+- **Fix** — how to correct it
+- **Fix** — how to correct it
+
+### Suggested Drills
+- Drill name — 1 sentence purpose
+`;
+
+    // Anthropic vision request
+    const anthropicResponse = await fetch(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-latest",
+          max_tokens: 4096,
+          stream: true,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_image",
+                  image_base64,
+                },
+                {
+                  type: "text",
+                  text: "Analyze this rowing technique.",
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!anthropicResponse.ok) {
+      const t = await anthropicResponse.text();
+      console.error("Anthropic error:", anthropicResponse.status, t);
+      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(anthropicResponse.body, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+      },
     });
-  } catch (error) {
-    console.error("Error analyzing rowing form:", error);
+  } catch (e) {
+    console.error("critique-rowing error:", e);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
-  }
-});
-    }));
-
-    const userPrompt = `
-Analyze these rowing frames. ${notes ? `The rower notes: "${notes}".` : ""}
-
-Provide a JSON critique with this structure:
-{
-  "overallScore": <number 1-10>,
-  "phase": "catch" | "drive" | "finish" | "recovery" | "multiple",
-  "summary": "1-2 sentence overall assessment",
-  "strengths": ["good thing 1", "good thing 2"],
-  "issues": [
-    { "area": "body part/phase", "problem": "what's wrong", "fix": "how to fix it" }
-  ],
-  "drills": ["drill 1", "drill 2"],
-  "priorityFix": "The single most important thing to work on first"
-}
-`;
-
-    // ⭐ CALL ANTHROPIC
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
-        max_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert rowing coach specializing in technique analysis. Provide precise, actionable feedback.",
-          },
-          {
-            role: "user",
-            content: [...imageBlocks, { type: "text", text: userPrompt }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Anthropic error:", response.status, errorText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      throw new Error(`Anthropic error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Anthropic returns content blocks
-    const text = data.content?.[0]?.text;
-    if (!text) throw new Error("No response from AI");
-
-    const critique = JSON.parse(text);
-
-    console.log("Successfully analyzed rowing form");
-
-    return new Response(JSON.stringify({ critique }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Error analyzing rowing form:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
-    { "area": "body part/phase", "problem": "what's wrong", "fix": "how to fix it" }
-  ],
-  "drills": ["drill 1 to improve form", "drill 2"],
-  "priorityFix": "The single most important thing to work on first"
-}
-
-Be specific and constructive. Reference the phases of the rowing stroke (catch, drive, finish, recovery). If you can't see enough detail, say so honestly rather than guessing.`
-          },
-          {
-            role: "user",
-            content: userContent,
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`AI API error: ${response.status} - ${errorText}`);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI usage limit reached." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No response from AI");
-    }
-
-    console.log("Successfully analyzed rowing form");
-
-    const critique = JSON.parse(content);
-
-    return new Response(JSON.stringify({ critique }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Error analyzing rowing form:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   }
 });
