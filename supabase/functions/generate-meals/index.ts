@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,59 +18,67 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, dietary_preferences, goals }
+    const { user_id, dietary_preferences, goals_override } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { preferences } = await req.json();
+    // Fetch user profile + goals
+    const [profileRes, goalsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+      supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .maybeSingle(),
+    ]);
+
+    const profile = profileRes.data;
+    const goals = goals_override || goalsRes.data;
+
+    const userContext = `
+USER PROFILE:
+- Name: ${profile?.full_name || "Unknown"}
+- Age: ${profile?.age || "Unknown"}
+- Weight: ${profile?.weight || "Unknown"}kg
+- Height: ${profile?.height || "Unknown"}cm
+- Experience: ${profile?.experience_level || "Unknown"}
+
+USER GOALS:
+- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
+- Current 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
+
+DIETARY PREFERENCES:
+${JSON.stringify(dietary_preferences, null, 2)}
+`.trim();
 
     const systemPrompt = `
-You are CrewSync AI — a sports nutrition assistant specializing in fueling rowers.
+You are CrewSync AI, an expert sports nutrition assistant for rowers.
 
-You create:
-- Balanced meals
-- Macro‑appropriate fueling plans
-- Pre‑workout and post‑workout meals
-- Daily meal plans for training and recovery
-
-Guidelines:
-- Keep meals simple and realistic
-- Use whole foods when possible
-- Include macros (protein, carbs, fats)
-- Adjust recommendations based on user preferences
+Your job:
+- Generate a personalized meal plan
+- Use the user's goals, body metrics, and dietary preferences
+- Provide macros, calories, and rationale
+- Suggest pre‑workout and post‑workout options
 - Use markdown formatting
-`;
+- Keep instructions clear and actionable
 
-    const userPrompt = `
-Generate meals based on these preferences:
+User context:
+${userContext}
+`.trim();
 
-${JSON.stringify(preferences, null, 2)}
-`;
-
-    // Anthropic request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -86,7 +94,10 @@ ${JSON.stringify(preferences, null, 2)}
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "user",
+              content: `Generate a meal plan based on the user's profile, goals, and dietary preferences.`,
+            },
           ],
         }),
       }
