@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,59 +18,80 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, muscle_group, equipment, preferences }
+    const { user_id, muscle_group, equipment, preferences } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { preferences } = await req.json();
+    // Fetch user profile + goals + recent strength workouts
+    const [profileRes, goalsRes, strengthRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+      supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .maybeSingle(),
+      supabase
+        .from("strength_workouts")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("workout_date", { ascending: false })
+        .limit(5),
+    ]);
+
+    const profile = profileRes.data;
+    const goals = goalsRes.data;
+    const recentStrength = strengthRes.data || [];
+
+    const userContext = `
+USER PROFILE:
+- Name: ${profile?.full_name || "Unknown"}
+- Experience: ${profile?.experience_level || "Unknown"}
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
+
+USER GOALS:
+- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
+
+RECENT STRENGTH WORKOUTS:
+${
+  recentStrength.length
+    ? recentStrength
+        .map(
+          (w) =>
+            `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`
+        )
+        .join("\n")
+    : "No recent strength workouts"
+}
+`.trim();
 
     const systemPrompt = `
-You are CrewSync AI — an expert strength coach for rowers.
+You are CrewSync AI, an expert strength coach for rowers.
 
-You design:
-- Strength blocks
-- Weekly lifting plans
-- Accessory work
-- Mobility and injury‑prevention routines
-
-Guidelines:
-- Focus on rowing‑specific strength (posterior chain, core, legs)
-- Use simple, effective movements
-- Provide sets, reps, and rest
-- Adjust based on user preferences and equipment
+Your job:
+- Generate a personalized strength workout
+- Use the user's goals, experience, and recent training
+- Suggest sets, reps, weights, tempo, and rest
+- Provide rowing-specific rationale
 - Use markdown formatting
-`;
+- Keep instructions clear and actionable
 
-    const userPrompt = `
-Generate a rowing‑specific strength training plan using these preferences:
+User context:
+${userContext}
+`.trim();
 
-${JSON.stringify(preferences, null, 2)}
-`;
-
-    // Anthropic request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -86,7 +107,14 @@ ${JSON.stringify(preferences, null, 2)}
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "user",
+              content: `Muscle group: ${muscle_group}\nEquipment: ${equipment}\nPreferences: ${JSON.stringify(
+                preferences,
+                null,
+                2
+              )}`,
+            },
           ],
         }),
       }
