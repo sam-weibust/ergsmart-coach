@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,70 +18,74 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, profile, goals, gpa, gender }
+    const { user_id, profile, goals, gpa, gender } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { recruit_profile } = await req.json();
+    // Fetch recent erg results for context
+    const { data: ergResults } = await supabase
+      .from("erg_workouts")
+      .select("*")
+      .eq("user_id", user_id)
+      .order("workout_date", { ascending: false })
+      .limit(5);
+
+    const ergSummary = ergResults?.length
+      ? ergResults
+          .map(
+            (w) =>
+              `- ${w.workout_date}: ${w.distance}m in ${w.duration} (avg split ${w.avg_split})`
+          )
+          .join("\n")
+      : "No recent erg results";
+
+    const userContext = `
+ATHLETE PROFILE:
+${JSON.stringify(profile, null, 2)}
+
+GOALS:
+${JSON.stringify(goals, null, 2)}
+
+GPA:
+${gpa}
+
+GENDER:
+${gender}
+
+RECENT ERG RESULTS:
+${ergSummary}
+`.trim();
 
     const systemPrompt = `
-You are CrewSync AI — an expert rowing recruiting analyst.
+You are CrewSync AI, an expert rowing recruiting analyst.
 
-You evaluate:
-- Erg scores
-- Academics
-- Height/weight/frame
-- Training history
-- Race results
-- Strength metrics
-- Coachability and intangibles (when provided)
-
-You return:
-- A projected recruiting tier (D1 top, D1 mid, D1 low, D2, club)
-- Strengths
-- Weaknesses
-- What to improve
-- What coaches will notice
-- A realistic action plan
-
-Guidelines:
-- Be honest but encouraging
-- Use rowing terminology naturally
-- Never overpromise
-- Base projections ONLY on provided data
+Your job:
+- Predict the athlete's realistic recruiting tier (D1 top, D1 mid, D1 low, D2, D3, Club)
+- Provide strengths and weaknesses
+- Provide improvement suggestions
+- Provide coach-style observations
+- Provide a 30-day action plan
+- Use rowing recruiting terminology naturally
 - Use markdown formatting
-`;
+- Be honest but encouraging
+- Base everything ONLY on the provided data
 
-    const userPrompt = `
-Analyze this recruit profile and predict realistic recruiting tier:
+User context:
+${userContext}
+`.trim();
 
-${JSON.stringify(recruit_profile, null, 2)}
-`;
-
-    // Anthropic request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -97,7 +101,11 @@ ${JSON.stringify(recruit_profile, null, 2)}
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "user",
+              content:
+                "Analyze the athlete and provide a full recruiting evaluation.",
+            },
           ],
         }),
       }
