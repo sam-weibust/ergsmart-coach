@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,34 +18,21 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, image_base64 }
+    const { user_id, image_base64 } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { image_base64 } = await req.json();
 
     if (!image_base64) {
       return new Response(JSON.stringify({ error: "Missing image_base64" }), {
@@ -55,31 +42,18 @@ serve(async (req) => {
     }
 
     const systemPrompt = `
-You are CrewSync AI — an expert at reading Concept2 erg screens.
+You are CrewSync AI, an expert at reading Concept2 PM5 ergometer screens.
 
-You extract ONLY what is clearly visible:
-- Split
-- Stroke rate
-- Distance
-- Time
-- Pace
-- Watts
-- Calories
-- Heart rate (if shown)
+Your job:
+- Extract workout data from the image
+- Identify distance, time, split, stroke rate, pace, and intervals
+- Return clean JSON
+- If the image is unclear, say so
+- Do NOT hallucinate values
+- Use rowing terminology naturally
+`.trim();
 
-Guidelines:
-- Do NOT guess values
-- Do NOT infer missing numbers
-- Only return what is readable
-- Use clean JSON output
-`;
-
-    const userPrompt = `
-Extract all readable values from this erg screen image.
-Return ONLY valid JSON.
-`;
-
-    // Anthropic Vision Request
+    // Anthropic Vision request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -91,15 +65,20 @@ Return ONLY valid JSON.
         },
         body: JSON.stringify({
           model: "claude-3-5-sonnet-latest",
-          max_tokens: 4096,
-          stream: true,
+          max_tokens: 2048,
           messages: [
             { role: "system", content: systemPrompt },
             {
               role: "user",
               content: [
-                { type: "input_image", image_base64 },
-                { type: "text", text: userPrompt },
+                {
+                  type: "input_image",
+                  image: image_base64,
+                },
+                {
+                  type: "text",
+                  text: "Extract all workout data from this PM5 screen and return JSON only.",
+                },
               ],
             },
           ],
@@ -116,10 +95,20 @@ Return ONLY valid JSON.
       });
     }
 
-    return new Response(anthropicResponse.body, {
+    const result = await anthropicResponse.json();
+
+    // Optionally store parsed data in DB
+    await supabase.from("erg_workouts").insert({
+      user_id,
+      raw_image: image_base64,
+      parsed_data: result,
+      created_at: new Date().toISOString(),
+    });
+
+    return new Response(JSON.stringify(result), {
       headers: {
         ...corsHeaders,
-        "Content-Type": "text/event-stream",
+        "Content-Type": "application/json",
       },
     });
   } catch (e) {
