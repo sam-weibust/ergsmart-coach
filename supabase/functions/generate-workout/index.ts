@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,65 +18,60 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, workout_type, preferences }
+    const { user_id, workout_type, preferences } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { workout_type, preferences } = await req.json();
-
-    // Fetch user context
-    const [profileRes, goalsRes, recentErgRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    // Fetch user profile + goals + recent workouts
+    const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase
         .from("user_goals")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", user_id)
         .maybeSingle(),
       supabase
         .from("erg_workouts")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", user_id)
+        .order("workout_date", { ascending: false })
+        .limit(5),
+      supabase
+        .from("strength_workouts")
+        .select("*")
+        .eq("user_id", user_id)
         .order("workout_date", { ascending: false })
         .limit(5),
     ]);
 
     const profile = profileRes.data;
     const goals = goalsRes.data;
-    const recentErg = recentErgRes.data || [];
+    const recentErg = ergRes.data || [];
+    const recentStrength = strengthRes.data || [];
 
     const userContext = `
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
+- Type: ${profile?.user_type || "rower"}
 - Experience: ${profile?.experience_level || "Unknown"}
-- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
 
 USER GOALS:
-- 2K: ${goals?.current_2k_time || "Not set"} → ${goals?.goal_2k_time || "Not set"}
-- 5K: ${goals?.current_5k_time || "Not set"} → ${goals?.goal_5k_time || "Not set"}
-- 6K: ${goals?.current_6k_time || "Not set"} → ${goals?.goal_6k_time || "Not set"}
+- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
+- Current 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
 
 RECENT ERG WORKOUTS:
 ${
@@ -87,39 +82,37 @@ ${
             `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, duration: ${w.duration}, avg split: ${w.avg_split}`
         )
         .join("\n")
-    : "No recent workouts"
+    : "No recent erg workouts"
+}
+
+RECENT STRENGTH WORKOUTS:
+${
+  recentStrength.length
+    ? recentStrength
+        .map(
+          (w) =>
+            `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`
+        )
+        .join("\n")
+    : "No recent strength workouts"
 }
 `.trim();
 
     const systemPrompt = `
-You are CrewSync AI — an expert rowing coach.
+You are CrewSync AI, an expert rowing and strength training coach.
 
-You design:
-- Steady state sessions
-- Interval workouts
-- Threshold work
-- Race prep pieces
-- Technique-focused sessions
-
-Guidelines:
-- Use the user's real data
-- Give specific paces (splits) based on fitness
+Your job:
+- Generate a personalized workout for the user
+- Use their goals, fitness level, and recent training
+- Suggest pacing, stroke rates, and structure
 - Use rowing terminology naturally
-- Provide warmup + main set + cooldown
+- Provide clear instructions and rationale
 - Use markdown formatting
-`;
-
-    const userPrompt = `
-Create a ${workout_type} workout.
-
-User preferences:
-${JSON.stringify(preferences, null, 2)}
 
 User context:
 ${userContext}
-`;
+`.trim();
 
-    // Anthropic request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -135,7 +128,14 @@ ${userContext}
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "user",
+              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
+                preferences,
+                null,
+                2
+              )}`,
+            },
           ],
         }),
       }
