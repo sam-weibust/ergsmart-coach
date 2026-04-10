@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -19,60 +19,47 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all 401s)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, messages }
+    const { user_id, messages } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { messages } = await req.json();
 
     // Fetch user context
     const [profileRes, goalsRes, recentErgRes, recentStrengthRes, plansRes] =
       await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
         supabase
           .from("user_goals")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("user_id", user_id)
           .maybeSingle(),
         supabase
           .from("erg_workouts")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("user_id", user_id)
           .order("workout_date", { ascending: false })
           .limit(5),
         supabase
           .from("strength_workouts")
           .select("*")
-          .eq("user_id", user.id)
+          .eq("user_id", user_id)
           .order("workout_date", { ascending: false })
           .limit(5),
         supabase
           .from("workout_plans")
           .select("title, description, created_at")
-          .eq("user_id", user.id)
+          .eq("user_id", user_id)
           .order("created_at", { ascending: false })
           .limit(3),
       ]);
