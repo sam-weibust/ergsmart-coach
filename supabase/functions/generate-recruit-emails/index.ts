@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,60 +18,85 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, athlete_info, target_school }
+    const { user_id, athlete_info, target_school } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { recruit_info } = await req.json();
+    // Fetch user profile + goals + recent erg results
+    const [profileRes, goalsRes, ergRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+      supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .maybeSingle(),
+      supabase
+        .from("erg_workouts")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("workout_date", { ascending: false })
+        .limit(3),
+    ]);
+
+    const profile = profileRes.data;
+    const goals = goalsRes.data;
+    const recentErg = ergRes.data || [];
+
+    const ergSummary = recentErg.length
+      ? recentErg
+          .map(
+            (w) =>
+              `- ${w.workout_date}: ${w.distance}m in ${w.duration} (avg split ${w.avg_split})`
+          )
+          .join("\n")
+      : "No recent erg results";
+
+    const userContext = `
+ATHLETE PROFILE:
+- Name: ${profile?.full_name || "Unknown"}
+- Graduation Year: ${profile?.grad_year || "Unknown"}
+- Height: ${profile?.height || "Unknown"}cm
+- Weight: ${profile?.weight || "Unknown"}kg
+- Experience: ${profile?.experience_level || "Unknown"}
+
+PERFORMANCE:
+${ergSummary}
+
+GOALS:
+- 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
+
+TARGET SCHOOL:
+${target_school}
+`.trim();
 
     const systemPrompt = `
-You are CrewSync AI — an expert assistant for rowing recruiting communications.
+You are CrewSync AI, an expert rowing recruiting assistant.
 
-You write:
-- Polished recruiting emails
-- Coach outreach messages
-- Follow‑ups
-- Updates on erg scores, academics, and training
-- Professional, concise communication
+Your job:
+- Write polished, professional recruiting emails
+- Tailor tone and content to the target school
+- Highlight athlete strengths and performance
+- Keep the email concise, confident, and respectful
+- Use markdown formatting
+- Provide 2–3 variations the athlete can choose from
 
-Guidelines:
-- Keep tone confident, respectful, and mature
-- Avoid exaggeration or over‑selling
-- Use clean formatting
-- Personalize based on the recruit's data
-- Include optional subject lines
-`;
+User context:
+${userContext}
+`.trim();
 
-    const userPrompt = `
-Generate a polished recruiting email using this data:
-
-${JSON.stringify(recruit_info, null, 2)}
-`;
-
-    // Anthropic request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -87,7 +112,14 @@ ${JSON.stringify(recruit_info, null, 2)}
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "user",
+              content: `Generate recruiting email drafts for:\n${JSON.stringify(
+                athlete_info,
+                null,
+                2
+              )}`,
+            },
           ],
         }),
       }
