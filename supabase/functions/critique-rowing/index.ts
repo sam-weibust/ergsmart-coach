@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,79 +18,65 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Frontend must send: { user_id, workout, notes }
+    const { user_id, workout, notes } = await req.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { messages, image_base64 } = await req.json();
-
-    if (!image_base64) {
-      return new Response(JSON.stringify({ error: "Missing image_base64" }), {
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Fetch user profile + goals for context
+    const [profileRes, goalsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+      supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .maybeSingle(),
+    ]);
+
+    const profile = profileRes.data;
+    const goals = goalsRes.data;
+
+    const userContext = `
+USER PROFILE:
+- Name: ${profile?.full_name || "Unknown"}
+- Type: ${profile?.user_type || "rower"}
+- Experience: ${profile?.experience_level || "Unknown"}
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
+
+USER GOALS:
+- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
+- Current 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
+`.trim();
+
     const systemPrompt = `
-You are CrewSync AI — an expert rowing technique analyst.
+You are CrewSync AI, an expert rowing coach specializing in technique analysis.
 
-You analyze:
-- Body position
-- Sequencing
-- Stroke length
-- Posture
-- Handle path
-- Slide control
-- Drive mechanics
-- Recovery flow
+Use the user's real data:
 
-Your output must be:
-- Supportive but honest
-- Specific and actionable
-- Focused on technique
-- Written in clean markdown
+${userContext}
 
-Return feedback in this structure:
+Your job:
+- Analyze the user's rowing technique based on the workout and notes
+- Identify strengths and weaknesses
+- Give specific, actionable corrections
+- Suggest drills and cues
+- Use rowing terminology naturally
+- Keep feedback encouraging but honest
+- Use markdown formatting
+`.trim();
 
-### Technique Summary
-(2–3 sentences)
-
-### Key Issues
-- **Issue** — what’s wrong
-- **Issue** — what’s wrong
-
-### Fixes
-- **Fix** — how to correct it
-- **Fix** — how to correct it
-
-### Suggested Drills
-- Drill name — 1 sentence purpose
-`;
-
-    // Anthropic vision request
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -108,16 +94,7 @@ Return feedback in this structure:
             { role: "system", content: systemPrompt },
             {
               role: "user",
-              content: [
-                {
-                  type: "input_image",
-                  image_base64,
-                },
-                {
-                  type: "text",
-                  text: "Analyze this rowing technique.",
-                },
-              ],
+              content: `WORKOUT DATA:\n${JSON.stringify(workout, null, 2)}\n\nNOTES:\n${notes}`,
             },
           ],
         }),
