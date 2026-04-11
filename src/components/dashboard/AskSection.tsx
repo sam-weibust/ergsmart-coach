@@ -38,7 +38,12 @@ const AskSection = () => {
         .limit(100);
 
       if (data && data.length > 0) {
-        setMessages(data.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setMessages(
+          data.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }))
+        );
       }
       setHistoryLoaded(true);
     };
@@ -46,14 +51,22 @@ const AskSection = () => {
   }, []);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
-  const persistMessage = useCallback(async (role: "user" | "assistant", content: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from("chat_messages").insert({ user_id: user.id, role, content });
-  }, []);
+  const persistMessage = useCallback(
+    async (role: "user" | "assistant", content: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase
+        .from("chat_messages")
+        .insert({ user_id: user.id, role, content });
+    },
+    []
+  );
 
   const clearHistory = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -78,16 +91,27 @@ const AskSection = () => {
     let assistantSoFar = "";
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not logged in");
+      // ⭐ FIX: get both session + user_id
+      const [{ data: { session } }, { data: { user } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
 
+      if (!session?.access_token || !user?.id) {
+        throw new Error("Not logged in");
+      }
+
+      // ⭐ FIX: include user_id in body
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ messages: updatedMessages }),
+        body: JSON.stringify({
+          user_id: user.id,
+          messages: updatedMessages,
+        }),
       });
 
       if (!resp.ok) {
@@ -105,10 +129,12 @@ const AskSection = () => {
       const upsert = (chunk: string) => {
         assistantSoFar += chunk;
         const content = assistantSoFar;
-        setMessages(prev => {
+        setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "assistant") {
-            return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content } : m));
+            return prev.map((m, i) =>
+              i === prev.length - 1 ? { ...m, content } : m
+            );
           }
           return [...prev, { role: "assistant", content }];
         });
@@ -127,7 +153,10 @@ const AskSection = () => {
           if (line.startsWith(":") || line.trim() === "") continue;
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") { streamDone = true; break; }
+          if (jsonStr === "[DONE]") {
+            streamDone = true;
+            break;
+          }
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
@@ -162,7 +191,7 @@ const AskSection = () => {
     } catch (e: any) {
       console.error("Chat error:", e);
       const errorMsg = `Sorry, something went wrong: ${e.message}`;
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         { role: "assistant", content: errorMsg },
       ]);
@@ -176,7 +205,10 @@ const AskSection = () => {
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           {/* Chat messages area */}
-          <div ref={scrollRef} className="h-[500px] overflow-y-auto p-4 space-y-4">
+          <div
+            ref={scrollRef}
+            className="h-[500px] overflow-y-auto p-4 space-y-4"
+          >
             {!historyLoaded ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -189,7 +221,9 @@ const AskSection = () => {
                 <div>
                   <h3 className="text-lg font-semibold">CrewSync AI Coach</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                    Ask me anything about rowing, training, technique, or your personal plans and goals. I have access to your profile and workout history.
+                    Ask me anything about rowing, training, technique, or your
+                    personal plans and goals. I have access to your profile and
+                    workout history.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
@@ -209,7 +243,14 @@ const AskSection = () => {
             ) : (
               <>
                 {messages.map((msg, i) => (
-                  <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    key={i}
+                    className={`flex gap-3 ${
+                      msg.role === "user"
+                        ? "justify-end"
+                        : "justify-start"
+                    }`}
+                  >
                     {msg.role === "assistant" && (
                       <div className="flex-shrink-0 mt-1">
                         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -242,16 +283,17 @@ const AskSection = () => {
                   </div>
                 ))}
 
-                {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-                  <div className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Bot className="h-4 w-4 text-primary" />
+                {isLoading &&
+                  messages[messages.length - 1]?.role !== "assistant" && (
+                    <div className="flex gap-3">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="bg-muted rounded-2xl px-4 py-3">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
                     </div>
-                    <div className="bg-muted rounded-2xl px-4 py-3">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
+                  )}
               </>
             )}
           </div>
