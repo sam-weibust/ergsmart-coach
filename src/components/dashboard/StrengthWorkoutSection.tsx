@@ -24,6 +24,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [feedback, setFeedback] = useState<any>(null);
+
   const [workout, setWorkout] = useState({
     exercise: "",
     sets: "",
@@ -35,11 +36,13 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     rest_between_sets: "",
   });
 
+  // ⭐ FIXED: generate-strength now includes user_id
   const getSuggestions = async () => {
     setLoadingSuggestions(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-strength", {
         body: {
+          user_id: profile.id,   // ⭐ REQUIRED
           weight: profile.weight,
           height: profile.height,
           experience: profile.experience_level,
@@ -62,7 +65,6 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
   };
 
   const selectSuggestion = (suggestion: any) => {
-    // Convert kg recommendation to lbs for display
     const weightLbs = Math.round(suggestion.recommendedWeight * 2.205);
     setWorkout({
       exercise: suggestion.exercise,
@@ -77,10 +79,10 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     setSuggestions([]);
   };
 
+  // ⭐ FIXED: analyze-workout now includes user_id
   const getAIFeedback = async (savedWorkout: any) => {
     setAnalyzingFeedback(true);
     try {
-      // Fetch recent workouts for this exercise
       const { data: recentWorkouts } = await supabase
         .from("strength_workouts")
         .select("*")
@@ -91,6 +93,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
 
       const { data, error } = await supabase.functions.invoke("analyze-workout", {
         body: {
+          user_id: profile.id,        // ⭐ REQUIRED
           workoutType: "strength",
           workout: savedWorkout,
           profile: profile,
@@ -100,11 +103,10 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-      
+
       setFeedback(data.feedback);
     } catch (error) {
       console.error("Error getting feedback:", error);
-      // Don't show error toast - feedback is optional
     } finally {
       setAnalyzingFeedback(false);
     }
@@ -115,11 +117,10 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
 
     setLoading(true);
     setFeedback(null);
-    
+
     try {
-      // Convert lbs to kg for storage
       const weightKg = lbsToKg(parseFloat(workout.weight));
-      
+
       const workoutData = {
         user_id: profile.id,
         exercise: workout.exercise,
@@ -145,7 +146,6 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
         description: "Analyzing your performance...",
       });
 
-      // Get AI feedback
       await getAIFeedback({
         ...workoutData,
         id: data.id,
@@ -178,7 +178,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
       {feedback && (
         <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
       )}
-      
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -191,6 +191,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
               disabled={loadingSuggestions}
               variant="outline"
               size="sm"
+              className="gap-1.5"
             >
               {loadingSuggestions ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -203,6 +204,7 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
             </Button>
           </CardTitle>
         </CardHeader>
+
         <CardContent className="space-y-4">
           {suggestions.length > 0 && (
             <div className="space-y-2">
@@ -319,7 +321,11 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
             />
           </div>
 
-          <Button onClick={handleSave} disabled={loading || analyzingFeedback || !workout.exercise} className="w-full">
+          <Button
+            onClick={handleSave}
+            disabled={loading || analyzingFeedback || !workout.exercise}
+            className="w-full"
+          >
             {loading || analyzingFeedback ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
