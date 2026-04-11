@@ -36,6 +36,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
     if (pm5Data.splitTime) setWorkout(p => ({ ...p, avg_split: pm5Data.splitTime! }));
     if (pm5Data.elapsedTime) setWorkout(p => ({ ...p, duration: pm5Data.elapsedTime! }));
   }, [pm5Data.distance, pm5Data.splitTime, pm5Data.elapsedTime]);
+
   const [workout, setWorkout] = useState({
     workout_type: "steady_state",
     distance: "",
@@ -47,13 +48,13 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
     warmup_duration: "",
     cooldown_duration: "",
     rest_periods: "",
-    // Interval-specific fields
     interval_count: "",
     interval_duration: "",
     interval_distance: "",
     interval_rest: "",
   });
 
+  // ⭐ FIXED: parse-erg-screen now includes user_id
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -79,7 +80,10 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
           },
-          body: JSON.stringify({ imageBase64: base64 }),
+          body: JSON.stringify({
+            user_id: profile.id,   // ⭐ REQUIRED
+            imageBase64: base64,
+          }),
         }
       );
 
@@ -108,16 +112,15 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
       sonnerToast.error(err.message || "Failed to read erg screen");
     } finally {
       setParsingPhoto(false);
-      // Reset inputs so same file can be re-selected
       if (photoInputRef.current) photoInputRef.current.value = "";
       if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
   };
 
+  // ⭐ FIXED: analyze-workout now includes user_id
   const getAIFeedback = async (savedWorkout: any) => {
     setAnalyzingFeedback(true);
     try {
-      // Fetch recent workouts for context
       const { data: recentWorkouts } = await supabase
         .from("erg_workouts")
         .select("*")
@@ -127,6 +130,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
 
       const { data, error } = await supabase.functions.invoke("analyze-workout", {
         body: {
+          user_id: profile.id,        // ⭐ REQUIRED
           workoutType: "erg",
           workout: savedWorkout,
           profile: profile,
@@ -136,11 +140,10 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-      
+
       setFeedback(data.feedback);
     } catch (error) {
       console.error("Error getting feedback:", error);
-      // Don't show error toast - feedback is optional
     } finally {
       setAnalyzingFeedback(false);
     }
@@ -151,7 +154,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
 
     setLoading(true);
     setFeedback(null);
-    
+
     try {
       const workoutData = {
         user_id: profile.id,
@@ -180,7 +183,6 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
         description: "Analyzing your performance...",
       });
 
-      // Get AI feedback
       await getAIFeedback({
         ...workoutData,
         id: data.id,
@@ -220,7 +222,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
       {feedback && (
         <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
       )}
-      
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -228,13 +230,15 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
               <Plus className="h-5 w-5" />
               Log Erg Workout
             </CardTitle>
+
             <div className="flex gap-2">
-              {/* PM5 Bluetooth Connect */}
               {isSupported && (
                 connected ? (
                   <Button variant="outline" size="sm" onClick={disconnect} className="gap-1.5">
                     <Bluetooth className="h-4 w-4 text-green-500" />
-                    <Badge variant="outline" className="text-green-600 border-green-500/30 text-xs px-1.5">Connected</Badge>
+                    <Badge variant="outline" className="text-green-600 border-green-500/30 text-xs px-1.5">
+                      Connected
+                    </Badge>
                   </Button>
                 ) : (
                   <Button variant="outline" size="sm" onClick={connect} disabled={connecting} className="gap-1.5">
@@ -243,6 +247,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                   </Button>
                 )
               )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -253,6 +258,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                 {parsingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                 <span className="hidden sm:inline">Snap Erg</span>
               </Button>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -265,9 +271,11 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
               </Button>
             </div>
           </div>
+
           <p className="text-sm text-muted-foreground mt-1">
             Take a photo of your erg screen or type your workout manually.
           </p>
+
           <input
             ref={cameraInputRef}
             type="file"
@@ -276,6 +284,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             className="hidden"
             onChange={handlePhotoCapture}
           />
+
           <input
             ref={photoInputRef}
             type="file"
@@ -284,7 +293,9 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             onChange={handlePhotoCapture}
           />
         </CardHeader>
+
         <CardContent className="space-y-4">
+          {/* Workout Type */}
           <div className="space-y-2">
             <Label htmlFor="workout_type">Workout Type</Label>
             <Select
@@ -319,6 +330,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                       <Timer className="h-3 w-3" /> Time
                     </Label>
                   </div>
+
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="distance" id="distance" />
                     <Label htmlFor="distance" className="flex items-center gap-1 cursor-pointer">
@@ -327,7 +339,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                   </div>
                 </RadioGroup>
               </div>
-              
+
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-1">
                   <Label className="text-xs"># of Intervals</Label>
@@ -338,7 +350,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                     onChange={(e) => setWorkout({ ...workout, interval_count: e.target.value })}
                   />
                 </div>
-                
+
                 {intervalMode === "time" ? (
                   <div className="space-y-1">
                     <Label className="text-xs">Interval Duration</Label>
@@ -359,7 +371,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
                     />
                   </div>
                 )}
-                
+
                 <div className="space-y-1">
                   <Label className="text-xs">Rest Between</Label>
                   <Input
@@ -372,6 +384,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             </div>
           )}
 
+          {/* Main Fields */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="distance">Total Distance (m)</Label>
@@ -427,6 +440,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             </div>
           </div>
 
+          {/* Warmup / Cooldown / Rest */}
           <div className="border-t pt-4 mt-4">
             <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
             <div className="grid gap-4 md:grid-cols-3">
@@ -462,6 +476,7 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             </div>
           </div>
 
+          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
@@ -473,20 +488,3 @@ const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
             />
           </div>
 
-          <Button onClick={handleSave} disabled={loading || analyzingFeedback} className="w-full">
-            {loading || analyzingFeedback ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {analyzingFeedback ? "Analyzing..." : "Saving..."}
-              </>
-            ) : (
-              "Log Workout & Get Feedback"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-export default ErgWorkoutSection;
