@@ -174,34 +174,39 @@ ${userContext}
 `.trim();
 console.log("ANTHROPIC KEY LENGTH:", ANTHROPIC_API_KEY?.length);
 
-    // ⭐ CALL CLAUDE (non-streaming)
-    const anthropicResponse = await fetch(
-      "https://api.anthropic.com/v1/messages",
-      {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
+   // ⭐ CALL CLAUDE (non-streaming)
+const anthropicResponse = await fetch(
+  "https://api.anthropic.com/v1/messages",
+  {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-sonnet-latest",
+      max_tokens: 4096,
+      stream: false,
+
+      // ⭐ Claude 3.5 requires system prompt HERE
+      system: systemPrompt,
+
+      // ⭐ Only user messages go in messages[]
+      messages: [
+        {
+          role: "user",
+          content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
+            preferences,
+            null,
+            2
+          )}`,
         },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-latest",
-          max_tokens: 4096,
-          stream: false,
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
-                preferences,
-                null,
-                2
-              )}`,
-            },
-          ],
-        }),
-      }
-    );
+      ],
+    }),
+  }
+);
+
 
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
