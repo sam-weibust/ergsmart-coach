@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { useSupabaseClient } from "@supabase/auth-helpers-react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL!,
+  import.meta.env.VITE_SUPABASE_ANON_KEY!
+);
 
 interface ErgWorkout {
   distance: string;
@@ -22,8 +27,6 @@ interface ErgWorkout {
 }
 
 const ErgWorkoutSection = () => {
-  const supabase = useSupabaseClient();
-
   const [workout, setWorkout] = useState<ErgWorkout>({
     distance: "",
     duration: "",
@@ -38,6 +41,7 @@ const ErgWorkoutSection = () => {
 
   const [loading, setLoading] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
+
 
   const handleSave = async () => {
     try {
