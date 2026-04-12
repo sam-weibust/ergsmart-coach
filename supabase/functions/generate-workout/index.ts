@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -18,15 +19,18 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
+    // Supabase client (service role)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Parse body safely
+    // ⭐ FIXED: SAFE BODY PARSING (req.json() breaks in production)
+    const raw = await req.text();
     let body;
+
     try {
-      body = await req.json();
+      body = JSON.parse(raw);
     } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
         status: 400,
@@ -34,10 +38,12 @@ serve(async (req) => {
       });
     }
 
+    // Extract fields
     const user_id = body.user_id;
     const workout_type = body.workout_type ?? "general";
     const preferences = body.preferences ?? {};
 
+    // Validate
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
@@ -68,6 +74,7 @@ serve(async (req) => {
     const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
+    // Build user context
     const userContext = `
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
@@ -120,6 +127,7 @@ User context:
 ${userContext}
 `.trim();
 
+    // Call Anthropic (streaming)
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -157,6 +165,7 @@ ${userContext}
       });
     }
 
+    // Stream response back to client
     return new Response(anthropicResponse.body, {
       headers: {
         ...corsHeaders,
