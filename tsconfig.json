@@ -1,24 +1,20 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",                     // ⭐ REQUIRED FOR ALIASES TO WORK ON VERCEL
     "allowJs": true,
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["src/*"]                  // ⭐ Alias now works everywhere
     },
     "skipLibCheck": true,
     "strictNullChecks": false
   },
-  "files": [],
+  "include": ["src"],                   // ⭐ Ensures Vercel includes your source files
+  "exclude": ["node_modules"],
   "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
-    }
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
   ]
 }
