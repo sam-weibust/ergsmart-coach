@@ -1,389 +1,182 @@
-import { useState, useRef, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Timer, Ruler, Camera, ImageIcon, Bluetooth } from "lucide-react";
-import { WorkoutFeedback } from "./WorkoutFeedback";
-import { toast as sonnerToast } from "sonner";
-import { usePM5Bluetooth } from "@/hooks/usePM5Bluetooth";
+"use client";
 
-interface ErgWorkoutSectionProps {
-  profile: any;
-  fullView?: boolean;
+import { useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useSupabaseClient } from "@supabase/auth-helpers-react";
+
+interface ErgWorkout {
+  distance: string;
+  duration: string;
+  split: string;
+  stroke_rate: string;
+  drag_factor: string;
+  notes: string;
+  warmup_duration: string;
+  cooldown_duration: string;
+  rest_periods: string;
 }
 
-const ErgWorkoutSection = ({ profile, fullView }: ErgWorkoutSectionProps) => {
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
-  const [parsingPhoto, setParsingPhoto] = useState(false);
-  const [feedback, setFeedback] = useState<any>(null);
-  const [intervalMode, setIntervalMode] = useState<"time" | "distance">("time");
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const { connected, connecting, pm5Data, connect, disconnect, isSupported } = usePM5Bluetooth();
+const ErgWorkoutSection = () => {
+  const supabase = useSupabaseClient();
 
-  const [workout, setWorkout] = useState({
-    workout_type: "steady_state",
+  const [workout, setWorkout] = useState<ErgWorkout>({
     distance: "",
     duration: "",
-    avg_split: "",
-    avg_heart_rate: "",
-    calories: "",
+    split: "",
+    stroke_rate: "",
+    drag_factor: "",
     notes: "",
     warmup_duration: "",
     cooldown_duration: "",
     rest_periods: "",
-    interval_count: "",
-    interval_duration: "",
-    interval_distance: "",
-    interval_rest: "",
   });
 
-  useEffect(() => {
-    if (pm5Data.distance) setWorkout(p => ({ ...p, distance: String(pm5Data.distance) }));
-    if (pm5Data.splitTime) setWorkout(p => ({ ...p, avg_split: pm5Data.splitTime! }));
-    if (pm5Data.elapsedTime) setWorkout(p => ({ ...p, duration: pm5Data.elapsedTime! }));
-  }, [pm5Data.distance, pm5Data.splitTime, pm5Data.elapsedTime]);
-  // ⭐ FIXED: parse-erg-screen now includes user_id
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [loading, setLoading] = useState(false);
+  const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
 
-    setParsingPhoto(true);
-    sonnerToast.info("Reading your erg screen...");
-
+  const handleSave = async () => {
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      setLoading(true);
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: userData } = await supabase.auth.getUser();
+      const user_id = userData?.user?.id;
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-erg-screen`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({
-            user_id: profile.id,   // ⭐ REQUIRED
-            imageBase64: base64,
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || `Error ${resp.status}`);
+      if (!user_id) {
+        alert("User not logged in.");
+        return;
       }
 
-      const data = await resp.json();
-      const w = data.workout;
-
-      setWorkout(prev => ({
-        ...prev,
-        workout_type: w.workout_type || prev.workout_type,
-        distance: w.distance ? String(w.distance) : prev.distance,
-        duration: w.duration || prev.duration,
-        avg_split: w.avg_split || prev.avg_split,
-        avg_heart_rate: w.avg_heart_rate ? String(w.avg_heart_rate) : prev.avg_heart_rate,
-        calories: w.calories ? String(w.calories) : prev.calories,
-        notes: w.notes || prev.notes,
-      }));
-
-      sonnerToast.success("Erg data imported! Review and save.");
-    } catch (err: any) {
-      console.error("Photo parse error:", err);
-      sonnerToast.error(err.message || "Failed to read erg screen");
-    } finally {
-      setParsingPhoto(false);
-      if (photoInputRef.current) photoInputRef.current.value = "";
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
-    }
-  };
-
-  // ⭐ FIXED: analyze-workout now includes user_id
-  const getAIFeedback = async (savedWorkout: any) => {
-    setAnalyzingFeedback(true);
-    try {
-      const { data: recentWorkouts } = await supabase
-        .from("erg_workouts")
-        .select("*")
-        .eq("user_id", profile.id)
-        .order("workout_date", { ascending: false })
-        .limit(5);
-
-      const { data, error } = await supabase.functions.invoke("analyze-workout", {
-        body: {
-          user_id: profile.id,        // ⭐ REQUIRED
-          workoutType: "erg",
-          workout: savedWorkout,
-          profile: profile,
-          recentWorkouts: recentWorkouts || [],
-        },
+      const { error } = await supabase.from("erg_workouts").insert({
+        user_id,
+        ...workout,
       });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (error) {
+        console.error(error);
+        alert("Error saving workout.");
+        return;
+      }
 
-      setFeedback(data.feedback);
-    } catch (error) {
-      console.error("Error getting feedback:", error);
-    } finally {
-      setAnalyzingFeedback(false);
-    }
-  };
-  const handleSave = async () => {
-    if (!profile) return;
+      setAnalyzingFeedback(true);
 
-    setLoading(true);
-    setFeedback(null);
-
-    try {
-      const workoutData = {
-        user_id: profile.id,
-        workout_type: workout.workout_type,
-        distance: workout.distance ? parseInt(workout.distance) : null,
-        duration: workout.duration || null,
-        avg_split: workout.avg_split || null,
-        avg_heart_rate: workout.avg_heart_rate ? parseInt(workout.avg_heart_rate) : null,
-        calories: workout.calories ? parseInt(workout.calories) : null,
-        notes: workout.notes || null,
-        warmup_duration: workout.warmup_duration || null,
-        cooldown_duration: workout.cooldown_duration || null,
-        rest_periods: workout.rest_periods || null,
-      };
-
-      const { data, error } = await supabase
-        .from("erg_workouts")
-        .insert(workoutData as any)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: "Workout logged!",
-        description: "Analyzing your performance...",
+      const feedbackRes = await fetch("/api/analyze-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id, workout }),
       });
 
-      await getAIFeedback({
-        ...workoutData,
-        id: data.id,
-      });
+      const feedbackData = await feedbackRes.json();
+      console.log("AI Feedback:", feedbackData);
 
-      setWorkout({
-        workout_type: "steady_state",
-        distance: "",
-        duration: "",
-        avg_split: "",
-        avg_heart_rate: "",
-        calories: "",
-        notes: "",
-        warmup_duration: "",
-        cooldown_duration: "",
-        rest_periods: "",
-        interval_count: "",
-        interval_duration: "",
-        interval_distance: "",
-        interval_rest: "",
-      });
-      setIntervalMode("time");
-    } catch (error) {
-      console.error("Error saving workout:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save workout. Please try again.",
-        variant: "destructive",
-      });
+      alert("Workout logged and feedback generated!");
+    } catch (err) {
+      console.error(err);
+      alert("Unexpected error.");
     } finally {
       setLoading(false);
+      setAnalyzingFeedback(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      {feedback && (
-        <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
-      )}
-
+    <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              Log Erg Workout
-            </CardTitle>
-
-            <div className="flex gap-2">
-              {isSupported && (
-                connected ? (
-                  <Button variant="outline" size="sm" onClick={disconnect} className="gap-1.5">
-                    <Bluetooth className="h-4 w-4 text-green-500" />
-                    <Badge variant="outline" className="text-green-600 border-green-500/30 text-xs px-1.5">
-                      Connected
-                    </Badge>
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={connect} disabled={connecting} className="gap-1.5">
-                    {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bluetooth className="h-4 w-4" />}
-                    <span className="hidden sm:inline">Connect Erg</span>
-                  </Button>
-                )
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={parsingPhoto}
-                className="gap-1.5"
-              >
-                {parsingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                <span className="hidden sm:inline">Snap Erg</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={parsingPhoto}
-                className="gap-1.5"
-              >
-                {parsingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                <span className="hidden sm:inline">Upload Photo</span>
-              </Button>
-            </div>
-          </div>
-
-          <p className="text-sm text-muted-foreground mt-1">
-            Take a photo of your erg screen or type your workout manually.
-          </p>
-
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhotoCapture}
-          />
-
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoCapture}
-          />
+          <CardTitle>Log Erg Workout</CardTitle>
         </CardHeader>
-
         <CardContent className="space-y-4">
-          {/* Main Fields */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="distance">Total Distance (m)</Label>
-              <Input
-                id="distance"
-                type="number"
-                placeholder="5000"
-                value={workout.distance}
-                onChange={(e) => setWorkout({ ...workout, distance: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="duration">Total Duration (MM:SS)</Label>
-              <Input
-                id="duration"
-                placeholder="20:00"
-                value={workout.duration}
-                onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="avg_split">Avg Split (/500m)</Label>
-              <Input
-                id="avg_split"
-                placeholder="2:00.0"
-                value={workout.avg_split}
-                onChange={(e) => setWorkout({ ...workout, avg_split: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="avg_heart_rate">Avg HR (bpm)</Label>
-              <Input
-                id="avg_heart_rate"
-                type="number"
-                placeholder="150"
-                value={workout.avg_heart_rate}
-                onChange={(e) => setWorkout({ ...workout, avg_heart_rate: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="calories">Calories</Label>
-              <Input
-                id="calories"
-                type="number"
-                placeholder="500"
-                value={workout.calories}
-                onChange={(e) => setWorkout({ ...workout, calories: e.target.value })}
-              />
-            </div>
+          {/* Distance */}
+          <div className="space-y-2">
+            <Label htmlFor="distance">Distance (meters)</Label>
+            <Input
+              id="distance"
+              placeholder="e.g., 2000"
+              value={workout.distance}
+              onChange={(e) => setWorkout({ ...workout, distance: e.target.value })}
+            />
           </div>
 
-          {/* Warmup / Cooldown / Rest */}
-          <div className="border-t pt-4 mt-4">
-            <h4 className="text-sm font-medium mb-3">Warmup / Cooldown / Rest</h4>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="warmup_duration">Warmup (MM:SS)</Label>
-                <Input
-                  id="warmup_duration"
-                  placeholder="10:00"
-                  value={workout.warmup_duration}
-                  onChange={(e) => setWorkout({ ...workout, warmup_duration: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cooldown_duration">Cooldown (MM:SS)</Label>
-                <Input
-                  id="cooldown_duration"
-                  placeholder="5:00"
-                  value={workout.cooldown_duration}
-                  onChange={(e) => setWorkout({ ...workout, cooldown_duration: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="rest_periods">Rest Periods</Label>
-                <Input
-                  id="rest_periods"
-                  placeholder="e.g., 2:00 between sets"
-                  value={workout.rest_periods}
-                  onChange={(e) => setWorkout({ ...workout, rest_periods: e.target.value })}
-                />
-              </div>
-            </div>
+          {/* Duration */}
+          <div className="space-y-2">
+            <Label htmlFor="duration">Duration (mm:ss)</Label>
+            <Input
+              id="duration"
+              placeholder="e.g., 07:30"
+              value={workout.duration}
+              onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
+            />
           </div>
 
+          {/* Split */}
+          <div className="space-y-2">
+            <Label htmlFor="split">Split (per 500m)</Label>
+            <Input
+              id="split"
+              placeholder="e.g., 01:52"
+              value={workout.split}
+              onChange={(e) => setWorkout({ ...workout, split: e.target.value })}
+            />
+          </div>
+
+          {/* Stroke Rate */}
+          <div className="space-y-2">
+            <Label htmlFor="stroke_rate">Stroke Rate (spm)</Label>
+            <Input
+              id="stroke_rate"
+              placeholder="e.g., 30"
+              value={workout.stroke_rate}
+              onChange={(e) => setWorkout({ ...workout, stroke_rate: e.target.value })}
+            />
+          </div>
+
+          {/* Drag Factor */}
+          <div className="space-y-2">
+            <Label htmlFor="drag_factor">Drag Factor</Label>
+            <Input
+              id="drag_factor"
+              placeholder="e.g., 120"
+              value={workout.drag_factor}
+              onChange={(e) => setWorkout({ ...workout, drag_factor: e.target.value })}
+            />
+          </div>
+
+          {/* Warmup */}
+          <div className="space-y-2">
+            <Label htmlFor="warmup_duration">Warmup Duration</Label>
+            <Input
+              id="warmup_duration"
+              placeholder="e.g., 10:00"
+              value={workout.warmup_duration}
+              onChange={(e) => setWorkout({ ...workout, warmup_duration: e.target.value })}
+            />
+          </div>
+
+          {/* Cooldown */}
+          <div className="space-y-2">
+            <Label htmlFor="cooldown_duration">Cooldown Duration</Label>
+            <Input
+              id="cooldown_duration"
+              placeholder="e.g., 10:00"
+              value={workout.cooldown_duration}
+              onChange={(e) => setWorkout({ ...workout, cooldown_duration: e.target.value })}
+            />
+          </div>
+
+          {/* Rest Periods */}
+          <div className="space-y-2">
+            <Label htmlFor="rest_periods">Rest Periods</Label>
+            <Input
+              id="rest_periods"
+              placeholder="e.g., 2:00 between sets"
+              value={workout.rest_periods}
+              onChange={(e) => setWorkout({ ...workout, rest_periods: e.target.value })}
+            />
+          </div>
           {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
