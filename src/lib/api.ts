@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient";
+import { supabase } from "@/integrations/supabase/client";
 
 const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
