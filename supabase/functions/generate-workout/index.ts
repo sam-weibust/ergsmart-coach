@@ -172,6 +172,7 @@ JSON FORMAT:
 User context:
 ${userContext}
 `.trim();
+console.log("ANTHROPIC KEY LENGTH:", ANTHROPIC_API_KEY?.length);
 
     // ⭐ CALL CLAUDE (non-streaming)
     const anthropicResponse = await fetch(
