@@ -178,38 +178,32 @@ User context:
 ${userContext}
 `.trim();
 
-    // ---------------------------
-    // CALL CLAUDE (NON-STREAMING)
-    // ---------------------------
-    console.log("Calling Anthropic…");
+    body: JSON.stringify({
+  model: "claude-3-5-sonnet-latest",
+  max_tokens: 4096,
+  stream: false,
 
-    const anthropicResponse = await fetch(
-      "https://api.anthropic.com/v1/messages",
-      {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
+  // ⭐ Claude 3.5 requires system prompt HERE
+  system: systemPrompt,
+
+  // ⭐ Only user messages go in messages[]
+  messages: [
+    {
+      role: "user",
+      content: `Generate a strength workout.\nUser profile: ${JSON.stringify(
+        {
+          weight: profile.weight,
+          height: profile.height,
+          experience: profile.experience_level,
+          goals: profile.goals,
         },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-latest",
-          max_tokens: 4096,
-          stream: false,
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
-                preferences,
-                null,
-                2
-              )}`,
-            },
-          ],
-        }),
-      }
-    );
+        null,
+        2
+      )}`,
+    },
+  ],
+}),
+
 
     if (!anthropicResponse.ok) {
       const errText = await anthropicResponse.text();
