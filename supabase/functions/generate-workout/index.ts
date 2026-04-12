@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -19,16 +18,14 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Supabase client (service role)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // ⭐ FIXED: SAFE BODY PARSING (req.json() breaks in production)
+    // Safe JSON parsing
     const raw = await req.text();
     let body;
-
     try {
       body = JSON.parse(raw);
     } catch {
@@ -38,12 +35,10 @@ serve(async (req) => {
       });
     }
 
-    // Extract fields
     const user_id = body.user_id;
     const workout_type = body.workout_type ?? "general";
     const preferences = body.preferences ?? {};
 
-    // Validate
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
@@ -112,22 +107,73 @@ ${
 }
 `.trim();
 
+    // ⭐ SYSTEM PROMPT — forces strict JSON output
     const systemPrompt = `
 You are CrewSync AI, an expert rowing and strength training coach.
 
-Your job:
-- Generate a personalized workout for the user
-- Use their goals, fitness level, and recent training
-- Suggest pacing, stroke rates, and structure
-- Use rowing terminology naturally
-- Provide clear instructions and rationale
-- Use markdown formatting
+You MUST output STRICT JSON ONLY.
+No commentary. No markdown. No explanations.
+
+JSON FORMAT:
+{
+  "plan": [
+    {
+      "week": 1,
+      "phase": "Base" | "Build" | "Peak" | "Taper",
+      "days": [
+        {
+          "day": 1,
+          "ergWorkout": {
+            "zone": "UT2" | "UT1" | "TR" | "AT",
+            "description": "string",
+            "duration": "string",
+            "distance": "number | null",
+            "targetSplit": "string | null",
+            "rate": "string | null",
+            "warmup": "string | null",
+            "restPeriods": "string | null",
+            "cooldown": "string | null",
+            "notes": "string | null"
+          },
+          "strengthWorkout": {
+            "focus": "string",
+            "warmupNotes": "string | null",
+            "exercises": [
+              {
+                "exercise": "string",
+                "sets": number,
+                "reps": number,
+                "weight": "string | null",
+                "restBetweenSets": "string | null"
+              }
+            ],
+            "cooldownNotes": "string | null",
+            "notes": "string | null"
+          },
+          "yogaSession": {
+            "duration": "string | null",
+            "focus": "string | null",
+            "poses": "string | null"
+          },
+          "mealPlan": {
+            "totalCalories": number | null,
+            "breakfast": "string | null",
+            "lunch": "string | null",
+            "dinner": "string | null",
+            "snacks": "string | null",
+            "macros": "string | null"
+          }
+        }
+      ]
+    }
+  ]
+}
 
 User context:
 ${userContext}
 `.trim();
 
-    // Call Anthropic (streaming)
+    // ⭐ CALL CLAUDE (non-streaming)
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -140,7 +186,7 @@ ${userContext}
         body: JSON.stringify({
           model: "claude-3-5-sonnet-latest",
           max_tokens: 4096,
-          stream: true,
+          stream: false,
           messages: [
             { role: "system", content: systemPrompt },
             {
@@ -165,12 +211,33 @@ ${userContext}
       });
     }
 
-    // Stream response back to client
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const result = await anthropicResponse.json();
+
+    // ⭐ Extract Claude's text
+    const text = result?.content?.[0]?.text;
+    if (!text) {
+      return new Response(JSON.stringify({ error: "Invalid AI response" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ⭐ Parse JSON from Claude
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON parse error:", text);
+      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ⭐ Return JSON to frontend
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-workout error:", e);
