@@ -14,14 +14,15 @@ interface StrengthWorkoutSectionProps {
   fullView?: boolean;
 }
 
-// Convert lbs to kg for storage (database stores in kg)
 const lbsToKg = (lbs: number) => lbs / 2.20462;
 
-const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionProps) => {
+const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
   const { toast } = useToast();
+
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
+
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [feedback, setFeedback] = useState<any>(null);
 
@@ -29,34 +30,56 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     exercise: "",
     sets: "",
     reps: "",
-    weight: "", // stored as lbs in UI
+    weight: "",
     notes: "",
     warmup_notes: "",
     cooldown_notes: "",
     rest_between_sets: "",
   });
 
-  // ⭐ FIXED: generate-strength now includes user_id
+  // ⭐ STANDARDIZED: generate-strength via fetch()
   const getSuggestions = async () => {
     setLoadingSuggestions(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-strength", {
-        body: {
-          user_id: profile.id,   // ⭐ REQUIRED
-          weight: profile.weight,
-          height: profile.height,
-          experience: profile.experience_level,
-          goals: profile.goals,
-        },
-      });
+      const [{ data: { session } }, { data: { user } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
 
-      if (error) throw error;
-      setSuggestions(data.suggestions.suggestions || []);
-    } catch (error) {
+      if (!session?.access_token || !user?.id) {
+        throw new Error("Not logged in");
+      }
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-strength`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            weight: profile.weight,
+            height: profile.height,
+            experience: profile.experience_level,
+            goals: profile.goals,
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(err.error || `Error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      setSuggestions(data.suggestions?.suggestions || []);
+    } catch (error: any) {
       console.error("Error getting suggestions:", error);
       toast({
         title: "Error",
-        description: "Failed to get suggestions. Please try again.",
+        description: error.message || "Failed to get suggestions.",
         variant: "destructive",
       });
     } finally {
@@ -64,14 +87,14 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     }
   };
 
-  const selectSuggestion = (suggestion: any) => {
-    const weightLbs = Math.round(suggestion.recommendedWeight * 2.205);
+  const selectSuggestion = (s: any) => {
+    const weightLbs = Math.round(s.recommendedWeight * 2.205);
     setWorkout({
-      exercise: suggestion.exercise,
-      sets: suggestion.sets.toString(),
-      reps: suggestion.reps.toString(),
+      exercise: s.exercise,
+      sets: s.sets.toString(),
+      reps: s.reps.toString(),
       weight: weightLbs.toString(),
-      notes: suggestion.notes,
+      notes: s.notes,
       warmup_notes: "",
       cooldown_notes: "",
       rest_between_sets: "",
@@ -79,34 +102,59 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
     setSuggestions([]);
   };
 
-  // ⭐ FIXED: analyze-workout now includes user_id
+  // ⭐ STANDARDIZED: analyze-workout via fetch()
   const getAIFeedback = async (savedWorkout: any) => {
     setAnalyzingFeedback(true);
     try {
+      const [{ data: { session } }, { data: { user } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+
+      if (!session?.access_token || !user?.id) {
+        throw new Error("Not logged in");
+      }
+
       const { data: recentWorkouts } = await supabase
         .from("strength_workouts")
         .select("*")
-        .eq("user_id", profile.id)
+        .eq("user_id", user.id)
         .eq("exercise", savedWorkout.exercise)
         .order("workout_date", { ascending: false })
         .limit(5);
 
-      const { data, error } = await supabase.functions.invoke("analyze-workout", {
-        body: {
-          user_id: profile.id,        // ⭐ REQUIRED
-          workoutType: "strength",
-          workout: savedWorkout,
-          profile: profile,
-          recentWorkouts: recentWorkouts || [],
-        },
-      });
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-workout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            workoutType: "strength",
+            workout: savedWorkout,
+            profile,
+            recentWorkouts: recentWorkouts || [],
+          }),
+        }
+      );
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(err.error || `Error ${resp.status}`);
+      }
 
+      const data = await resp.json();
       setFeedback(data.feedback);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error getting feedback:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to analyze workout.",
+        variant: "destructive",
+      });
     } finally {
       setAnalyzingFeedback(false);
     }
@@ -161,11 +209,11 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
         cooldown_notes: "",
         rest_between_sets: "",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving workout:", error);
       toast({
         title: "Error",
-        description: "Failed to save workout. Please try again.",
+        description: error.message || "Failed to save workout.",
         variant: "destructive",
       });
     } finally {
@@ -220,7 +268,8 @@ const StrengthWorkoutSection = ({ profile, fullView }: StrengthWorkoutSectionPro
                     <div className="text-left">
                       <div className="font-semibold">{sug.exercise}</div>
                       <div className="text-sm text-muted-foreground">
-                        {sug.sets} sets × {sug.reps} reps @ {Math.round(sug.recommendedWeight * 2.205)} lbs
+                        {sug.sets} sets × {sug.reps} reps @{" "}
+                        {Math.round(sug.recommendedWeight * 2.205)} lbs
                       </div>
                     </div>
                   </Button>
