@@ -18,14 +18,24 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Frontend must send: { user_id, muscle_group, equipment, preferences }
-    const { user_id, muscle_group, equipment, preferences } = await req.json();
+    // Safe JSON parsing
+    const raw = await req.text();
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { user_id, muscle_group, equipment, preferences } = body;
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -37,11 +47,7 @@ serve(async (req) => {
     // Fetch user profile + goals + recent strength workouts
     const [profileRes, goalsRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
-      supabase
-        .from("user_goals")
-        .select("*")
-        .eq("user_id", user_id)
-        .maybeSingle(),
+      supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
       supabase
         .from("strength_workouts")
         .select("*")
@@ -62,7 +68,6 @@ USER PROFILE:
 
 USER GOALS:
 - Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
 
 RECENT STRENGTH WORKOUTS:
 ${
@@ -77,21 +82,37 @@ ${
 }
 `.trim();
 
+    // ⭐ SYSTEM PROMPT — forces strict JSON output
     const systemPrompt = `
 You are CrewSync AI, an expert strength coach for rowers.
 
-Your job:
-- Generate a personalized strength workout
-- Use the user's goals, experience, and recent training
-- Suggest sets, reps, weights, tempo, and rest
-- Provide rowing-specific rationale
-- Use markdown formatting
-- Keep instructions clear and actionable
+You MUST output STRICT JSON ONLY.
+No markdown. No commentary. No explanations.
+
+JSON FORMAT:
+{
+  "strengthWorkout": {
+    "focus": "string",
+    "warmupNotes": "string | null",
+    "exercises": [
+      {
+        "exercise": "string",
+        "sets": number,
+        "reps": number,
+        "weight": "string | null",
+        "restBetweenSets": "string | null"
+      }
+    ],
+    "cooldownNotes": "string | null",
+    "notes": "string | null"
+  }
+}
 
 User context:
 ${userContext}
 `.trim();
 
+    // ⭐ CALL CLAUDE (non-streaming)
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -103,8 +124,8 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-3-5-sonnet-latest",
-          max_tokens: 4096,
-          stream: true,
+          max_tokens: 2048,
+          stream: false,
           messages: [
             { role: "system", content: systemPrompt },
             {
@@ -129,11 +150,33 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const result = await anthropicResponse.json();
+
+    // Extract Claude text
+    const text = result?.content?.[0]?.text;
+    if (!text) {
+      return new Response(JSON.stringify({ error: "Invalid AI response" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Parse JSON
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON parse error:", text);
+      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Return JSON
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-strength error:", e);
