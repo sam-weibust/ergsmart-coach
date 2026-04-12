@@ -18,22 +18,19 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
   const generateMealPlan = async () => {
     setLoading(true);
     try {
-      // Get diet goal from profile, default to maintain
-      const dietGoal = (profile as any)?.diet_goal || "maintain";
-      
+      const dietGoal = profile?.diet_goal || "maintain";
+
       const { data, error } = await supabase.functions.invoke("generate-meals", {
         body: {
-          weight: profile.weight,
-          height: profile.height,
-          age: profile.age,
-          goals: profile.goals,
-          trainingLoad: "moderate",
-          dietGoal: dietGoal,
-          allergies: profile.allergies || [],
+          user_id: profile.id, // REQUIRED for your rewritten function
+          dietary_preferences: profile.dietary_preferences || [],
+          goals_override: profile.goals || null,
         },
       });
 
       if (error) throw error;
+      if (!data) throw new Error("No meal plan returned");
+
       setMealPlan(data.mealPlan);
     } catch (error) {
       console.error("Error generating meal plan:", error);
@@ -63,7 +60,6 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
       }));
 
       const { error } = await supabase.from("meal_plans").insert(meals);
-
       if (error) throw error;
 
       toast({
@@ -84,8 +80,9 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
     }
   };
 
-  const dietGoal = (profile as any)?.diet_goal || "maintain";
-  const dietLabel = dietGoal === "cut" ? "Cut" : dietGoal === "bulk" ? "Bulk" : "Maintain";
+  const dietGoal = profile?.diet_goal || "maintain";
+  const dietLabel =
+    dietGoal === "cut" ? "Cut" : dietGoal === "bulk" ? "Bulk" : "Maintain";
 
   return (
     <Card>
@@ -98,6 +95,7 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
           </span>
         </CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {!mealPlan ? (
           <Button onClick={generateMealPlan} disabled={loading} className="w-full">
@@ -126,7 +124,9 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
                     {meal.calories} cal
                   </span>
                 </div>
+
                 <p className="text-sm">{meal.description}</p>
+
                 <div className="grid grid-cols-3 gap-2 pt-2 border-t">
                   <div className="text-center p-2 bg-muted rounded">
                     <div className="text-lg font-bold text-primary">{meal.protein}g</div>
@@ -169,7 +169,9 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
             )}
 
             {mealPlan.hydrationNote && (
-              <p className="text-sm text-muted-foreground italic">💧 {mealPlan.hydrationNote}</p>
+              <p className="text-sm text-muted-foreground italic">
+                💧 {mealPlan.hydrationNote}
+              </p>
             )}
 
             <div className="flex gap-2">
@@ -183,6 +185,7 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
                   "Save Meal Plan"
                 )}
               </Button>
+
               <Button onClick={generateMealPlan} disabled={loading} variant="outline">
                 Regenerate
               </Button>
