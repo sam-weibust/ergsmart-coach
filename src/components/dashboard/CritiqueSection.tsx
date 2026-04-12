@@ -1,10 +1,26 @@
 import { useState, useRef, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Video, AlertTriangle, CheckCircle, Target, Dumbbell, Loader2, X, Play } from "lucide-react";
+import {
+  Upload,
+  Video,
+  AlertTriangle,
+  CheckCircle,
+  Target,
+  Dumbbell,
+  Loader2,
+  X,
+  Play,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -18,7 +34,7 @@ interface CritiqueResult {
   priorityFix: string;
 }
 
-const YOUTUBE_TUTORIAL_ID = "zQ82RYIFLN8"; // Concept2 proper rowing technique
+const YOUTUBE_TUTORIAL_ID = "zQ82RYIFLN8";
 
 const CritiqueSection = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -27,6 +43,7 @@ const CritiqueSection = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [critique, setCritique] = useState<CritiqueResult | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -68,7 +85,6 @@ const CritiqueSection = () => {
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d")!;
 
-        // Extract 4-6 evenly spaced frames
         const frameCount = Math.min(6, Math.max(4, Math.floor(duration)));
         const interval = duration / (frameCount + 1);
         const frames: string[] = [];
@@ -111,7 +127,14 @@ const CritiqueSection = () => {
       setExtractionProgress(60);
       toast.info("Analyzing your rowing form...");
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const [{ data: { session } }, { data: { user } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+
+      if (!session?.access_token || !user?.id) {
+        throw new Error("Not logged in");
+      }
 
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/critique-rowing`,
@@ -119,9 +142,13 @@ const CritiqueSection = () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ frames, notes }),
+          body: JSON.stringify({
+            user_id: user.id,
+            frames,
+            notes,
+          }),
         }
       );
 
@@ -152,7 +179,7 @@ const CritiqueSection = () => {
 
   return (
     <div className="space-y-6">
-      {/* Video Upload */}
+      {/* Upload Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -163,6 +190,7 @@ const CritiqueSection = () => {
             Upload a video of yourself rowing on the erg and our AI coach will analyze your form and provide corrections.
           </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-4">
           {!videoUrl ? (
             <div
@@ -348,7 +376,7 @@ const CritiqueSection = () => {
         </div>
       )}
 
-      {/* Beginner Tutorial */}
+      {/* Tutorial */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">📚 Proper Rowing Form — Beginner Tutorial</CardTitle>
