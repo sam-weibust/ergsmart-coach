@@ -50,23 +50,17 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
         throw new Error("Not logged in");
       }
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-strength`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            weight: profile.weight,
-            height: profile.height,
-            experience: profile.experience_level,
-            goals: profile.goals,
-          }),
-        }
-      );
+      const res = await generateWorkout({
+  user_id: user.id,
+  workout_type: "strength",
+  preferences: {
+    weight: profile.weight,
+    height: profile.height,
+    experience: profile.experience_level,
+    goals: profile.goals,
+  },
+});
+
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Request failed" }));
