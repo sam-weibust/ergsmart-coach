@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
+import { generateWorkout } from "@/lib/api";
 
 interface StrengthWorkoutSectionProps {
   profile: any;
@@ -37,9 +38,10 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     rest_between_sets: "",
   });
 
-  // ⭐ STANDARDIZED: generate-strength via fetch()
+  // ⭐ FIXED: generate-strength via centralized API
   const getSuggestions = async () => {
     setLoadingSuggestions(true);
+
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
@@ -51,24 +53,27 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
       }
 
       const res = await generateWorkout({
-  user_id: user.id,
-  workout_type: "strength",
-  preferences: {
-    weight: profile.weight,
-    height: profile.height,
-    experience: profile.experience_level,
-    goals: profile.goals,
-  },
-});
+        user_id: user.id,
+        workout_type: "strength",
+        preferences: {
+          weight: profile.weight,
+          height: profile.height,
+          experience: profile.experience_level,
+          goals: profile.goals,
+        },
+      });
 
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(err.error || `Error ${resp.status}`);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value);
       }
 
-      const data = await resp.json();
-      setSuggestions(data.suggestions?.suggestions || []);
+      setSuggestions([{ text: fullText }]);
     } catch (error: any) {
       console.error("Error getting suggestions:", error);
       toast({
@@ -96,9 +101,10 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     setSuggestions([]);
   };
 
-  // ⭐ STANDARDIZED: analyze-workout via fetch()
+  // ⭐ FIXED: analyze-workout via centralized API
   const getAIFeedback = async (savedWorkout: any) => {
     setAnalyzingFeedback(true);
+
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
@@ -117,31 +123,27 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
         .order("workout_date", { ascending: false })
         .limit(5);
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-workout`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            workoutType: "strength",
-            workout: savedWorkout,
-            profile,
-            recentWorkouts: recentWorkouts || [],
-          }),
-        }
-      );
+      const res = await generateWorkout({
+        user_id: user.id,
+        workout_type: "strength-analysis",
+        preferences: {
+          workout: savedWorkout,
+          profile,
+          recentWorkouts: recentWorkouts || [],
+        },
+      });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(err.error || `Error ${resp.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value);
       }
 
-      const data = await resp.json();
-      setFeedback(data.feedback);
+      setFeedback(fullText);
     } catch (error: any) {
       console.error("Error getting feedback:", error);
       toast({
@@ -154,6 +156,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     }
   };
 
+  // ⭐ FIXED: save workout + AI feedback
   const handleSave = async () => {
     if (!profile || !workout.exercise) return;
 
@@ -161,10 +164,19 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     setFeedback(null);
 
     try {
+      const [{ data: { session } }, { data: { user } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+
+      if (!session?.access_token || !user?.id) {
+        throw new Error("Not logged in");
+      }
+
       const weightKg = lbsToKg(parseFloat(workout.weight));
 
       const workoutData = {
-        user_id: profile.id,
+        user_id: user.id,
         exercise: workout.exercise,
         sets: parseInt(workout.sets),
         reps: parseInt(workout.reps),
