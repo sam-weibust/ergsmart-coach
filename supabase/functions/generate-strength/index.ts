@@ -13,9 +13,11 @@ serve(async (req) => {
   }
 
   try {
+    console.log("🔥 generate-workout invoked");
+
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+      throw new Error("Missing ANTHROPIC_API_KEY");
     }
 
     const supabase = createClient(
@@ -23,7 +25,9 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Safe JSON parsing
+    // ---------------------------
+    // SAFE JSON PARSING
+    // ---------------------------
     const raw = await req.text();
     let body;
     try {
@@ -35,7 +39,7 @@ serve(async (req) => {
       });
     }
 
-    const { user_id, muscle_group, equipment, preferences } = body;
+    const { user_id, workout_type, preferences } = body;
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -44,10 +48,21 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user profile + goals + recent strength workouts
-    const [profileRes, goalsRes, strengthRes] = await Promise.all([
+    console.log("User:", user_id);
+    console.log("Preferences:", preferences);
+
+    // ---------------------------
+    // FETCH USER CONTEXT
+    // ---------------------------
+    const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
+      supabase
+        .from("erg_workouts")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("workout_date", { ascending: false })
+        .limit(5),
       supabase
         .from("strength_workouts")
         .select("*")
@@ -58,16 +73,29 @@ serve(async (req) => {
 
     const profile = profileRes.data;
     const goals = goalsRes.data;
+    const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
     const userContext = `
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
 - Experience: ${profile?.experience_level || "Unknown"}
-- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
 
 USER GOALS:
 - Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+
+RECENT ERG WORKOUTS:
+${
+  recentErg.length
+    ? recentErg
+        .map(
+          (w) =>
+            `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, duration: ${w.duration}, avg split: ${w.avg_split}`
+        )
+        .join("\n")
+    : "No recent erg workouts"
+}
 
 RECENT STRENGTH WORKOUTS:
 ${
@@ -82,37 +110,79 @@ ${
 }
 `.trim();
 
-    // ⭐ SYSTEM PROMPT — forces strict JSON output
+    // ---------------------------
+    // STRICT JSON SYSTEM PROMPT
+    // ---------------------------
     const systemPrompt = `
-You are CrewSync AI, an expert strength coach for rowers.
+You are CrewSync AI, an expert rowing and strength coach.
 
 You MUST output STRICT JSON ONLY.
 No markdown. No commentary. No explanations.
 
 JSON FORMAT:
 {
-  "strengthWorkout": {
-    "focus": "string",
-    "warmupNotes": "string | null",
-    "exercises": [
-      {
-        "exercise": "string",
-        "sets": number,
-        "reps": number,
-        "weight": "string | null",
-        "restBetweenSets": "string | null"
-      }
-    ],
-    "cooldownNotes": "string | null",
-    "notes": "string | null"
-  }
+  "plan": [
+    {
+      "week": 1,
+      "phase": "Base" | "Build" | "Peak" | "Taper",
+      "days": [
+        {
+          "day": 1,
+          "ergWorkout": {
+            "zone": "UT2" | "UT1" | "TR" | "AT",
+            "description": "string",
+            "duration": "string",
+            "distance": "number | null",
+            "targetSplit": "string | null",
+            "rate": "string | null",
+            "warmup": "string | null",
+            "restPeriods": "string | null",
+            "cooldown": "string | null",
+            "notes": "string | null"
+          },
+          "strengthWorkout": {
+            "focus": "string",
+            "warmupNotes": "string | null",
+            "exercises": [
+              {
+                "exercise": "string",
+                "sets": number,
+                "reps": number,
+                "weight": "string | null",
+                "restBetweenSets": "string | null"
+              }
+            ],
+            "cooldownNotes": "string | null",
+            "notes": "string | null"
+          },
+          "yogaSession": {
+            "duration": "string | null",
+            "focus": "string | null",
+            "poses": "string | null"
+          },
+          "mealPlan": {
+            "totalCalories": number | null,
+            "breakfast": "string | null",
+            "lunch": "string | null",
+            "dinner": "string | null",
+            "snacks": "string | null",
+            "macros": "string | null"
+          }
+        }
+      ]
+    }
+  ]
 }
 
 User context:
 ${userContext}
 `.trim();
 
-    // ⭐ CALL CLAUDE (non-streaming)
+    // ---------------------------
+    // CALL CLAUDE (NON-STREAMING)
+    // ---------------------------
+    console.log("Calling Anthropic…");
+
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -124,13 +194,13 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-3-5-sonnet-latest",
-          max_tokens: 2048,
+          max_tokens: 4096,
           stream: false,
           messages: [
             { role: "system", content: systemPrompt },
             {
               role: "user",
-              content: `Muscle group: ${muscle_group}\nEquipment: ${equipment}\nPreferences: ${JSON.stringify(
+              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
                 preferences,
                 null,
                 2
@@ -142,44 +212,56 @@ ${userContext}
     );
 
     if (!anthropicResponse.ok) {
-      const t = await anthropicResponse.text();
-      console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const errText = await anthropicResponse.text();
+      console.error("❌ Anthropic error:", anthropicResponse.status, errText);
+
+      return new Response(
+        JSON.stringify({
+          error: "Anthropic request failed",
+          status: anthropicResponse.status,
+          details: errText,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const result = await anthropicResponse.json();
-
-    // Extract Claude text
     const text = result?.content?.[0]?.text;
+
     if (!text) {
+      console.error("❌ No text returned from Claude:", result);
       return new Response(JSON.stringify({ error: "Invalid AI response" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Parse JSON
+    // ---------------------------
+    // PARSE JSON FROM CLAUDE
+    // ---------------------------
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch (e) {
-      console.error("JSON parse error:", text);
+      console.error("❌ JSON parse error:", text);
       return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Return JSON
+    console.log("✅ Plan generated successfully");
+
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("generate-strength error:", e);
+    console.error("🔥 INTERNAL ERROR:", e);
+
     return new Response(
       JSON.stringify({
         error: e instanceof Error ? e.message : "Unknown error",
