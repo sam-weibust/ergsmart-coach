@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { generateWorkout } from "@/lib/api";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL!,
@@ -42,7 +43,6 @@ const ErgWorkoutSection = () => {
   const [loading, setLoading] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
 
-
   const handleSave = async () => {
     try {
       setLoading(true);
@@ -55,6 +55,7 @@ const ErgWorkoutSection = () => {
         return;
       }
 
+      // ⭐ SAVE WORKOUT TO SUPABASE
       const { error } = await supabase.from("erg_workouts").insert({
         user_id,
         ...workout,
@@ -66,17 +67,27 @@ const ErgWorkoutSection = () => {
         return;
       }
 
+      // ⭐ CALL EDGE FUNCTION FOR AI FEEDBACK
       setAnalyzingFeedback(true);
 
-      const feedbackRes = await fetch("/api/analyze-workout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id, workout }),
+      const res = await generateWorkout({
+        user_id,
+        workout_type: "erg-analysis",
+        preferences: workout,
       });
 
-      const feedbackData = await feedbackRes.json();
-      console.log("AI Feedback:", feedbackData);
+      // ⭐ STREAM RESPONSE
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
 
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value);
+      }
+
+      console.log("AI Feedback:", fullText);
       alert("Workout logged and feedback generated!");
     } catch (err) {
       console.error(err);
@@ -181,6 +192,7 @@ const ErgWorkoutSection = () => {
               onChange={(e) => setWorkout({ ...workout, rest_periods: e.target.value })}
             />
           </div>
+
           {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
