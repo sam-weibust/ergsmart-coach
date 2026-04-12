@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { supabase } from "@/integrations/supabase/client";
 
 const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
@@ -24,10 +26,6 @@ async function callFunction(name, body) {
 
   return res;
 }
-
-/* -----------------------------
-   EXPORTS FOR ALL FUNCTIONS
------------------------------- */
 
 export function generateWorkout(payload) {
   return callFunction("generate-workout", payload);
