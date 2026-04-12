@@ -18,14 +18,25 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Frontend must send: { user_id, workout_type, preferences }
-    const { user_id, workout_type, preferences } = await req.json();
+    // Parse body safely
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const user_id = body.user_id;
+    const workout_type = body.workout_type ?? "general";
+    const preferences = body.preferences ?? {};
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -34,14 +45,10 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user profile + goals + recent workouts
+    // Fetch user data
     const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
-      supabase
-        .from("user_goals")
-        .select("*")
-        .eq("user_id", user_id)
-        .maybeSingle(),
+      supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
       supabase
         .from("erg_workouts")
         .select("*")
