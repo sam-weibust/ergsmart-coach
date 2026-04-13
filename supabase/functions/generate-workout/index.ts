@@ -191,6 +191,10 @@ const anthropicResponse = await fetch(
 
       // ⭐ Claude 3.5 requires system prompt HERE
       system: systemPrompt,
+messages: [
+  { role: "user", content: "..." }
+]
+
 
       // ⭐ Only user messages go in messages[]
       messages: [
