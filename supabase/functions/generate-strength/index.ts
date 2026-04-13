@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log("🔥 generate-workout invoked");
+    console.log("🔥 generate-strength invoked");
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -39,7 +39,7 @@ serve(async (req) => {
       });
     }
 
-    const { user_id, workout_type, preferences } = body;
+    const { user_id, preferences } = body;
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -49,20 +49,13 @@ serve(async (req) => {
     }
 
     console.log("User:", user_id);
-    console.log("Preferences:", preferences);
 
     // ---------------------------
     // FETCH USER CONTEXT
     // ---------------------------
-    const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
+    const [profileRes, goalsRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
-      supabase
-        .from("erg_workouts")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("workout_date", { ascending: false })
-        .limit(5),
       supabase
         .from("strength_workouts")
         .select("*")
@@ -73,7 +66,6 @@ serve(async (req) => {
 
     const profile = profileRes.data;
     const goals = goalsRes.data;
-    const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
     const userContext = `
@@ -84,18 +76,6 @@ USER PROFILE:
 
 USER GOALS:
 - Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-
-RECENT ERG WORKOUTS:
-${
-  recentErg.length
-    ? recentErg
-        .map(
-          (w) =>
-            `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, duration: ${w.duration}, avg split: ${w.avg_split}`
-        )
-        .join("\n")
-    : "No recent erg workouts"
-}
 
 RECENT STRENGTH WORKOUTS:
 ${
@@ -114,96 +94,63 @@ ${
     // STRICT JSON SYSTEM PROMPT
     // ---------------------------
     const systemPrompt = `
-You are CrewSync AI, an expert rowing and strength coach.
+You are CrewSync AI, an expert strength coach.
 
 You MUST output STRICT JSON ONLY.
 No markdown. No commentary. No explanations.
 
 JSON FORMAT:
 {
-  "plan": [
-    {
-      "week": 1,
-      "phase": "Base" | "Build" | "Peak" | "Taper",
-      "days": [
-        {
-          "day": 1,
-          "ergWorkout": {
-            "zone": "UT2" | "UT1" | "TR" | "AT",
-            "description": "string",
-            "duration": "string",
-            "distance": "number | null",
-            "targetSplit": "string | null",
-            "rate": "string | null",
-            "warmup": "string | null",
-            "restPeriods": "string | null",
-            "cooldown": "string | null",
-            "notes": "string | null"
-          },
-          "strengthWorkout": {
-            "focus": "string",
-            "warmupNotes": "string | null",
-            "exercises": [
-              {
-                "exercise": "string",
-                "sets": number,
-                "reps": number,
-                "weight": "string | null",
-                "restBetweenSets": "string | null"
-              }
-            ],
-            "cooldownNotes": "string | null",
-            "notes": "string | null"
-          },
-          "yogaSession": {
-            "duration": "string | null",
-            "focus": "string | null",
-            "poses": "string | null"
-          },
-          "mealPlan": {
-            "totalCalories": number | null,
-            "breakfast": "string | null",
-            "lunch": "string | null",
-            "dinner": "string | null",
-            "snacks": "string | null",
-            "macros": "string | null"
-          }
-        }
-      ]
-    }
-  ]
+  "workout": {
+    "focus": "string",
+    "warmup": "string",
+    "exercises": [
+      {
+        "exercise": "string",
+        "sets": number,
+        "reps": number,
+        "weight": "string | null",
+        "rest": "string | null"
+      }
+    ],
+    "cooldown": "string"
+  }
 }
 
 User context:
 ${userContext}
 `.trim();
 
-    body: JSON.stringify({
-  model: "claude-3-5-sonnet-latest",
-  max_tokens: 4096,
-  stream: false,
-
-  // ⭐ Claude 3.5 requires system prompt HERE
-  system: systemPrompt,
-
-  // ⭐ Only user messages go in messages[]
-  messages: [
-    {
-      role: "user",
-      content: `Generate a strength workout.\nUser profile: ${JSON.stringify(
-        {
-          weight: profile.weight,
-          height: profile.height,
-          experience: profile.experience_level,
-          goals: profile.goals,
+    // ---------------------------
+    // CALL CLAUDE 3.5
+    // ---------------------------
+    const anthropicResponse = await fetch(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
         },
-        null,
-        2
-      )}`,
-    },
-  ],
-}),
-
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-latest",
+          max_tokens: 4096,
+          stream: false,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: `Generate a strength workout.\nPreferences: ${JSON.stringify(
+                preferences,
+                null,
+                2
+              )}`,
+            },
+          ],
+        }),
+      }
+    );
 
     if (!anthropicResponse.ok) {
       const errText = await anthropicResponse.text();
@@ -247,7 +194,7 @@ ${userContext}
       });
     }
 
-    console.log("✅ Plan generated successfully");
+    console.log("✅ Strength workout generated successfully");
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
