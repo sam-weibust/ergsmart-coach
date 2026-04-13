@@ -185,7 +185,7 @@ const anthropicResponse = await fetch(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: model: "claude-3-5-sonnet-20241022",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 4096,
       stream: false,
 
