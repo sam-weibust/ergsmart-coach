@@ -15,7 +15,7 @@ serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+      throw new Error("Missing ANTHROPIC_API_KEY");
     }
 
     const supabase = createClient(
@@ -23,7 +23,9 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Safe JSON parsing
+    // ---------------------------
+    // SAFE JSON PARSING
+    // ---------------------------
     const raw = await req.text();
     let body;
     try {
@@ -46,7 +48,9 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user data
+    // ---------------------------
+    // FETCH USER CONTEXT
+    // ---------------------------
     const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
@@ -69,7 +73,9 @@ serve(async (req) => {
     const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
-    // Build user context
+    // ---------------------------
+    // BUILD USER CONTEXT
+    // ---------------------------
     const userContext = `
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
@@ -107,7 +113,9 @@ ${
 }
 `.trim();
 
-    // ⭐ SYSTEM PROMPT — forces strict JSON output
+    // ---------------------------
+    // STRICT JSON SYSTEM PROMPT
+    // ---------------------------
     const systemPrompt = `
 You are CrewSync AI, an expert rowing and strength training coach.
 
@@ -172,45 +180,41 @@ JSON FORMAT:
 User context:
 ${userContext}
 `.trim();
-console.log("ANTHROPIC KEY LENGTH:", ANTHROPIC_API_KEY?.length);
 
-   // ⭐ CALL CLAUDE (non-streaming)
-const anthropicResponse = await fetch(
-  "https://api.anthropic.com/v1/messages",
-  {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 4096,
-      stream: false,
-
-      // ⭐ Claude 3.5 requires system prompt HERE
-      system: systemPrompt,
-messages: [
-  { role: "user", content: "..." }
-]
-
-
-      // ⭐ Only user messages go in messages[]
-      messages: [
-        {
-          role: "user",
-          content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
-            preferences,
-            null,
-            2
-          )}`,
+    // ---------------------------
+    // CALL CLAUDE 3.5
+    // ---------------------------
+    const anthropicResponse = await fetch(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
         },
-      ],
-    }),
-  }
-);
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 4096,
+          stream: false,
 
+          // ⭐ Correct placement
+          system: systemPrompt,
+
+          // ⭐ Only user messages
+          messages: [
+            {
+              role: "user",
+              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
+                preferences,
+                null,
+                2
+              )}`,
+            },
+          ],
+        }),
+      }
+    );
 
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
@@ -222,9 +226,8 @@ messages: [
     }
 
     const result = await anthropicResponse.json();
-
-    // ⭐ Extract Claude's text
     const text = result?.content?.[0]?.text;
+
     if (!text) {
       return new Response(JSON.stringify({ error: "Invalid AI response" }), {
         status: 500,
@@ -232,7 +235,9 @@ messages: [
       });
     }
 
-    // ⭐ Parse JSON from Claude
+    // ---------------------------
+    // PARSE STRICT JSON
+    // ---------------------------
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -244,7 +249,6 @@ messages: [
       });
     }
 
-    // ⭐ Return JSON to frontend
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
