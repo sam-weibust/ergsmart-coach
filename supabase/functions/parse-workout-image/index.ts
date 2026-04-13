@@ -65,7 +65,7 @@ Your job:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-latest",
+          model: "claude-3-5-sonnet-20241022",
           max_tokens: 2048,
           messages: [
             { role: "system", content: systemPrompt },
