@@ -149,7 +149,7 @@ Guidelines:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-latest",
+          model: "claude-3-5-sonnet-20241022",
           max_tokens: 4096,
           stream: true,
           messages: [{ role: "system", content: systemPrompt }, ...messages],
