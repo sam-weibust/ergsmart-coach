@@ -138,6 +138,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     try {
       const { data, error } = await supabase.functions.invoke("generate-meals", {
         body: {
+          user_id: profile.id,
           weight: profile.weight,
           height: profile.height,
           age: profile.age,

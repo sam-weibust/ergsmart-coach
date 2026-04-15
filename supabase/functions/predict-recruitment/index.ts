@@ -99,8 +99,8 @@ ${userContext}
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
           stream: true,
+          system: systemPrompt,
           messages: [
-            { role: "system", content: systemPrompt },
             {
               role: "user",
               content:

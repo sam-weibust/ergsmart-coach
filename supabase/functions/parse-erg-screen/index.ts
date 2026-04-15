@@ -66,8 +66,8 @@ Your job:
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2048,
+          system: systemPrompt,
           messages: [
-            { role: "system", content: systemPrompt },
             {
               role: "user",
               content: [

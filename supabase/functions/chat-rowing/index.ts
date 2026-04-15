@@ -152,7 +152,8 @@ Guidelines:
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
           stream: true,
-          messages: [{ role: "system", content: systemPrompt }, ...messages],
+          system: systemPrompt,
+          messages: [...messages],
         }),
       }
     );

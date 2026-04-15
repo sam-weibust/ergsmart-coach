@@ -25,7 +25,17 @@ serve(async (req) => {
     );
 
     // Frontend must send: { user_id, dietary_preferences, goals }
-    const { user_id, dietary_preferences, goals_override } = await req.json();
+    const body = await req.json();
+    const {
+      user_id,
+      dietary_preferences,
+      goals_override,
+      dietGoal,
+      allergies,
+      foodPreferences,
+      favoriteMeals,
+      trainingLoad,
+    } = body;
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -60,8 +70,12 @@ USER GOALS:
 - Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
 - Current 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
 
-DIETARY PREFERENCES:
-${JSON.stringify(dietary_preferences, null, 2)}
+NUTRITION PREFERENCES:
+- Diet goal: ${dietGoal || "maintain"}
+- Training load: ${trainingLoad || "moderate"}
+- Allergies: ${allergies?.join(", ") || "None"}
+- Food preferences: ${foodPreferences?.join(", ") || dietary_preferences?.join(", ") || "None"}
+- Favourite meals: ${favoriteMeals?.join(", ") || "Not specified"}
 `.trim();
 
     const systemPrompt = `
@@ -92,8 +106,8 @@ ${userContext}
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
           stream: true,
+          system: systemPrompt,
           messages: [
-            { role: "system", content: systemPrompt },
             {
               role: "user",
               content: `Generate a meal plan based on the user's profile, goals, and dietary preferences.`,
