@@ -182,7 +182,7 @@ ${userContext}
 `.trim();
 
     // ---------------------------
-    // CALL CLAUDE 3.5
+    // CALL CLAUDE 3 HAIKU (guaranteed available)
     // ---------------------------
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -194,14 +194,12 @@ ${userContext}
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-3-haiku-20240307",
+          model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
           stream: false,
 
-          // ⭐ Correct placement
           system: systemPrompt,
 
-          // ⭐ Only user messages
           messages: [
             {
               role: "user",
@@ -235,9 +233,6 @@ ${userContext}
       });
     }
 
-    // ---------------------------
-    // PARSE STRICT JSON
-    // ---------------------------
     let parsed;
     try {
       parsed = JSON.parse(text);

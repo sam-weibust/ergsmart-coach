@@ -13,33 +13,19 @@ serve(async (req) => {
   }
 
   try {
-    console.log("🔥 generate-strength invoked");
-
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      throw new Error("Missing ANTHROPIC_API_KEY");
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
+    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // ---------------------------
-    // SAFE JSON PARSING
-    // ---------------------------
-    const raw = await req.text();
-    let body;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { user_id, preferences } = body;
+    // Frontend must send: { user_id, muscle_group, equipment, preferences }
+    const { user_id, muscle_group, equipment, preferences } = await req.json();
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -48,14 +34,14 @@ serve(async (req) => {
       });
     }
 
-    console.log("User:", user_id);
-
-    // ---------------------------
-    // FETCH USER CONTEXT
-    // ---------------------------
+    // Fetch user profile + goals + recent strength workouts
     const [profileRes, goalsRes, strengthRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
-      supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
+      supabase
+        .from("user_goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .maybeSingle(),
       supabase
         .from("strength_workouts")
         .select("*")
@@ -72,10 +58,11 @@ serve(async (req) => {
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
 - Experience: ${profile?.experience_level || "Unknown"}
-- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
 
 USER GOALS:
 - Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
+- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
 
 RECENT STRENGTH WORKOUTS:
 ${
@@ -90,40 +77,21 @@ ${
 }
 `.trim();
 
-    // ---------------------------
-    // STRICT JSON SYSTEM PROMPT
-    // ---------------------------
     const systemPrompt = `
-You are CrewSync AI, an expert strength coach.
+You are CrewSync AI, an expert strength coach for rowers.
 
-You MUST output STRICT JSON ONLY.
-No markdown. No commentary. No explanations.
-
-JSON FORMAT:
-{
-  "workout": {
-    "focus": "string",
-    "warmup": "string",
-    "exercises": [
-      {
-        "exercise": "string",
-        "sets": number,
-        "reps": number,
-        "weight": "string | null",
-        "rest": "string | null"
-      }
-    ],
-    "cooldown": "string"
-  }
-}
+Your job:
+- Generate a personalized strength workout
+- Use the user's goals, experience, and recent training
+- Suggest sets, reps, weights, tempo, and rest
+- Provide rowing-specific rationale
+- Use markdown formatting
+- Keep instructions clear and actionable
 
 User context:
 ${userContext}
 `.trim();
 
-    // ---------------------------
-    // CALL CLAUDE 3.5
-    // ---------------------------
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -134,14 +102,14 @@ ${userContext}
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: model: "claude-3-5-sonnet-20241022",
+          model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          stream: false,
-          system: systemPrompt,
+          stream: true,
           messages: [
+            { role: "system", content: systemPrompt },
             {
               role: "user",
-              content: `Generate a strength workout.\nPreferences: ${JSON.stringify(
+              content: `Muscle group: ${muscle_group}\nEquipment: ${equipment}\nPreferences: ${JSON.stringify(
                 preferences,
                 null,
                 2
@@ -153,56 +121,22 @@ ${userContext}
     );
 
     if (!anthropicResponse.ok) {
-      const errText = await anthropicResponse.text();
-      console.error("❌ Anthropic error:", anthropicResponse.status, errText);
-
-      return new Response(
-        JSON.stringify({
-          error: "Anthropic request failed",
-          status: anthropicResponse.status,
-          details: errText,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const result = await anthropicResponse.json();
-    const text = result?.content?.[0]?.text;
-
-    if (!text) {
-      console.error("❌ No text returned from Claude:", result);
-      return new Response(JSON.stringify({ error: "Invalid AI response" }), {
+      const t = await anthropicResponse.text();
+      console.error("Anthropic error:", anthropicResponse.status, t);
+      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ---------------------------
-    // PARSE JSON FROM CLAUDE
-    // ---------------------------
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch (e) {
-      console.error("❌ JSON parse error:", text);
-      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log("✅ Strength workout generated successfully");
-
-    return new Response(JSON.stringify(parsed), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(anthropicResponse.body, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+      },
     });
   } catch (e) {
-    console.error("🔥 INTERNAL ERROR:", e);
-
+    console.error("generate-strength error:", e);
     return new Response(
       JSON.stringify({
         error: e instanceof Error ? e.message : "Unknown error",

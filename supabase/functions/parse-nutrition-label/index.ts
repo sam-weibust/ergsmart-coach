@@ -75,7 +75,7 @@ Return ONLY the JSON.
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 2048,
         messages: [
           { role: "system", content: systemPrompt },

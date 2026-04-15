@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";   // ⭐ FIXED
-import { generateWorkout } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
+import { analyzeWorkout } from "@/lib/api";
 
 interface ErgWorkout {
   distance: string;
@@ -50,7 +50,6 @@ const ErgWorkoutSection = () => {
         return;
       }
 
-      // Save workout
       const { error } = await supabase.from("erg_workouts").insert({
         user_id,
         ...workout,
@@ -62,15 +61,9 @@ const ErgWorkoutSection = () => {
         return;
       }
 
-      // AI feedback
       setAnalyzingFeedback(true);
 
-      const res = await generateWorkout({
-        user_id,
-        workout_type: "erg-analysis",
-        preferences: workout,
-      });
-
+      const res = await analyzeWorkout({ user_id, workout });
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
@@ -99,7 +92,96 @@ const ErgWorkoutSection = () => {
           <CardTitle>Log Erg Workout</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* all your inputs unchanged */}
+          <div className="space-y-2">
+            <Label htmlFor="distance">Distance (meters)</Label>
+            <Input
+              id="distance"
+              placeholder="e.g., 2000"
+              value={workout.distance}
+              onChange={(e) => setWorkout({ ...workout, distance: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="duration">Duration (mm:ss)</Label>
+            <Input
+              id="duration"
+              placeholder="e.g., 7:30.0"
+              value={workout.duration}
+              onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="split">Avg Split (/500m)</Label>
+            <Input
+              id="split"
+              placeholder="e.g., 1:52.5"
+              value={workout.split}
+              onChange={(e) => setWorkout({ ...workout, split: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stroke_rate">Stroke Rate (spm)</Label>
+            <Input
+              id="stroke_rate"
+              placeholder="e.g., 20"
+              value={workout.stroke_rate}
+              onChange={(e) => setWorkout({ ...workout, stroke_rate: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="drag_factor">Drag Factor</Label>
+            <Input
+              id="drag_factor"
+              placeholder="e.g., 130"
+              value={workout.drag_factor}
+              onChange={(e) => setWorkout({ ...workout, drag_factor: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="warmup_duration">Warmup Duration</Label>
+            <Input
+              id="warmup_duration"
+              placeholder="e.g., 10:00"
+              value={workout.warmup_duration}
+              onChange={(e) => setWorkout({ ...workout, warmup_duration: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cooldown_duration">Cooldown Duration</Label>
+            <Input
+              id="cooldown_duration"
+              placeholder="e.g., 5:00"
+              value={workout.cooldown_duration}
+              onChange={(e) => setWorkout({ ...workout, cooldown_duration: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rest_periods">Rest Periods</Label>
+            <Input
+              id="rest_periods"
+              placeholder="e.g., 2x2:00"
+              value={workout.rest_periods}
+              onChange={(e) => setWorkout({ ...workout, rest_periods: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              placeholder="How did it feel? Any observations..."
+              value={workout.notes}
+              onChange={(e) => setWorkout({ ...workout, notes: e.target.value })}
+            />
+          </div>
+
           <Button
             onClick={handleSave}
             disabled={loading || analyzingFeedback}

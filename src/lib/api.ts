@@ -47,10 +47,30 @@ export function critiqueRowing(payload) {
   return callFunction("critique-rowing", payload);
 }
 
+export function analyzeWorkout(payload) {
+  return callFunction("analyze-workout", payload);
+}
+
 export function parseErgScreen(payload) {
   return callFunction("parse-erg-screen", payload);
 }
 
 export function parseWorkoutImage(payload) {
   return callFunction("parse-workout-image", payload);
+}
+
+export function parseNutritionLabel(payload) {
+  return callFunction("parse-nutrition-label", payload);
+}
+
+export function c2LogbookAuth(payload) {
+  return callFunction("c2-logbook-auth", payload);
+}
+
+export function c2LogbookSync(payload) {
+  return callFunction("c2-logbook-sync", payload);
+}
+
+export function createNotification(payload) {
+  return callFunction("create-notification", payload);
 }
