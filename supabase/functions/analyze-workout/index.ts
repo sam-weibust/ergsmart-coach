@@ -24,15 +24,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Frontend must send: { user_id, workout }
-    const { user_id, workout } = await req.json();
-
-    if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Callers send: { workoutType, workout, profile, recentWorkouts, recoveryLogs }
+    // OR legacy: { user_id, workout }
+    const body = await req.json();
+    const { workoutType, workout, profile: bodyProfile, recentWorkouts = [], recoveryLogs = [] } = body;
+    const user_id = body.user_id || bodyProfile?.id;
 
     if (!workout) {
       return new Response(JSON.stringify({ error: "Missing workout data" }), {
@@ -41,29 +37,26 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user profile + goals for context
-    const [profileRes, goalsRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
-      supabase
-        .from("user_goals")
-        .select("*")
-        .eq("user_id", user_id)
-        .maybeSingle(),
-    ]);
-
-    const profile = profileRes.data;
-    const goals = goalsRes.data;
+    // Use profile from body if provided, otherwise fetch from DB
+    let profile = bodyProfile;
+    let goals: any = null;
+    if (!profile && user_id) {
+      const [profileRes, goalsRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+        supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
+      ]);
+      profile = profileRes.data;
+      goals = goalsRes.data;
+    }
 
     const userContext = `
-USER PROFILE:
+ATHLETE PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
 - Experience: ${profile?.experience_level || "Unknown"}
 - Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
-
-USER GOALS:
-- 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-- 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
-- 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
+- Goals: ${profile?.goals || "Not set"}
+${goals ? `\nGOALS:\n- 2K: ${goals.current_2k_time || "Not set"} → Goal: ${goals.goal_2k_time || "Not set"}` : ""}
+${recentWorkouts.length ? `\nRECENT WORKOUTS:\n${recentWorkouts.slice(0, 5).map((w: any) => `- ${w.workout_date}: ${w.distance || ""}m ${w.duration || ""}`).join("\n")}` : ""}
 `.trim();
 
     const systemPrompt = `
@@ -99,11 +92,7 @@ ${userContext}
           messages: [
             {
               role: "user",
-              content: `Analyze this workout:\n${JSON.stringify(
-                workout,
-                null,
-                2
-              )}`,
+              content: `Workout type: ${workoutType || "general"}\n\nAnalyze this workout:\n${JSON.stringify(workout, null, 2)}`,
             },
           ],
         }),

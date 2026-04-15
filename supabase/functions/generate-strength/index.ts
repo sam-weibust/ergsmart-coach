@@ -24,57 +24,42 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Frontend must send: { user_id, muscle_group, equipment, preferences }
-    const { user_id, muscle_group, equipment, preferences } = await req.json();
+    // Caller sends: { weight, height, experience, goals } OR { user_id, muscle_group, equipment, preferences }
+    const body = await req.json();
+    const user_id = body.user_id;
+    const muscle_group = body.muscle_group || "full body";
+    const equipment = body.equipment || "standard gym";
+    const preferences = body.preferences || {};
 
-    if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Use inline fields if provided (from MultiSetStrengthForm), else fetch from DB
+    const inlineWeight = body.weight;
+    const inlineHeight = body.height;
+    const inlineExperience = body.experience;
+    const inlineGoals = body.goals;
+
+    let profile: any = null;
+    let goals: any = null;
+    let recentStrength: any[] = [];
+
+    if (user_id) {
+      const [profileRes, goalsRes, strengthRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
+        supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
+        supabase.from("strength_workouts").select("*").eq("user_id", user_id)
+          .order("workout_date", { ascending: false }).limit(5),
+      ]);
+      profile = profileRes.data;
+      goals = goalsRes.data;
+      recentStrength = strengthRes.data || [];
     }
-
-    // Fetch user profile + goals + recent strength workouts
-    const [profileRes, goalsRes, strengthRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
-      supabase
-        .from("user_goals")
-        .select("*")
-        .eq("user_id", user_id)
-        .maybeSingle(),
-      supabase
-        .from("strength_workouts")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("workout_date", { ascending: false })
-        .limit(5),
-    ]);
-
-    const profile = profileRes.data;
-    const goals = goalsRes.data;
-    const recentStrength = strengthRes.data || [];
 
     const userContext = `
 USER PROFILE:
-- Name: ${profile?.full_name || "Unknown"}
-- Experience: ${profile?.experience_level || "Unknown"}
-- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg
-
-USER GOALS:
-- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
-
-RECENT STRENGTH WORKOUTS:
-${
-  recentStrength.length
-    ? recentStrength
-        .map(
-          (w) =>
-            `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`
-        )
-        .join("\n")
-    : "No recent strength workouts"
-}
+- Experience: ${inlineExperience || profile?.experience_level || "Unknown"}
+- Weight: ${inlineWeight || profile?.weight || "Unknown"}kg
+- Height: ${inlineHeight || profile?.height || "Unknown"}cm
+- Goals: ${inlineGoals || profile?.goals || "General fitness"}
+${recentStrength.length ? `\nRECENT STRENGTH:\n${recentStrength.map((w) => `- ${w.exercise} ${w.sets}x${w.reps} @ ${w.weight}kg`).join("\n")}` : ""}
 `.trim();
 
     const systemPrompt = `You are CrewSync AI, an expert strength coach for rowers.

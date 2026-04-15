@@ -53,16 +53,17 @@ serve(async (req) => {
 
     const userContext = `
 ATHLETE PROFILE:
-${JSON.stringify(profile, null, 2)}
+- Name: ${profile?.full_name || "Unknown"}
+- Age: ${profile?.age || "Unknown"}
+- Height: ${profile?.height || "Unknown"}cm, Weight: ${profile?.weight || "Unknown"}kg
+- Experience: ${profile?.experience_level || "Unknown"}
+- Gender: ${gender || "Unknown"}
+- GPA: ${gpa || "Not provided"}
 
-GOALS:
-${JSON.stringify(goals, null, 2)}
-
-GPA:
-${gpa}
-
-GENDER:
-${gender}
+CURRENT TIMES:
+- 2K: ${goals?.current_2k_time || "Not set"} (goal: ${goals?.goal_2k_time || "Not set"})
+- 5K: ${goals?.current_5k_time || "Not set"} (goal: ${goals?.goal_5k_time || "Not set"})
+- 6K: ${goals?.current_6k_time || "Not set"} (goal: ${goals?.goal_6k_time || "Not set"})
 
 RECENT ERG RESULTS:
 ${ergSummary}
