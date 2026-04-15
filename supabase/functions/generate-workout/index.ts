@@ -114,72 +114,60 @@ ${
 `.trim();
 
     // ---------------------------
-    // STRICT JSON SYSTEM PROMPT
+    // COMPUTE PLAN DIMENSIONS
     // ---------------------------
-    const systemPrompt = `
-You are CrewSync AI, an expert rowing and strength training coach.
+    const totalWeeks = Math.max(1, (preferences.months ?? 3) * 4);
+    const durationLabel = `${preferences.months ?? 3} months (${totalWeeks} weeks)`;
 
-You MUST output STRICT JSON ONLY.
-No commentary. No markdown. No explanations.
+    // ---------------------------
+    // SYSTEM PROMPT
+    // ---------------------------
+    const systemPrompt = `You are CrewSync AI, an expert rowing and strength training coach.
 
-JSON FORMAT:
+USER CONTEXT:
+${userContext}
+
+You are generating a complete multi-week training plan.
+You MUST output the FULL plan, not a sample.
+You MUST output EVERY week explicitly from Week 1 through Week ${totalWeeks}.
+You MUST NOT summarize.
+You MUST NOT skip weeks.
+You MUST NOT say "repeat this pattern."
+You MUST NOT compress multiple weeks into one description.
+You MUST NOT output commentary before or after the JSON.
+
+Your ONLY output should be a single valid JSON object with this exact structure:
+
 {
+  "duration": "${durationLabel}",
+  "total_weeks": ${totalWeeks},
   "plan": [
     {
       "week": 1,
-      "phase": "Base" | "Build" | "Peak" | "Taper",
+      "phase": "Base",
       "days": [
         {
-          "day": 1,
-          "ergWorkout": {
-            "zone": "UT2" | "UT1" | "TR" | "AT",
-            "description": "string",
-            "duration": "string",
-            "distance": "number | null",
-            "targetSplit": "string | null",
-            "rate": "string | null",
-            "warmup": "string | null",
-            "restPeriods": "string | null",
-            "cooldown": "string | null",
-            "notes": "string | null"
-          },
-          "strengthWorkout": {
-            "focus": "string",
-            "warmupNotes": "string | null",
-            "exercises": [
-              {
-                "exercise": "string",
-                "sets": number,
-                "reps": number,
-                "weight": "string | null",
-                "restBetweenSets": "string | null"
-              }
-            ],
-            "cooldownNotes": "string | null",
-            "notes": "string | null"
-          },
-          "yogaSession": {
-            "duration": "string | null",
-            "focus": "string | null",
-            "poses": "string | null"
-          },
-          "mealPlan": {
-            "totalCalories": number | null,
-            "breakfast": "string | null",
-            "lunch": "string | null",
-            "dinner": "string | null",
-            "snacks": "string | null",
-            "macros": "string | null"
-          }
+          "day": "Monday",
+          "workout": "..."
         }
       ]
     }
   ]
 }
 
-User context:
-${userContext}
-`.trim();
+Rules you MUST follow:
+- The JSON must be valid and parseable.
+- No trailing commas.
+- No markdown formatting.
+- No text outside the JSON.
+- The "plan" array MUST contain exactly ${totalWeeks} week objects.
+- Each week MUST contain 7 days (Monday through Sunday).
+- Each day MUST have a "day" (day name string) and "workout" (detailed description string) field.
+- Each week MUST have a "phase" field: one of "Base", "Build", "Peak", or "Taper".
+- The workouts MUST be specific, actionable, and unique for each day.
+- Include erg zone (UT2/UT1/TR/AT), distance or duration, target split, and strength/recovery notes inline in the "workout" string.
+
+Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
 
     // ---------------------------
     // CALL CLAUDE 3 HAIKU (guaranteed available)
@@ -203,11 +191,7 @@ ${userContext}
           messages: [
             {
               role: "user",
-              content: `Workout type: ${workout_type}\nPreferences: ${JSON.stringify(
-                preferences,
-                null,
-                2
-              )}`,
+              content: `Generate the complete ${durationLabel} training plan for this athlete. Output only the JSON object.`,
             },
           ],
         }),

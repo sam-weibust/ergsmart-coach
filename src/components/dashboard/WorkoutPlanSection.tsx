@@ -408,20 +408,23 @@ type DayCardProps = {
 const DayCard = ({ day, dayIndex }: DayCardProps) => (
   <div className="p-4 border rounded-lg space-y-3">
     <div className="font-medium text-lg">
-      Day {day?.day ?? dayIndex + 1}
+      {typeof day?.day === "string" ? day.day : `Day ${day?.day ?? dayIndex + 1}`}
     </div>
 
-    {day?.ergWorkout && <ErgBlock ergWorkout={day.ergWorkout} />}
+    {/* New schema: plain workout string */}
+    {day?.workout && (
+      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{day.workout}</p>
+    )}
 
-    {day?.strengthWorkout && (
+    {/* Legacy schema: structured blocks */}
+    {!day?.workout && day?.ergWorkout && <ErgBlock ergWorkout={day.ergWorkout} />}
+    {!day?.workout && day?.strengthWorkout && (
       <StrengthBlock strengthWorkout={day.strengthWorkout} />
     )}
-
-    {day?.yogaSession && (
+    {!day?.workout && day?.yogaSession && (
       <YogaBlock yogaSession={day.yogaSession} />
     )}
-
-    {day?.mealPlan && <MealBlock mealPlan={day.mealPlan} />}
+    {!day?.workout && day?.mealPlan && <MealBlock mealPlan={day.mealPlan} />}
   </div>
 );
 
@@ -1040,7 +1043,7 @@ export const WorkoutPlanSection = () => {
           description: `Generated plan for ${
             profile?.goals || "general fitness"
           }`,
-          workout_data: data.plan,
+          workout_data: data?.plan ?? data,
         });
 
       if (error) throw error;
