@@ -94,7 +94,7 @@ ${userContext}
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          stream: true,
+          stream: false,
           system: systemPrompt,
           messages: [
             {
@@ -119,11 +119,12 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const result = await anthropicResponse.json();
+    const text = result?.content?.[0]?.text ?? "";
+
+    return new Response(JSON.stringify({ feedback: text }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("analyze-workout error:", e);

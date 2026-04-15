@@ -78,20 +78,47 @@ NUTRITION PREFERENCES:
 - Favourite meals: ${favoriteMeals?.join(", ") || "Not specified"}
 `.trim();
 
-    const systemPrompt = `
-You are CrewSync AI, an expert sports nutrition assistant for rowers.
-
-Your job:
-- Generate a personalized meal plan
-- Use the user's goals, body metrics, and dietary preferences
-- Provide macros, calories, and rationale
-- Suggest pre‑workout and post‑workout options
-- Use markdown formatting
-- Keep instructions clear and actionable
+    const systemPrompt = `You are CrewSync AI, an expert sports nutrition assistant for rowers.
 
 User context:
 ${userContext}
-`.trim();
+
+Output ONLY a valid JSON object — no markdown, no commentary:
+{
+  "mealPlan": {
+    "meals": [
+      {
+        "meal_type": "Breakfast",
+        "timing": "7:00 AM",
+        "description": "Meal description",
+        "calories": 600,
+        "protein": 35,
+        "carbs": 70,
+        "fats": 18,
+        "recipe": {
+          "ingredients": ["item 1", "item 2"],
+          "instructions": ["step 1", "step 2"],
+          "prep_time": "10 min",
+          "cook_time": "15 min"
+        }
+      }
+    ],
+    "dailyTotals": {
+      "calories": 2500,
+      "protein": 160,
+      "carbs": 300,
+      "fats": 80
+    },
+    "hydrationNote": "Drink 3-4L of water throughout the day"
+  }
+}
+
+Rules:
+- Include Breakfast, Morning Snack, Lunch, Pre-Workout, Dinner, and Evening Snack
+- All macro values are numbers (grams)
+- Calories is a number
+- Respect allergies and food preferences exactly
+- No text outside the JSON`.trim();
 
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -105,12 +132,12 @@ ${userContext}
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          stream: true,
+          stream: false,
           system: systemPrompt,
           messages: [
             {
               role: "user",
-              content: `Generate a meal plan based on the user's profile, goals, and dietary preferences.`,
+              content: "Generate today's meal plan.",
             },
           ],
         }),
@@ -126,11 +153,18 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const aiResult = await anthropicResponse.json();
+    const rawText = aiResult?.content?.[0]?.text ?? "";
+    const start = rawText.indexOf("{");
+    const end = rawText.lastIndexOf("}");
+    let parsed: any = { mealPlan: { meals: [], dailyTotals: { calories: 0, protein: 0, carbs: 0, fats: 0 }, hydrationNote: "" } };
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
+    }
+
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-meals error:", e);

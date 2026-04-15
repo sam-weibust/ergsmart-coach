@@ -158,15 +158,17 @@ const AskSection = () => {
           if (!line.startsWith("data: ")) continue;
 
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") {
-            streamDone = true;
-            break;
-          }
+          if (jsonStr === "[DONE]") { streamDone = true; break; }
 
           try {
             const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) upsert(content);
+            // Anthropic SSE format
+            if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+              upsert(parsed.delta.text);
+            } else if (parsed.type === "message_stop") {
+              streamDone = true;
+              break;
+            }
           } catch {
             textBuffer = line + "\n" + textBuffer;
             break;
@@ -180,14 +182,13 @@ const AskSection = () => {
           if (!raw) continue;
           if (raw.endsWith("\r")) raw = raw.slice(0, -1);
           if (!raw.startsWith("data: ")) continue;
-
           const jsonStr = raw.slice(6).trim();
           if (jsonStr === "[DONE]") continue;
-
           try {
             const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) upsert(content);
+            if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+              upsert(parsed.delta.text);
+            }
           } catch {}
         }
       }

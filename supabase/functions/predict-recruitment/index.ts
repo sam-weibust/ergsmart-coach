@@ -68,23 +68,33 @@ RECENT ERG RESULTS:
 ${ergSummary}
 `.trim();
 
-    const systemPrompt = `
-You are CrewSync AI, an expert rowing recruiting analyst.
+    const systemPrompt = `You are CrewSync AI, an expert rowing recruiting analyst.
 
-Your job:
-- Predict the athlete's realistic recruiting tier (D1 top, D1 mid, D1 low, D2, D3, Club)
-- Provide strengths and weaknesses
-- Provide improvement suggestions
-- Provide coach-style observations
-- Provide a 30-day action plan
-- Use rowing recruiting terminology naturally
-- Use markdown formatting
-- Be honest but encouraging
-- Base everything ONLY on the provided data
-
-User context:
+Athlete data:
 ${userContext}
-`.trim();
+
+Output ONLY a valid JSON object — no markdown, no commentary:
+{
+  "predicted_tier": "D1 mid",
+  "summary": "2-3 sentence honest assessment",
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "action_plan": ["30-day step 1", "30-day step 2", "30-day step 3"],
+  "school_predictions": [
+    {
+      "school": "University Name",
+      "division": "D1",
+      "chance": "high"
+    }
+  ],
+  "missing_data_notes": ["note if any data was missing"]
+}
+
+Rules:
+- chance must be one of: "high", "medium", "low", "reach"
+- Include 8-12 realistic schools across divisions
+- Be honest about tier placement based on erg times
+- No text outside the JSON`.trim();
 
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -98,13 +108,12 @@ ${userContext}
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          stream: true,
+          stream: false,
           system: systemPrompt,
           messages: [
             {
               role: "user",
-              content:
-                "Analyze the athlete and provide a full recruiting evaluation.",
+              content: "Analyze the athlete and provide a full recruiting evaluation.",
             },
           ],
         }),
@@ -120,11 +129,18 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const aiResult = await anthropicResponse.json();
+    const rawText = aiResult?.content?.[0]?.text ?? "";
+    const start = rawText.indexOf("{");
+    const end = rawText.lastIndexOf("}");
+    let parsed: any = { predicted_tier: "Unknown", school_predictions: [], missing_data_notes: [] };
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
+    }
+
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("predict-recruitment error:", e);

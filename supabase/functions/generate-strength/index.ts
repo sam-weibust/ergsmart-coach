@@ -77,20 +77,32 @@ ${
 }
 `.trim();
 
-    const systemPrompt = `
-You are CrewSync AI, an expert strength coach for rowers.
-
-Your job:
-- Generate a personalized strength workout
-- Use the user's goals, experience, and recent training
-- Suggest sets, reps, weights, tempo, and rest
-- Provide rowing-specific rationale
-- Use markdown formatting
-- Keep instructions clear and actionable
+    const systemPrompt = `You are CrewSync AI, an expert strength coach for rowers.
 
 User context:
 ${userContext}
-`.trim();
+
+Output ONLY a valid JSON object with this exact structure — no markdown, no commentary:
+{
+  "suggestions": {
+    "suggestions": [
+      {
+        "exercise": "Exercise Name",
+        "sets": 3,
+        "reps": 8,
+        "recommendedWeight": 60,
+        "notes": "brief coaching cue"
+      }
+    ]
+  }
+}
+
+Rules:
+- Include 5-8 exercises appropriate for the requested muscle group and equipment
+- recommendedWeight is in kilograms
+- sets and reps are numbers
+- Make exercises rowing-specific and periodization-appropriate
+- No text outside the JSON object`.trim();
 
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -103,17 +115,13 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
-          stream: true,
+          max_tokens: 2048,
+          stream: false,
           system: systemPrompt,
           messages: [
             {
               role: "user",
-              content: `Muscle group: ${muscle_group}\nEquipment: ${equipment}\nPreferences: ${JSON.stringify(
-                preferences,
-                null,
-                2
-              )}`,
+              content: `Muscle group: ${muscle_group}\nEquipment: ${equipment}\nPreferences: ${JSON.stringify(preferences, null, 2)}`,
             },
           ],
         }),
@@ -129,11 +137,18 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const aiResult = await anthropicResponse.json();
+    const rawText = aiResult?.content?.[0]?.text ?? "";
+    const start = rawText.indexOf("{");
+    const end = rawText.lastIndexOf("}");
+    let parsed: any = { suggestions: { suggestions: [] } };
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
+    }
+
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-strength error:", e);

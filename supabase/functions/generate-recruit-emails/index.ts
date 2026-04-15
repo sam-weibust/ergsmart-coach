@@ -82,20 +82,49 @@ TARGET SCHOOL:
 ${target_school}
 `.trim();
 
-    const systemPrompt = `
-You are CrewSync AI, an expert rowing recruiting assistant.
+    const systemPrompt = `You are CrewSync AI, an expert rowing recruiting assistant.
 
-Your job:
-- Write polished, professional recruiting emails
-- Tailor tone and content to the target school
-- Highlight athlete strengths and performance
-- Keep the email concise, confident, and respectful
-- Use markdown formatting
-- Provide 2–3 variations the athlete can choose from
-
-User context:
+Athlete context:
 ${userContext}
-`.trim();
+
+Output ONLY a valid JSON object — no markdown, no commentary:
+{
+  "general_email": "coach@school.edu (or best guess pattern)",
+  "coaches": [
+    {
+      "name": "Coach Name",
+      "title": "Head Coach",
+      "email": "email@school.edu",
+      "confidence": "likely",
+      "notes": "optional note"
+    }
+  ],
+  "email_campaign": [
+    {
+      "sequence_number": 1,
+      "email_type": "Initial Contact",
+      "timing": "Send now",
+      "subject": "Email subject line",
+      "body": "Full email body text",
+      "tips": "Brief tip for this email"
+    },
+    {
+      "sequence_number": 2,
+      "email_type": "Follow-Up",
+      "timing": "2 weeks after initial",
+      "subject": "Follow-up subject",
+      "body": "Full follow-up body",
+      "tips": "Brief tip"
+    }
+  ],
+  "campaign_tips": ["tip 1", "tip 2", "tip 3"]
+}
+
+Rules:
+- confidence must be one of: "verified", "likely", "pattern-based"
+- Include 3 emails in the campaign (initial, follow-up, final)
+- Tailor content to the specific target school
+- No text outside the JSON`.trim();
 
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -109,16 +138,12 @@ ${userContext}
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          stream: true,
+          stream: false,
           system: systemPrompt,
           messages: [
             {
               role: "user",
-              content: `Generate recruiting email drafts for:\n${JSON.stringify(
-                athlete_info,
-                null,
-                2
-              )}`,
+              content: `Generate the recruiting email campaign for target school: ${target_school}`,
             },
           ],
         }),
@@ -134,11 +159,18 @@ ${userContext}
       });
     }
 
-    return new Response(anthropicResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    const aiResult = await anthropicResponse.json();
+    const rawText = aiResult?.content?.[0]?.text ?? "";
+    const start = rawText.indexOf("{");
+    const end = rawText.lastIndexOf("}");
+    let parsed: any = { coaches: [], email_campaign: [], campaign_tips: [] };
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
+    }
+
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-recruit-emails error:", e);
