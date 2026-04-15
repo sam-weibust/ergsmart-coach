@@ -233,8 +233,17 @@ ${userContext}
       });
     }
 
-    // Strip markdown code fences if the model wrapped the JSON
-    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    // Extract the outermost JSON object, tolerating any preamble/fences from the model
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      console.error("No JSON object found in response:", text);
+      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const cleaned = text.slice(start, end + 1);
 
     let parsed;
     try {
