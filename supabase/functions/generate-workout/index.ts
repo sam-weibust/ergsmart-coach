@@ -195,7 +195,7 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
+          max_tokens: 16000,
           stream: false,
 
           system: systemPrompt,
@@ -233,11 +233,14 @@ ${userContext}
       });
     }
 
+    // Strip markdown code fences if the model wrapped the JSON
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+
     let parsed;
     try {
-      parsed = JSON.parse(text);
+      parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.error("JSON parse error:", text);
+      console.error("JSON parse error:", cleaned);
       return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
