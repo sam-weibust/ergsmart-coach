@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Loader2, Wand2, Save, Download, AlertTriangle } from "lucide-react";
-import { BOAT_CLASSES } from "./constants";
+import { BOAT_CLASSES, displayName } from "./constants";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -119,7 +119,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
       const athlete = allAthletes.find(a => a.id === s.user_id);
       return [
         s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`,
-        athlete?.full_name || s.user_id || "—",
+        displayName(athlete),
         `${Math.round((s.confidence || 0) * 100)}%`,
         s.rationale || "",
       ];
@@ -127,7 +127,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
 
     if (aiResult.cox) {
       const coxAthlete = allAthletes.find(a => a.id === aiResult.cox?.user_id);
-      tableData.unshift(["Cox", coxAthlete?.full_name || "—", "—", aiResult.cox?.rationale || ""]);
+      tableData.unshift(["Cox", displayName(coxAthlete), "—", aiResult.cox?.rationale || ""]);
     }
 
     autoTable(doc, {
@@ -209,7 +209,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
                 {allAthletes.map(a => (
                   <div key={a.id} className="flex items-center gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer" onClick={() => toggleAthlete(a.id)}>
                     <Checkbox checked={selectedAthletes.includes(a.id)} onCheckedChange={() => toggleAthlete(a.id)} />
-                    <span className="text-sm">{a.full_name || a.username || "—"}</span>
+                    <span className="text-sm">{displayName(a)}</span>
                   </div>
                 ))}
               </div>
@@ -268,7 +268,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
                 <div className="flex items-center gap-3 p-2 rounded border bg-muted/30">
                   <span className="text-sm font-medium w-16 shrink-0 text-muted-foreground">Cox</span>
                   <span className="text-sm font-semibold flex-1">
-                    {allAthletes.find(a => a.id === aiResult.cox?.user_id)?.full_name || aiResult.cox?.user_id || "—"}
+                    {displayName(allAthletes.find(a => a.id === aiResult.cox?.user_id))}
                   </span>
                   <span className="text-xs text-muted-foreground">{aiResult.cox?.rationale}</span>
                 </div>
@@ -280,7 +280,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
                     <span className="text-sm font-medium w-16 shrink-0 text-muted-foreground">
                       {seat.seat_number === 0 ? "Cox" : `Seat ${seat.seat_number}`}
                     </span>
-                    <span className="text-sm font-semibold flex-1">{athlete?.full_name || seat.user_id || "—"}</span>
+                    <span className="text-sm font-semibold flex-1">{displayName(athlete)}</span>
                     <div className="flex items-center gap-1">
                       <Progress value={Math.round((seat.confidence || 0) * 100)} className="w-16 h-1.5" />
                       <span className="text-xs text-muted-foreground w-8">{Math.round((seat.confidence || 0) * 100)}%</span>

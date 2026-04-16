@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, Loader2, Wand2, Plus, Trash2 } from "lucide-react";
+import { displayName } from "./constants";
 
 interface Props {
   teamId: string;
@@ -238,7 +239,7 @@ const RecruitingGaps = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                   <div className="flex gap-1 flex-wrap flex-1">
                     {byGradYear[year].map(a => (
                       <Badge key={a.id} variant={year <= currentYear + 1 ? "destructive" : year <= currentYear + 2 ? "secondary" : "outline"} className="text-xs">
-                        {a.full_name || a.username || "—"}
+                        {displayName(a)}
                       </Badge>
                     ))}
                   </div>

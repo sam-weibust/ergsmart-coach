@@ -13,7 +13,7 @@ import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useS
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2 } from "lucide-react";
-import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX } from "./constants";
+import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName } from "./constants";
 
 interface Props {
   teamId: string;
@@ -53,7 +53,7 @@ function SortableSeat({ seat, athletes, onAthleteChange }: {
         <SelectContent>
           <SelectItem value="none">Unassigned</SelectItem>
           {athletes.map(a => (
-            <SelectItem key={a.id} value={String(a.id)}>{a.full_name || a.username || a.id}</SelectItem>
+            <SelectItem key={a.id} value={String(a.id)}>{displayName(a)}</SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -144,7 +144,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
     setSeats(prev => prev.map(s => s.seat_number === seatNum ? {
       ...s,
       user_id: cleanId,
-      name: cleanId ? (allAthletes.find((a: any) => a.id === cleanId)?.full_name || "") : "",
+      name: cleanId ? displayName(allAthletes.find((a: any) => a.id === cleanId)) : "",
     } : s));
   }
 

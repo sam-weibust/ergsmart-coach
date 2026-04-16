@@ -54,6 +54,11 @@ export function getFatigueColor(score: number | null): string {
   return "bg-red-500/70";
 }
 
+export function displayName(profile: any): string {
+  if (!profile) return "Unknown";
+  return profile.full_name || profile.username || profile.email || "Unknown";
+}
+
 export const SIDEBAR_ITEMS = [
   { key: "overview", label: "Overview", icon: "LayoutDashboard" },
   { key: "lineups", label: "Boat Lineups", icon: "Ship" },

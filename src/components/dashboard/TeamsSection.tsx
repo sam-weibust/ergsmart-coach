@@ -380,7 +380,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                   <div>
                     <CardTitle className="text-base">{team.name}</CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Coach: {team.coach?.full_name || team.coach?.email}
+                      Coach: {team.coach?.full_name || team.coach?.username || team.coach?.email}
                     </p>
                   </div>
                   {expandedTeam === team.id ? (

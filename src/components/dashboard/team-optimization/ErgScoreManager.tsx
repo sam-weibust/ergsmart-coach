@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Plus, TrendingDown, BarChart3, Loader2 } from "lucide-react";
-import { splitToWatts, wattsPerKg } from "./constants";
+import { splitToWatts, wattsPerKg, displayName } from "./constants";
 
 interface Props {
   teamId: string;
@@ -163,7 +163,7 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                     <SelectTrigger><SelectValue placeholder="Select athlete" /></SelectTrigger>
                     <SelectContent>
                       {allAthletes.map(a => (
-                        <SelectItem key={a.id} value={a.id}>{a.full_name || a.username || a.email || a.id}</SelectItem>
+                        <SelectItem key={a.id} value={a.id}>{displayName(a)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -238,7 +238,7 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                       className={`border-b hover:bg-muted/50 cursor-pointer transition-colors ${selectedAthleteId === athlete.id ? "bg-primary/5" : ""}`}
                       onClick={() => setSelectedAthleteId(selectedAthleteId === athlete.id ? null : athlete.id)}
                     >
-                      <td className="py-2 pr-3 font-medium">{athlete.full_name || athlete.username || "—"}</td>
+                      <td className="py-2 pr-3 font-medium">{displayName(athlete)}</td>
                       <td className="py-2 px-2 text-right font-mono">{formatTime2k(twok?.time_seconds)}</td>
                       <td className="py-2 px-2 text-right">{twok?.watts ? `${parseFloat(String(twok.watts)).toFixed(0)}W` : "—"}</td>
                       <td className="py-2 px-2 text-right">{twok?.watts_per_kg ? parseFloat(String(twok.watts_per_kg)).toFixed(2) : "—"}</td>
@@ -267,7 +267,7 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
-              {allAthletes.find(a => a.id === selectedAthleteId)?.full_name || "Athlete"} — Watts Trend
+              {displayName(allAthletes.find(a => a.id === selectedAthleteId))} — Watts Trend
             </CardTitle>
           </CardHeader>
           <CardContent>

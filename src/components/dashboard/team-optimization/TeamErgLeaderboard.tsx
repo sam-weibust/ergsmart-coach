@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Medal, Loader2, Share2, TrendingUp, TrendingDown, Minus, Copy } from "lucide-react";
+import { displayName } from "./constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
@@ -135,7 +136,7 @@ const TeamErgLeaderboard = ({ teamId, teamName, teamMembers, isCoach, profile }:
             <Card key={entry.athlete.id} className={i === 0 ? "border-yellow-300 ring-1 ring-yellow-300/50" : ""}>
               <CardContent className="p-4 text-center">
                 <div className="text-3xl mb-1">{MEDAL_ICONS[i]}</div>
-                <p className="text-sm font-bold truncate">{entry.athlete.full_name || entry.athlete.username || "—"}</p>
+                <p className="text-sm font-bold truncate">{displayName(entry.athlete)}</p>
                 <p className="text-xl font-bold text-primary mt-1">
                   {testType !== "60min"
                     ? formatTime2k(entry.score.time_seconds)
@@ -183,7 +184,7 @@ const TeamErgLeaderboard = ({ teamId, teamName, teamMembers, isCoach, profile }:
                         <td className="py-2 font-bold text-muted-foreground">
                           {i < 3 ? <span className={MEDAL_COLORS[i]}>{i + 1}</span> : i + 1}
                         </td>
-                        <td className="py-2 pr-3 font-medium">{entry.athlete.full_name || entry.athlete.username || "—"}</td>
+                        <td className="py-2 pr-3 font-medium">{displayName(entry.athlete)}</td>
                         <td className="py-2 px-2 text-right font-mono">
                           {testType === "60min"
                             ? (entry.score.total_meters ? `${entry.score.total_meters}m` : "—")
@@ -211,7 +212,7 @@ const TeamErgLeaderboard = ({ teamId, teamName, teamMembers, isCoach, profile }:
 
           {unranked.length > 0 && (
             <div className="mt-4 pt-3 border-t">
-              <p className="text-xs text-muted-foreground mb-2">No {testType} score logged: {unranked.map(a => a.full_name || a.username || "—").join(", ")}</p>
+              <p className="text-xs text-muted-foreground mb-2">No {testType} score logged: {unranked.map(a => displayName(a)).join(", ")}</p>
             </div>
           )}
         </CardContent>

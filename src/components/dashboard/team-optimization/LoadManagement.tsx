@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Activity, Loader2, Wand2, AlertTriangle } from "lucide-react";
-import { getFatigueColor } from "./constants";
+import { getFatigueColor, displayName } from "./constants";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -143,7 +143,7 @@ const LoadManagement = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                   <Select value={form.user_id} onValueChange={v => setForm(f => ({ ...f, user_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select athlete" /></SelectTrigger>
                     <SelectContent>
-                      {allAthletes.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name || a.username}</SelectItem>)}
+                      {allAthletes.map(a => <SelectItem key={a.id} value={a.id}>{displayName(a)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -247,7 +247,7 @@ const LoadManagement = ({ teamId, teamMembers, isCoach, profile }: Props) => {
               <tbody>
                 {allAthletes.map(athlete => (
                   <tr key={athlete.id} className="border-b">
-                    <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{athlete.full_name || athlete.username || "—"}</td>
+                    <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{displayName(athlete)}</td>
                     {LAST_8_WEEKS.map(week => {
                       const log = heatmap[athlete.id]?.[week];
                       const fatigue = log?.fatigue_score ?? null;
@@ -299,7 +299,7 @@ const LoadManagement = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                     const athlete = allAthletes.find(a => a.id === log.user_id);
                     return (
                       <tr key={log.id} className="border-b hover:bg-muted/50">
-                        <td className="py-2 pr-3">{athlete?.full_name || athlete?.username || "—"}</td>
+                        <td className="py-2 pr-3">{displayName(athlete)}</td>
                         <td className="py-2 px-2">{log.week_start}</td>
                         <td className="py-2 px-2 text-right">{log.total_meters ? (log.total_meters / 1000).toFixed(0) : 0}</td>
                         <td className="py-2 px-2 text-right">{log.erg_meters ? (log.erg_meters / 1000).toFixed(0) : 0}</td>
