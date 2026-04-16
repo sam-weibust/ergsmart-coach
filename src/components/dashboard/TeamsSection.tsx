@@ -25,6 +25,7 @@ import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
 import { CoachComparison } from "./CoachComparison";
 import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 
 interface TeamsSectionProps {
   profile: any;
@@ -318,65 +319,14 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     )}
                   </div>
 
-                  {/* Team Management Tabs */}
-                  <Tabs defaultValue="overview" className="space-y-4">
-                    <TabsList className="grid w-full grid-cols-4">
-                      <TabsTrigger value="overview">Overview</TabsTrigger>
-                      <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                      <TabsTrigger value="plans">Plans</TabsTrigger>
-                      <TabsTrigger value="goals">Goals</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="overview" className="space-y-4">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Leaderboard teamId={team.id} teamName={team.name} />
-                        <div className="space-y-4">
-                          <Card className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium">Team Stats</span>
-                              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                            </div>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span>Total Members:</span>
-                                <span className="font-medium">{team.team_members?.length || 0}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Active This Week:</span>
-                                <span className="font-medium">-</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Avg 2K Time:</span>
-                                <span className="font-medium">-</span>
-                              </div>
-                            </div>
-                          </Card>
-                        </div>
-                      </div>
-                      
-                      <MessageBoard
-                        teamId={team.id}
-                        currentUserId={profile.id}
-                        title={`${team.name} Chat`}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="analytics">
-                      <TeamAnalytics teamId={team.id} teamName={team.name} />
-                    </TabsContent>
-
-                    <TabsContent value="plans">
-                      <TeamWorkoutPlanSection 
-                        teamId={team.id} 
-                        teamName={team.name} 
-                        profile={profile} 
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="goals">
-                      <TeamGoals teamId={team.id} isCoach={isCoach} currentUserId={profile.id} />
-                    </TabsContent>
-                  </Tabs>
+                  {/* Team Optimization Dashboard */}
+                  <TeamOptimizationDashboard
+                    teamId={team.id}
+                    teamName={team.name}
+                    teamMembers={team.team_members || []}
+                    isCoach={isCoach}
+                    profile={profile}
+                  />
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
