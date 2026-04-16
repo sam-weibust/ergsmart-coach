@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { analyzeWorkout } from "@/lib/api";
+import { WorkoutFeedback } from "./WorkoutFeedback";
 
 interface ErgWorkout {
   distance: string;
@@ -22,7 +22,7 @@ interface ErgWorkout {
   rest_periods: string;
 }
 
-const ErgWorkoutSection = () => {
+const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
   const [workout, setWorkout] = useState<ErgWorkout>({
     distance: "",
     duration: "",
@@ -37,22 +37,37 @@ const ErgWorkoutSection = () => {
 
   const [loading, setLoading] = useState(false);
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
+  const [feedback, setFeedback] = useState<any>(null);
 
   const handleSave = async () => {
     try {
       setLoading(true);
+      setFeedback(null);
 
-      const { data: userData } = await supabase.auth.getUser();
-      const user_id = userData?.user?.id;
+      const user_id = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
 
       if (!user_id) {
         alert("User not logged in.");
         return;
       }
 
+      // stroke_rate and drag_factor aren't DB columns — fold into notes
+      const extraNotes = [
+        workout.stroke_rate ? `SR: ${workout.stroke_rate} spm` : null,
+        workout.drag_factor ? `DF: ${workout.drag_factor}` : null,
+        workout.notes || null,
+      ].filter(Boolean).join(" | ");
+
       const { error } = await supabase.from("erg_workouts").insert({
         user_id,
-        ...workout,
+        workout_type: "steady_state",
+        distance: workout.distance ? parseInt(workout.distance) : null,
+        duration: workout.duration || null,
+        avg_split: workout.split || null,
+        notes: extraNotes || null,
+        warmup_duration: workout.warmup_duration || null,
+        cooldown_duration: workout.cooldown_duration || null,
+        rest_periods: workout.rest_periods || null,
       });
 
       if (error) {
@@ -61,21 +76,32 @@ const ErgWorkoutSection = () => {
         return;
       }
 
+      setLoading(false);
       setAnalyzingFeedback(true);
 
-      const res = await analyzeWorkout({ user_id, workout });
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
+      const { data: fbData, error: fnError } = await supabase.functions.invoke("analyze-workout", {
+        body: {
+          workoutType: "erg",
+          workout: { ...workout },
+          user_id,
+        },
+      });
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value);
+      if (!fnError && fbData?.feedback) {
+        setFeedback(fbData.feedback);
       }
 
-      console.log("AI Feedback:", fullText);
-      alert("Workout logged and feedback generated!");
+      setWorkout({
+        distance: "",
+        duration: "",
+        split: "",
+        stroke_rate: "",
+        drag_factor: "",
+        notes: "",
+        warmup_duration: "",
+        cooldown_duration: "",
+        rest_periods: "",
+      });
     } catch (err) {
       console.error(err);
       alert("Unexpected error.");
@@ -87,6 +113,10 @@ const ErgWorkoutSection = () => {
 
   return (
     <div className="space-y-6">
+      {feedback && (
+        <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Log Erg Workout</CardTitle>

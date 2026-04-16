@@ -295,7 +295,21 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
           .limit(10);
 
         const { data: fbData } = await supabase.functions.invoke("analyze-workout", {
-          body: { workoutType: "strength", workout: { exercises: data, meta: {} }, profile, recentWorkouts: recentWorkouts || [] },
+          body: {
+            workoutType: "strength",
+            workout: {
+              exercises: data,
+              meta: {
+                warmupNotes: strengthWorkout?.warmupNotes || null,
+                cooldownNotes: strengthWorkout?.cooldownNotes || null,
+                focus: strengthWorkout?.focus || null,
+                week: weekNumber,
+                day: dayNumber,
+              },
+            },
+            profile,
+            recentWorkouts: recentWorkouts || [],
+          },
         });
         if (fbData?.feedback) setStrengthFeedback(fbData.feedback);
       } catch {}

@@ -18,14 +18,11 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Use service role key (fixes all RLS/401 issues)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Callers send: { workoutType, workout, profile, recentWorkouts, recoveryLogs }
-    // OR legacy: { user_id, workout }
     const body = await req.json();
     const { workoutType, workout, profile: bodyProfile, recentWorkouts = [], recoveryLogs = [] } = body;
     const user_id = body.user_id || bodyProfile?.id;
@@ -37,7 +34,6 @@ serve(async (req) => {
       });
     }
 
-    // Use profile from body if provided, otherwise fetch from DB
     let profile = bodyProfile;
     let goals: any = null;
     if (!profile && user_id) {
@@ -62,14 +58,18 @@ ${recentWorkouts.length ? `\nRECENT WORKOUTS:\n${recentWorkouts.slice(0, 5).map(
     const systemPrompt = `
 You are CrewSync AI, an expert rowing and strength training analyst.
 
-Your job:
-- Analyze the user's workout in depth
-- Identify strengths, weaknesses, pacing trends, technique implications
-- Provide actionable recommendations
-- Suggest drills, pacing adjustments, or strength focuses
-- Use rowing terminology naturally
-- Use markdown formatting
-- Keep feedback honest but encouraging
+Analyze the athlete's workout and respond with ONLY a valid JSON object — no markdown, no extra text, no code fences.
+
+Required format:
+{
+  "overallRating": "excellent" | "good" | "average" | "needs_improvement",
+  "summary": "2-3 sentence overview of the workout performance",
+  "strengths": ["strength 1", "strength 2"],
+  "improvements": ["area to improve 1", "area to improve 2"],
+  "recommendation": "one specific tip for the next workout",
+  "motivationalMessage": "short encouraging closing message",
+  "progressNote": "optional note about trend vs recent workouts, omit key if no data"
+}
 
 User context:
 ${userContext}
@@ -86,7 +86,7 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
+          max_tokens: 1024,
           stream: false,
           system: systemPrompt,
           messages: [
@@ -109,9 +109,27 @@ ${userContext}
     }
 
     const result = await anthropicResponse.json();
-    const text = result?.content?.[0]?.text ?? "";
+    const text = result?.content?.[0]?.text ?? "{}";
 
-    return new Response(JSON.stringify({ feedback: text }), {
+    let feedback: any;
+    try {
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start === -1 || end === -1) throw new Error("No JSON found");
+      feedback = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      // Fallback structure if Claude didn't return valid JSON
+      feedback = {
+        overallRating: "good",
+        summary: text.slice(0, 300) || "Workout logged successfully.",
+        strengths: ["Completed the workout"],
+        improvements: ["Continue tracking your metrics"],
+        recommendation: "Keep up the consistent training.",
+        motivationalMessage: "Great work — every session counts!",
+      };
+    }
+
+    return new Response(JSON.stringify({ feedback }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
