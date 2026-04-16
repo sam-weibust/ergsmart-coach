@@ -796,8 +796,8 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
               <CollapsibleContent>
                 <CardContent className="pt-0">
                   <div className="space-y-3">
-                    {prediction.tier_breakdown.map((tier, i) => {
-                      const config = likelihoodConfig[tier.likelihood];
+                    {(prediction.tier_breakdown ?? []).map((tier, i) => {
+                      const config = likelihoodConfig[tier.likelihood] ?? likelihoodConfig.possible;
                       return (
                         <div
                           key={i}
