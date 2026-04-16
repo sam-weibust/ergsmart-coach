@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
@@ -55,8 +54,8 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
   };
 
   return (
-    <div className="flex gap-4 min-h-[600px]">
-      {/* Sidebar - hidden on mobile */}
+    <div className="flex flex-col md:flex-row gap-4 min-h-[600px]">
+      {/* Sidebar — desktop only */}
       <div className="hidden md:flex flex-col w-52 shrink-0">
         <nav className="space-y-0.5">
           {SIDEBAR_ITEMS.map((item) => {
@@ -80,10 +79,11 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
         </nav>
       </div>
 
-      {/* Mobile horizontal scroll tab strip */}
-      <div className="md:hidden w-full mb-4">
-        <ScrollArea className="w-full" orientation="horizontal">
-          <div className="flex gap-1 pb-2">
+      {/* Mobile horizontal scroll strip + main content stacked */}
+      <div className="flex flex-col flex-1 min-w-0 gap-4">
+        {/* Mobile tab strip */}
+        <div className="md:hidden overflow-x-auto pb-1">
+          <div className="flex gap-1.5 w-max">
             {SIDEBAR_ITEMS.map((item) => {
               const Icon = ICON_MAP[item.icon];
               return (
@@ -103,12 +103,12 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
               );
             })}
           </div>
-        </ScrollArea>
-      </div>
+        </div>
 
-      {/* Main content */}
-      <div className="flex-1 min-w-0">
-        {renderSection()}
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {renderSection()}
+        </div>
       </div>
     </div>
   );
