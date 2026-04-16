@@ -35,7 +35,7 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-const TeamMessageBoard = ({ teamId, teamMembers, isCoach, profile }: Props) => {
+const TeamMessageBoard = ({ teamId, isCoach, profile }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newContent, setNewContent] = useState("");
@@ -44,18 +44,12 @@ const TeamMessageBoard = ({ teamId, teamMembers, isCoach, profile }: Props) => {
   const [replyContent, setReplyContent] = useState("");
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
 
-  const athleteMap: Record<string, any> = {};
-  for (const m of teamMembers) {
-    const p = m.profile || m;
-    if (p?.id) athleteMap[p.id] = p;
-  }
-
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["team-board-posts", teamId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("team_board_posts")
-        .select("*")
+        .select("*, author:profiles!team_board_posts_author_id_fkey(id, full_name, username)")
         .eq("team_id", teamId)
         .is("parent_id", null)
         .order("is_pinned", { ascending: false })
@@ -70,7 +64,7 @@ const TeamMessageBoard = ({ teamId, teamMembers, isCoach, profile }: Props) => {
     queryFn: async () => {
       const { data } = await supabase
         .from("team_board_posts")
-        .select("*")
+        .select("*, author:profiles!team_board_posts_author_id_fkey(id, full_name, username)")
         .eq("team_id", teamId)
         .not("parent_id", "is", null)
         .order("created_at", { ascending: true });
@@ -206,7 +200,7 @@ const TeamMessageBoard = ({ teamId, teamMembers, isCoach, profile }: Props) => {
       ) : (
         <div className="space-y-3">
           {posts.map((post: any) => {
-            const author = athleteMap[post.author_id];
+            const author = post.author;
             const replies = getReplies(post.id);
             const isExpanded = expandedPosts.has(post.id);
             const canDelete = isCoach || post.author_id === profile.id;
@@ -259,7 +253,7 @@ const TeamMessageBoard = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                     {isExpanded && replies.length > 0 && (
                       <div className="pl-4 border-l-2 border-muted space-y-2 mt-2">
                         {replies.map((reply: any) => {
-                          const replyAuthor = athleteMap[reply.author_id];
+                          const replyAuthor = reply.author;
                           const canDeleteReply = isCoach || reply.author_id === profile.id;
                           return (
                             <div key={reply.id} className="flex items-start gap-2">

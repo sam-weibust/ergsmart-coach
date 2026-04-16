@@ -26,6 +26,7 @@ import { CoachComparison } from "./CoachComparison";
 import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
+import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface TeamsSectionProps {
@@ -401,11 +402,13 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     <Leaderboard teamId={team.id} teamName={team.name} />
                     <TeamGoals teamId={team.id} isCoach={false} currentUserId={profile.id} />
                   </div>
-                  
-                  <MessageBoard
+
+                  <TeamMessageBoard
                     teamId={team.id}
-                    currentUserId={profile.id}
-                    title={`${team.name} Chat`}
+                    teamName={team.name}
+                    teamMembers={team.team_members || []}
+                    isCoach={false}
+                    profile={profile}
                   />
                 </CardContent>
               )}
