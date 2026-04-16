@@ -289,11 +289,11 @@ const Dashboard = () => {
                 <span className="text-[10px] font-medium">More</span>
               </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[70vh]">
-              <SheetHeader>
+            <SheetContent side="bottom" className="max-h-[80vh] flex flex-col">
+              <SheetHeader className="shrink-0">
                 <SheetTitle>All Tabs</SheetTitle>
               </SheetHeader>
-              <div className="overflow-y-auto mt-4 space-y-1">
+              <div className="overflow-y-auto flex-1 mt-4 space-y-1 pb-4">
                 {moreTabItems.map((item) => (
                   <button
                     key={item.value}
