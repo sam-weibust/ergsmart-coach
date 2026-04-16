@@ -220,17 +220,17 @@ export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps 
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
       );
       const mimeType = fileExt === 'pdf' ? 'application/pdf' : `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
-      const imageBase64 = `data:${mimeType};base64,${base64}`;
-      
+      const image_base64 = `data:${mimeType};base64,${base64}`;
+
       // Call edge function to parse with AI
       const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-workout-image", {
-        body: { imageBase64, fileType: fileExt },
+        body: { user_id: user.id, image_base64 },
       });
-      
+
       if (parseError) throw parseError;
-      if (parseResult.error) throw new Error(parseResult.error);
-      
-      const workoutData = parseResult.plan;
+      if (parseResult?.error) throw new Error(parseResult.error);
+
+      const workoutData = parseResult?.plan;
       
       if (!workoutData || workoutData.length === 0) {
         throw new Error("Could not extract workout data from the image. Please try a clearer image or use CSV format.");

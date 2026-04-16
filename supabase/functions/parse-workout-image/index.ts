@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,13 +17,6 @@ serve(async (req) => {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    // Use service role key (fixes all RLS/401 issues)
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-
-    // Frontend must send: { user_id, image_base64 }
     const { user_id, image_base64 } = await req.json();
 
     if (!user_id) {
@@ -41,20 +33,65 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = `
-You are CrewSync AI, an expert at reading workout images.
+    // Extract media type and raw base64 from data URL
+    // image_base64 may be "data:image/jpeg;base64,/9j/..." or raw base64
+    let mediaType = "image/jpeg";
+    let base64Data = image_base64;
 
-Your job:
-- Extract structured workout data from the image
-- Identify exercise names, sets, reps, weights, distances, times, intervals, etc.
-- Return clean JSON with fields like:
-  type, exercises[], intervals[], notes
-- If the image is unclear, say so
-- Do NOT hallucinate values
-- Use only what is visible in the image
-`.trim();
+    const dataUrlMatch = image_base64.match(/^data:([^;]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      mediaType = dataUrlMatch[1];
+      base64Data = dataUrlMatch[2];
+    }
 
-    // Anthropic Vision request
+    const systemPrompt = `You are CrewSync AI, an expert at reading rowing and athletic training plan images.
+
+Extract the workout schedule from this image and return a JSON array of weeks in EXACTLY this format:
+[
+  {
+    "week": 1,
+    "phase": "Base",
+    "days": [
+      {
+        "day": "Monday",
+        "ergWorkout": {
+          "zone": "UT2",
+          "description": "20 min steady state",
+          "duration": "20 min",
+          "warmup": "5 min easy",
+          "cooldown": "5 min easy",
+          "notes": ""
+        }
+      },
+      {
+        "day": "Tuesday",
+        "strengthWorkout": {
+          "focus": "Upper Body",
+          "exercises": [
+            { "name": "Pull-ups", "sets": 3, "reps": 8 }
+          ],
+          "notes": ""
+        }
+      },
+      {
+        "day": "Wednesday",
+        "yogaSession": {
+          "duration": "30 min",
+          "focus": "Hip flexibility"
+        }
+      }
+    ]
+  }
+]
+
+Rules:
+- zone must be one of: UT2, UT1, TR, AT (or omit if not applicable)
+- Use ergWorkout for rowing/cardio sessions
+- Use strengthWorkout for lifting/cross-training
+- Use yogaSession for rest/recovery days
+- If a day has only a text description, use: { "day": "Monday", "workout": "the description text" }
+- Return ONLY the JSON array with no explanation, no markdown code fences`;
+
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
       {
@@ -65,20 +102,24 @@ Your job:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2048,
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 4096,
           system: systemPrompt,
           messages: [
             {
               role: "user",
               content: [
                 {
-                  type: "input_image",
-                  image: image_base64,
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: mediaType,
+                    data: base64Data,
+                  },
                 },
                 {
                   type: "text",
-                  text: "Extract all workout data from this image and return JSON only.",
+                  text: "Extract the workout plan from this image and return it as a JSON array only.",
                 },
               ],
             },
@@ -97,20 +138,23 @@ Your job:
     }
 
     const result = await anthropicResponse.json();
+    const textContent: string = result.content?.[0]?.text ?? "";
 
-    // Optionally store parsed data
-    await supabase.from("parsed_workouts").insert({
-      user_id,
-      raw_image: image_base64,
-      parsed_data: result,
-      created_at: new Date().toISOString(),
-    });
+    // Parse the JSON array from the response (handle any stray markdown)
+    let plan: any[] = [];
+    try {
+      const jsonMatch = textContent.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        plan = JSON.parse(jsonMatch[0]);
+      } else {
+        console.error("No JSON array found in response:", textContent);
+      }
+    } catch (e) {
+      console.error("Failed to parse plan JSON:", e, textContent);
+    }
 
-    return new Response(JSON.stringify(result), {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
+    return new Response(JSON.stringify({ plan }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("parse-workout-image error:", e);

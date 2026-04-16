@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -37,8 +37,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
+  CalendarDays,
   ChevronDown,
   ChevronUp,
+  Download,
   Dumbbell,
   FileImage,
   Loader2,
@@ -49,6 +51,7 @@ import {
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
 import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
 import { GenerationProgress } from "./GenerationProgress";
+import { Calendar } from "@/components/ui/calendar";
 
 type Profile = {
   id: string;
@@ -637,6 +640,16 @@ const PlanList = ({
 
   if (!plans || plans.length === 0) return null;
 
+  const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(new Set());
+
+  const toggleCalendarView = (planId: string) => {
+    setCalendarPlanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(planId)) next.delete(planId); else next.add(planId);
+      return next;
+    });
+  };
+
   const toggleAllWeeks = (planId: string, weeks: any[]) => {
     const weekIds = weeks.map((_: any, idx: number) => `week-${idx}`);
     const currentExpanded = expandedWeeks[planId] || [];
@@ -731,6 +744,35 @@ const PlanList = ({
 
                     {workoutWeeks.length > 0 &&
                       !workoutWeeks[0]?.fileUrl && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleCalendarView(plan.id)}
+                          >
+                            <CalendarDays className="h-4 w-4 mr-2" />
+                            {calendarPlanIds.has(plan.id) ? "List View" : "Calendar View"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => downloadICS(plan)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export .ics
+                          </Button>
+                        </div>
+                      )}
+
+                    {workoutWeeks.length > 0 &&
+                      !workoutWeeks[0]?.fileUrl &&
+                      calendarPlanIds.has(plan.id) && (
+                        <PlanCalendarView plan={plan} />
+                      )}
+
+                    {workoutWeeks.length > 0 &&
+                      !workoutWeeks[0]?.fileUrl &&
+                      !calendarPlanIds.has(plan.id) && (
                         <PrintableWeeklyPlan
                           weeks={workoutWeeks}
                           title={plan.title}
@@ -738,7 +780,8 @@ const PlanList = ({
                       )}
 
                     {workoutWeeks.length > 0 &&
-                      !workoutWeeks[0]?.fileUrl && (
+                      !workoutWeeks[0]?.fileUrl &&
+                      !calendarPlanIds.has(plan.id) && (
                         <div className="flex justify-end mb-2">
                           <Button
                             variant="outline"
@@ -765,27 +808,29 @@ const PlanList = ({
                         </div>
                       )}
 
-                    {workoutWeeks.length > 0 ? (
-                      <WeekAccordion
-                        planId={plan.id}
-                        weeks={workoutWeeks}
-                        expandedWeeks={planExpandedWeeks}
-                        setExpandedWeeks={(values) =>
-                          setExpandedWeeks((prev) => ({
-                            ...prev,
-                            [plan.id]: values,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <div className="text-muted-foreground p-4 text-center">
-                        {plan.workout_data
-                          ? "Unable to display workout data"
-                          : "No workout data available"}
-                      </div>
+                    {!calendarPlanIds.has(plan.id) && (
+                      workoutWeeks.length > 0 ? (
+                        <WeekAccordion
+                          planId={plan.id}
+                          weeks={workoutWeeks}
+                          expandedWeeks={planExpandedWeeks}
+                          setExpandedWeeks={(values) =>
+                            setExpandedWeeks((prev) => ({
+                              ...prev,
+                              [plan.id]: values,
+                            }))
+                          }
+                        />
+                      ) : (
+                        <div className="text-muted-foreground p-4 text-center">
+                          {plan.workout_data
+                            ? "Unable to display workout data"
+                            : "No workout data available"}
+                        </div>
+                      )
                     )}
 
-                    <div className="flex gap-2 pt-4 border-t">
+                    <div className="flex flex-wrap gap-2 pt-4 border-t">
                       <SharePlanDialog
                         planId={plan.id}
                         friends={friends}
@@ -793,6 +838,14 @@ const PlanList = ({
                         isCoach={isCoach}
                         onShare={onSharePlan}
                       />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadICS(plan)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Export .ics
+                      </Button>
                       <Button
                         variant="destructive"
                         size="sm"
@@ -813,6 +866,170 @@ const PlanList = ({
     </Card>
   );
 };
+
+// ─── ICS export ──────────────────────────────────────────────────────────────
+
+const sanitizeICS = (s: string) =>
+  s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+
+const generateICS = (plan: WorkoutPlan): string => {
+  const startDate = plan.created_at ? new Date(plan.created_at) : new Date();
+  const weeks = Array.isArray(plan.workout_data) ? (plan.workout_data as any[]) : [];
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+
+  const events = weeks.flatMap((week: any, wi: number) =>
+    (week.days || []).map((day: any, di: number) => {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + wi * 7 + di);
+      const dateStr = fmtDate(d);
+
+      const summary = day.ergWorkout
+        ? `${day.ergWorkout.zone ? day.ergWorkout.zone + ": " : ""}${day.ergWorkout.description || "Erg Workout"}`
+        : day.strengthWorkout
+        ? `Strength: ${day.strengthWorkout.focus || "Workout"}`
+        : day.yogaSession
+        ? "Rest / Recovery"
+        : day.workout
+        ? String(day.workout).slice(0, 60)
+        : "Training Day";
+
+      const description =
+        day.workout ||
+        day.ergWorkout?.description ||
+        (day.strengthWorkout ? `${day.strengthWorkout.focus || "Strength"} training` : "") ||
+        (day.yogaSession ? `Recovery: ${day.yogaSession.focus || ""}` : "") ||
+        "";
+
+      const lines = [
+        "BEGIN:VEVENT",
+        `DTSTART;VALUE=DATE:${dateStr}`,
+        `DTEND;VALUE=DATE:${dateStr}`,
+        `SUMMARY:${sanitizeICS(summary)}`,
+        description ? `DESCRIPTION:${sanitizeICS(description)}` : null,
+        `UID:${plan.id}-w${wi}-d${di}@crewsync`,
+        "END:VEVENT",
+      ];
+      return lines.filter(Boolean).join("\r\n");
+    })
+  );
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//CrewSync//Training Plan//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    ...events,
+    "END:VCALENDAR",
+  ].join("\r\n");
+};
+
+const downloadICS = (plan: WorkoutPlan) => {
+  const ics = generateICS(plan);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${plan.title.replace(/\s+/g, "-")}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// ─── Calendar view ────────────────────────────────────────────────────────────
+
+const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+
+  const { startDate, workoutMap, ergDays, strengthDays, restDays } = useMemo(() => {
+    const start = plan.created_at ? new Date(plan.created_at) : new Date();
+    const map: Record<string, { summary: string; type: string }> = {};
+    const erg: Date[] = [];
+    const str: Date[] = [];
+    const rest: Date[] = [];
+
+    const weeks = Array.isArray(plan.workout_data) ? (plan.workout_data as any[]) : [];
+    weeks.forEach((week: any, wi: number) => {
+      (week.days || []).forEach((day: any, di: number) => {
+        const d = new Date(start);
+        d.setDate(d.getDate() + wi * 7 + di);
+        const key = d.toDateString();
+
+        if (day.ergWorkout) {
+          erg.push(new Date(d));
+          map[key] = {
+            summary: `${day.ergWorkout.zone ? "[" + day.ergWorkout.zone + "] " : ""}${day.ergWorkout.description || "Erg workout"}`,
+            type: "erg",
+          };
+        } else if (day.strengthWorkout) {
+          str.push(new Date(d));
+          map[key] = { summary: `Strength: ${day.strengthWorkout.focus || "Workout"}`, type: "strength" };
+        } else if (day.yogaSession) {
+          rest.push(new Date(d));
+          map[key] = { summary: `Recovery: ${day.yogaSession.focus || "Rest day"}`, type: "rest" };
+        } else if (day.workout) {
+          erg.push(new Date(d));
+          map[key] = { summary: String(day.workout).slice(0, 80), type: "erg" };
+        }
+      });
+    });
+
+    return { startDate: start, workoutMap: map, ergDays: erg, strengthDays: str, restDays: rest };
+  }, [plan]);
+
+  const selectedWorkout = selectedDate ? workoutMap[selectedDate.toDateString()] : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 text-xs flex-wrap text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Erg / Cardio
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" /> Strength
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Rest / Recovery
+        </span>
+      </div>
+
+      <Calendar
+        mode="single"
+        selected={selectedDate}
+        onSelect={setSelectedDate}
+        defaultMonth={startDate}
+        modifiers={{ erg: ergDays, strength: strengthDays, rest: restDays }}
+        modifiersClassNames={{
+          erg: "!bg-blue-100 !text-blue-800 dark:!bg-blue-900/40 dark:!text-blue-300 font-semibold hover:!bg-blue-200",
+          strength: "!bg-orange-100 !text-orange-800 dark:!bg-orange-900/40 dark:!text-orange-300 font-semibold hover:!bg-orange-200",
+          rest: "!bg-purple-100 !text-purple-800 dark:!bg-purple-900/40 dark:!text-purple-300 font-semibold hover:!bg-purple-200",
+        }}
+        className="rounded-md border w-fit"
+      />
+
+      {selectedDate && selectedWorkout && (
+        <div className="p-3 rounded-lg border bg-muted/30 text-sm space-y-1">
+          <p className="font-medium">
+            {selectedDate.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+          <p className="text-muted-foreground">{selectedWorkout.summary}</p>
+        </div>
+      )}
+      {selectedDate && !selectedWorkout && (
+        <p className="text-sm text-muted-foreground text-center py-2">
+          No workout scheduled for this day
+        </p>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const WorkoutPlanSection = () => {
   const [months, setMonths] = useState<string>("3");

@@ -102,6 +102,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         ergWorkout: dayPlan.ergWorkout || null,
         strengthWorkout: dayPlan.strengthWorkout || null,
         yogaSession: dayPlan.yogaSession || null,
+        workout: dayPlan.workout || null,
       };
     } catch (e) {
       console.error("Error parsing today's plan:", e);
@@ -185,7 +186,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     );
   }
 
-  const { ergWorkout, strengthWorkout, yogaSession, weekNumber, phase, dayNumber } = todaysPlan;
+  const { ergWorkout, strengthWorkout, yogaSession, workout, weekNumber, phase, dayNumber } = todaysPlan;
   const isRestDay = !ergWorkout && !strengthWorkout && !!yogaSession;
 
   const handleLogErg = async () => {
@@ -368,6 +369,20 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
             {yogaSession.poses && (
               <p className="text-sm text-muted-foreground">{yogaSession.poses}</p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {workout && !ergWorkout && !strengthWorkout && !yogaSession && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Activity className="h-5 w-5 text-blue-500" />
+              Today's Workout
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap">{workout}</p>
           </CardContent>
         </Card>
       )}
