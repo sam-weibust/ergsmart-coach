@@ -10,8 +10,9 @@ import {
 } from "lucide-react";
 
 const C2_SERVICE           = "ce060000-43e5-11e4-916c-0800200c9a66";
+const C2_ROWING_SERVICE    = "ce060030-43e5-11e4-916c-0800200c9a66";
 const C2_ROWING_STATUS     = "ce060031-43e5-11e4-916c-0800200c9a66";
-const C2_ROWING_ADDITIONAL = "ce060039-43e5-11e4-916c-0800200c9a66";
+const C2_ROWING_ADDITIONAL = "ce060032-43e5-11e4-916c-0800200c9a66";
 const HR_SERVICE           = "heart_rate";
 const HR_MEASUREMENT       = "heart_rate_measurement";
 
@@ -98,6 +99,7 @@ const DeviceSection = () => {
 
   const ergServerRef = useRef<any>(null);
   const hrServerRef = useRef<any>(null);
+  const hrDeviceRef = useRef<any>(null);
   const prevWorkoutState = useRef<number | undefined>(undefined);
   const autoSavedRef = useRef(false);
 
@@ -211,7 +213,7 @@ const DeviceSection = () => {
           { namePrefix: "PM5" },
           { namePrefix: "Concept2" },
         ],
-        optionalServices: [C2_SERVICE],
+        optionalServices: [C2_ROWING_SERVICE],
       });
 
       device.addEventListener("gattserverdisconnected", () => {
@@ -222,7 +224,7 @@ const DeviceSection = () => {
 
       const server = await device.gatt!.connect();
       ergServerRef.current = server;
-      const service = await server.getPrimaryService(C2_SERVICE);
+      const service = await server.getPrimaryService(C2_ROWING_SERVICE);
 
       try {
         const sc = await service.getCharacteristic(C2_ROWING_STATUS);
@@ -259,35 +261,45 @@ const DeviceSection = () => {
     setErgData({});
   }, []);
 
+  const subscribeHR = useCallback(async (device: any) => {
+    const server = await device.gatt!.connect();
+    hrServerRef.current = server;
+    const service = await server.getPrimaryService(HR_SERVICE);
+    const char = await service.getCharacteristic(HR_MEASUREMENT);
+    await char.startNotifications();
+    char.addEventListener("characteristicvaluechanged", (e: any) => {
+      const dv = e.target.value as DataView;
+      const isUint16 = dv.getUint8(0) & 0x1;
+      const hr = isUint16 ? dv.getUint16(1, true) : dv.getUint8(1);
+      setHeartRate(hr);
+      setErgData(prev => ({ ...prev, heartRate: hr }));
+    });
+    return server;
+  }, []);
+
   const connectHR = useCallback(async () => {
     if (!webBtSupported) return;
     setHrConnecting(true);
     try {
       const device = await (navigator as any).bluetooth.requestDevice({
         filters: [{ services: [HR_SERVICE] }],
-        optionalServices: [HR_SERVICE],
       });
 
-      device.addEventListener("gattserverdisconnected", () => {
+      device.addEventListener("gattserverdisconnected", async () => {
         setHrConnected(false);
         setHeartRate(null);
-        toast({ title: "HR monitor disconnected" });
+        // Auto-reconnect attempt
+        try {
+          await subscribeHR(device);
+          setHrConnected(true);
+          toast({ title: "HR Monitor Reconnected" });
+        } catch {
+          toast({ title: "HR Monitor Disconnected", description: "Tap Reconnect to retry." });
+        }
       });
 
-      const server = await device.gatt!.connect();
-      hrServerRef.current = server;
-      const service = await server.getPrimaryService(HR_SERVICE);
-      const char = await service.getCharacteristic(HR_MEASUREMENT);
-      await char.startNotifications();
-
-      char.addEventListener("characteristicvaluechanged", (e: any) => {
-        const dv = e.target.value as DataView;
-        const isUint16 = dv.getUint8(0) & 0x1;
-        const hr = isUint16 ? dv.getUint16(1, true) : dv.getUint8(1);
-        setHeartRate(hr);
-        setErgData(prev => ({ ...prev, heartRate: hr }));
-      });
-
+      await subscribeHR(device);
+      hrDeviceRef.current = device;
       setHrDevice(device);
       setHrConnected(true);
       toast({ title: "HR Monitor Connected", description: device.name || "Heart Rate Monitor" });
@@ -298,12 +310,13 @@ const DeviceSection = () => {
     } finally {
       setHrConnecting(false);
     }
-  }, [webBtSupported, toast]);
+  }, [webBtSupported, subscribeHR, toast]);
 
   const disconnectHR = useCallback(() => {
-    try { hrServerRef.current?.disconnect(); } catch {}
+    try { hrDeviceRef.current?.gatt?.disconnect(); } catch {}
     setHrConnected(false);
     setHrDevice(null);
+    hrDeviceRef.current = null;
     setHeartRate(null);
   }, []);
 
