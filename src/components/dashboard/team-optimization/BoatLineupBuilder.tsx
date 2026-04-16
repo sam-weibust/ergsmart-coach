@@ -46,14 +46,14 @@ function SortableSeat({ seat, athletes, onAthleteChange }: {
       <div className="w-16 text-sm font-medium text-muted-foreground shrink-0">
         {seat.seat_number === 0 ? "Cox" : `Seat ${seat.seat_number}`}
       </div>
-      <Select value={seat.user_id || ""} onValueChange={v => onAthleteChange(seat.seat_number, v)}>
+      <Select value={seat.user_id || "none"} onValueChange={v => onAthleteChange(seat.seat_number, v === "none" ? "" : v)}>
         <SelectTrigger className="h-8 text-sm">
           <SelectValue placeholder="Unassigned" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">Unassigned</SelectItem>
+          <SelectItem value="none">Unassigned</SelectItem>
           {athletes.map(a => (
-            <SelectItem key={a.id} value={a.id}>{a.full_name || a.username || a.id}</SelectItem>
+            <SelectItem key={a.id} value={String(a.id)}>{a.full_name || a.username || a.id}</SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -78,7 +78,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   const [balanceScore, setBalanceScore] = useState<number | null>(null);
   const [aiRationale, setAiRationale] = useState<string>("");
 
-  const allAthletes = teamMembers.map((m: any) => m.profile || m).filter(Boolean);
+  const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
 
   const { data: lineups = [], isLoading } = useQuery({
     queryKey: ["boat-lineups", teamId],
@@ -140,7 +140,12 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   }
 
   function handleAthleteChange(seatNum: number, userId: string) {
-    setSeats(prev => prev.map(s => s.seat_number === seatNum ? { ...s, user_id: userId || null, name: userId ? (allAthletes.find(a => a.id === userId)?.full_name || "") : "" } : s));
+    const cleanId = userId && userId !== "none" ? userId : null;
+    setSeats(prev => prev.map(s => s.seat_number === seatNum ? {
+      ...s,
+      user_id: cleanId,
+      name: cleanId ? (allAthletes.find((a: any) => a.id === cleanId)?.full_name || "") : "",
+    } : s));
   }
 
   function handleDragEnd(event: DragEndEvent) {

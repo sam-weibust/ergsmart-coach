@@ -26,6 +26,7 @@ import { CoachComparison } from "./CoachComparison";
 import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface TeamsSectionProps {
   profile: any;
@@ -320,13 +321,15 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                   </div>
 
                   {/* Team Optimization Dashboard */}
-                  <TeamOptimizationDashboard
-                    teamId={team.id}
-                    teamName={team.name}
-                    teamMembers={team.team_members || []}
-                    isCoach={isCoach}
-                    profile={profile}
-                  />
+                  <ErrorBoundary>
+                    <TeamOptimizationDashboard
+                      teamId={team.id}
+                      teamName={team.name}
+                      teamMembers={team.team_members || []}
+                      isCoach={isCoach}
+                      profile={profile}
+                    />
+                  </ErrorBoundary>
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

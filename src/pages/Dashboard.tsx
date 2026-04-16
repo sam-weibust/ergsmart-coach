@@ -124,7 +124,7 @@ const Dashboard = () => {
     { value: "recruit", icon: GraduationCap, label: "Recruit" },
     { value: "profile", icon: User, label: "Profile" },
     { value: "friends", icon: MessageCircle, label: "Friends" },
-    ...(isOnTeam ? [{ value: "teams", icon: UsersRound, label: "Teams" }] : []),
+    { value: "teams", icon: UsersRound, label: "Teams" },
     { value: "critique", icon: Eye, label: "Critique" },
     { value: "forum", icon: MessagesSquare, label: "Forum" },
     { value: "devices", icon: Bluetooth, label: "Devices" },
@@ -250,9 +250,7 @@ const Dashboard = () => {
             <TabsContent value="leaderboard" className="mt-0"><LeaderboardSection /></TabsContent>
             <TabsContent value="profile" className="mt-0"><ProfileSection /></TabsContent>
             <TabsContent value="friends" className="mt-0"><FriendsSection profile={profile} /></TabsContent>
-            {isOnTeam && (
-              <TabsContent value="teams" className="mt-0"><TeamsSection profile={profile} isCoach={isCoach} /></TabsContent>
-            )}
+            <TabsContent value="teams" className="mt-0"><TeamsSection profile={profile} isCoach={isCoach} /></TabsContent>
             <TabsContent value="critique" className="mt-0"><CritiqueSection /></TabsContent>
             <TabsContent value="ask" className="mt-0"><AskSection /></TabsContent>
             <TabsContent value="forum" className="mt-0"><ForumSection /></TabsContent>
