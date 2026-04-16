@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
@@ -81,28 +82,26 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
 
       {/* Mobile horizontal scroll strip + main content stacked */}
       <div className="flex flex-col flex-1 min-w-0 gap-4">
-        {/* Mobile tab strip */}
-        <div className="md:hidden overflow-x-auto pb-1">
-          <div className="flex gap-1.5 w-max">
-            {SIDEBAR_ITEMS.map((item) => {
-              const Icon = ICON_MAP[item.icon];
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => setActiveSection(item.key)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shrink-0",
-                    activeSection === item.key
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5" />}
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* Mobile section picker */}
+        <div className="md:hidden">
+          <Select value={activeSection} onValueChange={setActiveSection}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SIDEBAR_ITEMS.map((item) => {
+                const Icon = ICON_MAP[item.icon];
+                return (
+                  <SelectItem key={item.key} value={item.key}>
+                    <span className="flex items-center gap-2">
+                      {Icon && <Icon className="h-4 w-4" />}
+                      {item.label}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Main content */}
