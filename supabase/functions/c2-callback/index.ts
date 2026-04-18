@@ -49,12 +49,24 @@ serve(async (req) => {
     });
 
     if (!tokenRes.ok) {
-      const err = await tokenRes.text();
-      console.error("Token exchange error:", err);
-      return new Response(JSON.stringify({ error: "Failed to exchange authorization code" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const errText = await tokenRes.text();
+      console.error("Token exchange error (status %d):", tokenRes.status, errText);
+      let errDetail: unknown = errText;
+      try { errDetail = JSON.parse(errText); } catch { /* keep raw text */ }
+      return new Response(
+        JSON.stringify({
+          error: "Failed to exchange authorization code",
+          concept2_status: tokenRes.status,
+          concept2_error: errDetail,
+          redirect_uri_sent: "https://ergsmart-coach.vercel.app/auth/concept2/callback",
+          client_id_present: !!C2_CLIENT_ID,
+          client_secret_present: !!C2_CLIENT_SECRET,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const tokens = await tokenRes.json();
