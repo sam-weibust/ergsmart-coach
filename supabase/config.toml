@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.parse-nutrition-label]
 verify_jwt = false
+
+[functions.generate-athlete-summary]
+verify_jwt = false
+
+[functions.score-college-targets]
+verify_jwt = false

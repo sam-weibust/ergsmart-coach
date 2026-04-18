@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -34,6 +34,10 @@ import RecoverySection from "@/components/dashboard/RecoverySection";
 import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 import LiveErgView from "@/components/dashboard/LiveErgView";
 import RaceSection from "@/components/dashboard/RaceSection";
+import { PublicProfileSection } from "@/components/dashboard/PublicProfileSection";
+import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
+import { CollegeTargetsSection } from "@/components/dashboard/CollegeTargetsSection";
+import { CoachDirectorySection } from "@/components/dashboard/CoachDirectorySection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -124,6 +128,10 @@ const Dashboard = () => {
     { value: "predictor", icon: Calculator, label: "Predictor" },
     { value: "leaderboard", icon: Medal, label: "Rankings" },
     { value: "recruit", icon: GraduationCap, label: "Recruit" },
+    { value: "public-profile", icon: Globe, label: "My Profile" },
+    { value: "recruiting", icon: Target, label: "Recruiting" },
+    { value: "college-targets", icon: School, label: "Colleges" },
+    { value: "coaches", icon: UsersRound, label: "Coaches" },
     { value: "profile", icon: User, label: "Profile" },
     { value: "friends", icon: MessageCircle, label: "Friends" },
     { value: "teams", icon: UsersRound, label: "Teams" },
@@ -200,6 +208,18 @@ const Dashboard = () => {
               <TabsTrigger value="recruit" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <GraduationCap className="h-4 w-4" /><span>Recruit</span>
               </TabsTrigger>
+              <TabsTrigger value="public-profile" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <Globe className="h-4 w-4" /><span>My Profile</span>
+              </TabsTrigger>
+              <TabsTrigger value="recruiting" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <Target className="h-4 w-4" /><span>Recruiting</span>
+              </TabsTrigger>
+              <TabsTrigger value="college-targets" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <School className="h-4 w-4" /><span>Colleges</span>
+              </TabsTrigger>
+              <TabsTrigger value="coaches" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <UsersRound className="h-4 w-4" /><span>Coaches</span>
+              </TabsTrigger>
               <TabsTrigger value="profile" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <User className="h-4 w-4" /><span>Profile</span>
               </TabsTrigger>
@@ -254,6 +274,10 @@ const Dashboard = () => {
             <TabsContent value="compare" className="mt-0"><ComparisonSection profile={profile} /></TabsContent>
             <TabsContent value="awards" className="mt-0"><AwardsSection profile={profile} /></TabsContent>
             <TabsContent value="recruit" className="mt-0"><RecruitmentSection profile={profile} /></TabsContent>
+            <TabsContent value="public-profile" className="mt-0"><PublicProfileSection /></TabsContent>
+            <TabsContent value="recruiting" className="mt-0"><RecruitingProfileSection /></TabsContent>
+            <TabsContent value="college-targets" className="mt-0"><CollegeTargetsSection /></TabsContent>
+            <TabsContent value="coaches" className="mt-0"><CoachDirectorySection profile={profile} /></TabsContent>
             <TabsContent value="predictor" className="mt-0">
               <div className="space-y-6"><ErgPredictor /><SplitCalculator /></div>
             </TabsContent>
