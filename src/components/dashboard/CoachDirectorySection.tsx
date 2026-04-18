@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Search, Mail, Globe, School, Users, Phone } from "lucide-react";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export const CoachDirectorySection = ({ profile }: { profile: any }) => {
   const { toast } = useToast();

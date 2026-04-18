@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const FIT_COLORS: Record<string, string> = {
   likely: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
