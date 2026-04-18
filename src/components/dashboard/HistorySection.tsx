@@ -216,13 +216,14 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   // Extract a positive-or-null heart rate value (0 means no monitor connected)
   const safeHR = (val: any): number | null => (val != null && Number(val) > 0 ? Number(val) : null);
 
-  // Pull intervals/splits out of real_time_data regardless of nesting
-  const extractIntervals = (rt: any): any[] => {
-    if (!rt) return [];
-    if (Array.isArray(rt)) return rt;
-    if (Array.isArray(rt.data)) return rt.data;
-    if (Array.isArray(rt.intervals)) return rt.intervals;
-    if (Array.isArray(rt.splits)) return rt.splits;
+  // Pull splits/intervals from workout_data (the full stored Concept2 detail object).
+  // d.splits  = per-500m split results (most workouts)
+  // d.workout.intervals = interval definitions (interval workouts)
+  // real_time_data contains raw stroke-by-stroke data, not used for the display table.
+  const extractIntervals = (d: any): any[] => {
+    if (!d) return [];
+    if (Array.isArray(d.splits) && d.splits.length > 0) return d.splits;
+    if (Array.isArray(d.workout?.intervals) && d.workout.intervals.length > 0) return d.workout.intervals;
     return [];
   };
 
@@ -230,8 +231,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   // falls back to individual columns for manually-entered workouts.
   const WorkoutDetailBody = ({ workout }: { workout: any }) => {
     const d: any = workout.workout_data;
-    const rt: any = workout.real_time_data;
-    const intervals = extractIntervals(rt);
+    const intervals = extractIntervals(d);
 
     // HR from workout_data.heart_rate object (C2 workouts) or individual columns
     const hrAvg  = d ? safeHR(d.heart_rate?.average) : safeHR(workout.heart_rate_average ?? workout.avg_heart_rate);
@@ -282,7 +282,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
 
         {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
 
-        {/* Intervals / splits table from real_time_data */}
+        {/* Intervals / splits table from workout_data.splits or workout_data.workout.intervals */}
         {intervals.length > 0 && (
           <div className="overflow-x-auto">
             <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">
@@ -416,8 +416,14 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                                     </Button>
                                   )}
                                 </h3>
-                                <p className="text-sm text-muted-foreground">
-                                  {new Date(workout.workout_date).toLocaleDateString()}
+                                <p className="text-sm text-muted-foreground flex gap-3">
+                                  <span>{new Date(workout.workout_date).toLocaleDateString()}</span>
+                                  {(workout.workout_data?.time_formatted ?? workout.time_formatted) && (
+                                    <span>{workout.workout_data?.time_formatted ?? workout.time_formatted}</span>
+                                  )}
+                                  {workout.avg_split && (
+                                    <span>{workout.avg_split}/500m</span>
+                                  )}
                                 </p>
                               </div>
                             </div>

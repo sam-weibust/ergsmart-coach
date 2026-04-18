@@ -319,6 +319,7 @@ serve(async (req) => {
         }
 
         console.log(`[sync-concept2] MAPPED DETAIL for c2_id=${c2Id}:`, JSON.stringify(detailUpdate));
+        console.log(`[sync-concept2] workout_data populated=${detailUpdate.workout_data != null}, real_time_data populated=${detailUpdate.real_time_data != null}, splits count=${(detailUpdate.workout_data as any)?.splits?.length ?? 0}`);
 
         const { error: updateErr } = await supabase.from("erg_workouts")
           .update(detailUpdate)
