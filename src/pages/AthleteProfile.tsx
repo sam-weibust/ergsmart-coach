@@ -10,9 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   MapPin, School, Users, Globe, Instagram, Twitter, Youtube,
   ExternalLink, UserPlus, UserCheck, Eye, GraduationCap, TrendingUp,
-  Dumbbell, BarChart3, Heart, Star, ArrowLeft, Mail, Link2
+  Dumbbell, BarChart3, Heart, Star, ArrowLeft, Mail, Link2,
+  RefreshCw, Unplug, Plug
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
 const fmtSplit = (s: string | null) => {
@@ -196,6 +198,81 @@ export default function AthleteProfile() {
   const socialLinks = ap.social_links || {};
   const personalFacts = ap.personal_facts || [];
   const isOwnProfile = currentUser?.id === base.id;
+
+  const [c2Connected, setC2Connected] = useState<boolean | null>(null);
+  const [c2LastSync, setC2LastSync] = useState<string | null>(ap.last_concept2_sync ?? null);
+  const [c2Syncing, setC2Syncing] = useState(false);
+  const [c2Connecting, setC2Connecting] = useState(false);
+  const [c2ImportedCount, setC2ImportedCount] = useState<number | null>(null);
+
+  // Check from URL if just connected
+  const urlParams = new URLSearchParams(window.location.search);
+  const justConnected = urlParams.get("c2") === "connected";
+  const importedFromUrl = urlParams.get("imported");
+
+  useEffect(() => {
+    if (!isOwnProfile || !currentUser) return;
+    // Check Concept2 connection status via athlete_profiles last_concept2_sync
+    // We use last_concept2_sync as a proxy for being connected
+    setC2Connected(!!ap.last_concept2_sync);
+    setC2LastSync(ap.last_concept2_sync ?? null);
+    if (justConnected && importedFromUrl) {
+      setC2Connected(true);
+      setC2ImportedCount(parseInt(importedFromUrl, 10));
+    }
+  }, [isOwnProfile, currentUser, ap.last_concept2_sync]);
+
+  const handleC2Connect = async () => {
+    if (!currentUser) return;
+    setC2Connecting(true);
+    try {
+      const res = await c2Connect({ user_id: currentUser.id });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({ title: "Connection error", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Connection failed", variant: "destructive" });
+    } finally {
+      setC2Connecting(false);
+    }
+  };
+
+  const handleC2Sync = async () => {
+    if (!currentUser) return;
+    setC2Syncing(true);
+    try {
+      const res = await c2Sync({ user_id: currentUser.id });
+      const data = await res.json();
+      if (data.success) {
+        setC2LastSync(new Date().toISOString());
+        setC2ImportedCount(data.imported);
+        queryClient.invalidateQueries({ queryKey: ["public-athlete", username] });
+        toast({ title: `Synced! ${data.imported} workout${data.imported === 1 ? "" : "s"} imported.` });
+      } else {
+        toast({ title: "Sync failed", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setC2Syncing(false);
+    }
+  };
+
+  const handleC2Disconnect = async () => {
+    if (!currentUser) return;
+    try {
+      await c2Disconnect({ user_id: currentUser.id });
+      setC2Connected(false);
+      setC2LastSync(null);
+      setC2ImportedCount(null);
+      toast({ title: "Concept2 disconnected" });
+    } catch {
+      toast({ title: "Disconnect failed", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
@@ -463,6 +540,81 @@ export default function AthleteProfile() {
                       <p className="font-medium">{fact.value}</p>
                     </div>
                   ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Concept2 Integration — only shown to profile owner */}
+            {isOwnProfile && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <img
+                      src="https://www.concept2.com/favicon.ico"
+                      alt="Concept2"
+                      className="h-4 w-4"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                    Concept2 Logbook
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {c2Connected ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                          Connected
+                        </span>
+                      </div>
+                      {c2ImportedCount !== null && (
+                        <p className="text-xs text-muted-foreground">
+                          {c2ImportedCount} workout{c2ImportedCount === 1 ? "" : "s"} imported
+                        </p>
+                      )}
+                      {c2LastSync && (
+                        <p className="text-xs text-muted-foreground">
+                          Last synced: {new Date(c2LastSync).toLocaleDateString()}
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={handleC2Sync}
+                          disabled={c2Syncing}
+                        >
+                          <RefreshCw className={`h-3 w-3 mr-1 ${c2Syncing ? "animate-spin" : ""}`} />
+                          {c2Syncing ? "Syncing…" : "Sync Now"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-muted-foreground hover:text-destructive"
+                          onClick={handleC2Disconnect}
+                        >
+                          <Unplug className="h-3 w-3 mr-1" />
+                          Disconnect
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Connect your Concept2 account to automatically import workouts.
+                      </p>
+                      <Button
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={handleC2Connect}
+                        disabled={c2Connecting}
+                      >
+                        <Plug className="h-3 w-3 mr-1" />
+                        {c2Connecting ? "Connecting…" : "Connect Concept2 Account"}
+                      </Button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             )}

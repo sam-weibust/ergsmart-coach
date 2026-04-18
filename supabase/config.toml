@@ -44,3 +44,21 @@ verify_jwt = false
 
 [functions.score-college-targets]
 verify_jwt = false
+
+[functions.sync-concept2]
+verify_jwt = false
+
+[functions.c2-connect]
+verify_jwt = false
+
+[functions.c2-callback]
+verify_jwt = false
+
+[functions.c2-disconnect]
+verify_jwt = false
+
+[functions.c2-sync]
+verify_jwt = false
+
+[functions.daily-c2-sync]
+verify_jwt = false

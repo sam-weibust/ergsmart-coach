@@ -74,3 +74,19 @@ export function c2LogbookSync(payload) {
 export function createNotification(payload) {
   return callFunction("create-notification", payload);
 }
+
+export function c2Connect(payload) {
+  return callFunction("c2-connect", payload);
+}
+
+export function c2Callback(payload) {
+  return callFunction("c2-callback", payload);
+}
+
+export function c2Disconnect(payload) {
+  return callFunction("c2-disconnect", payload);
+}
+
+export function c2Sync(payload) {
+  return callFunction("c2-sync", payload);
+}
