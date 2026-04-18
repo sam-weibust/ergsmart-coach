@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CrewSync</string>
+    <string name="title_activity_main">CrewSync</string>
+    <string name="package_name">com.crewsync.app</string>
+    <string name="custom_url_scheme">com.crewsync.app</string>
+</resources>
