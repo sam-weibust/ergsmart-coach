@@ -3,10 +3,61 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School, Award, Zap } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  LogOut,
+  Sparkles,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Construction,
+  LayoutDashboard,
+  Dumbbell,
+  BarChart3,
+  Users,
+  GraduationCap,
+  Trophy,
+  Gauge,
+  MessagesSquare,
+  Settings,
+  Calendar,
+  History,
+  Activity,
+  Utensils,
+  Weight,
+  Moon,
+  BookOpen,
+  TrendingUp,
+  Star,
+  Zap,
+  Target,
+  Video,
+  Ship,
+  ArrowLeftRight,
+  MessageCircle,
+  CheckSquare,
+  Medal,
+  GitCompare,
+  Link2,
+  User,
+  Bell,
+  MessageSquare,
+  Bluetooth,
+  Plug,
+  Globe,
+  School,
+  Award,
+  Users2,
+  Radio,
+  HeartPulse,
+  Wifi,
+  MessageCircleMore,
+  UserPlus,
+  Share2,
+  Calculator,
+  Swords,
+} from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
@@ -49,12 +100,248 @@ import { StreakWidget } from "@/components/dashboard/StreakWidget";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 
+// ─── NAV CONFIG ──────────────────────────────────────────────────────────────
+
+interface SubSection {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  coachOnly?: boolean;
+}
+
+interface NavSection {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  subs: SubSection[];
+}
+
+const NAV_CONFIG: NavSection[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    subs: [],
+  },
+  {
+    id: "training",
+    label: "Training",
+    icon: Dumbbell,
+    subs: [
+      { id: "plan", label: "Plan", description: "View and manage your training plan", icon: Calendar },
+      { id: "history", label: "History", description: "Review your past workouts", icon: History },
+      { id: "erg", label: "Erg Workout", description: "Log an erg session", icon: Activity },
+      { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
+      { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
+      { id: "load", label: "Load Management", description: "Monitor training load", icon: TrendingUp },
+      { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
+      { id: "schedule", label: "Schedule", description: "Today's scheduled workouts", icon: Calendar },
+      { id: "library", label: "Library", description: "Browse workout templates", icon: BookOpen },
+    ],
+  },
+  {
+    id: "performance",
+    label: "Performance",
+    icon: BarChart3,
+    subs: [
+      { id: "analytics", label: "Analytics", description: "Deep-dive performance analytics", icon: BarChart3 },
+      { id: "trends", label: "Trends", description: "Compare and track trends over time", icon: TrendingUp },
+      { id: "records", label: "Personal Records", description: "Your all-time best performances", icon: Star },
+      { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
+      { id: "pacing", label: "Pacing", description: "Calculate and plan splits", icon: Calculator },
+      { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
+    ],
+  },
+  {
+    id: "teams",
+    label: "Teams",
+    icon: Users,
+    subs: [
+      { id: "roster", label: "Roster", description: "View and manage team roster", icon: Users },
+      { id: "lineups", label: "Lineups", description: "Build boat lineups", icon: Ship },
+      { id: "seat-racing", label: "Seat Racing", description: "Analyze seat racing results", icon: ArrowLeftRight },
+      { id: "race-optimizer", label: "Race Optimizer", description: "Optimize race lineups", icon: Target },
+      { id: "messages", label: "Messages", description: "Team message board", icon: MessageCircle },
+      { id: "attendance", label: "Attendance", description: "Track team attendance", icon: CheckSquare },
+      { id: "checkins", label: "Check-ins", description: "Daily athlete check-ins", icon: Activity },
+      { id: "leaderboard", label: "Leaderboard", description: "Team erg leaderboard", icon: Medal },
+      { id: "comparison", label: "Athlete Compare", description: "Compare athletes side by side", icon: GitCompare },
+      { id: "teamsnap", label: "TeamSnap", description: "TeamSnap integration", icon: Link2 },
+      { id: "plan-gen", label: "Plan Generator", description: "Generate team training plans", icon: Calendar, coachOnly: true },
+      { id: "load-mgmt", label: "Load Management", description: "Manage athlete training loads", icon: Activity, coachOnly: true },
+      { id: "recruiting-gaps", label: "Recruiting Gaps", description: "Identify recruiting needs", icon: GraduationCap, coachOnly: true },
+    ],
+  },
+  {
+    id: "recruiting",
+    label: "Recruiting",
+    icon: GraduationCap,
+    subs: [
+      { id: "my-profile", label: "My Profile", description: "View your public athlete profile", icon: User },
+      { id: "public-profile", label: "Public Profile", description: "Edit your public-facing profile", icon: Globe },
+      { id: "recruiting-profile", label: "Recruiting Profile", description: "Manage your recruiting information", icon: Target },
+      { id: "college-targets", label: "College Targets", description: "Track target schools and coaches", icon: School },
+      { id: "coach-directory", label: "Coach Directory", description: "Find and contact college coaches", icon: Users2 },
+      { id: "combine", label: "Virtual Combine", description: "Participate in virtual combines", icon: Award },
+      { id: "alumni", label: "Alumni Network", description: "Connect with alumni athletes", icon: GraduationCap },
+      { id: "commitments", label: "Commitments", description: "Track athlete commitments", icon: CheckSquare },
+    ],
+  },
+  {
+    id: "competition",
+    label: "Competition",
+    icon: Trophy,
+    subs: [
+      { id: "leaderboard", label: "Leaderboard", description: "Global erg rankings", icon: Medal },
+      { id: "h2h", label: "Head-to-Head", description: "Race against other athletes", icon: Swords },
+      { id: "challenges", label: "Challenges", description: "Weekly community challenges", icon: Zap },
+      { id: "achievements", label: "Achievements", description: "View your awards and badges", icon: Trophy },
+      { id: "rankings", label: "Rankings", description: "Official event rankings", icon: Star },
+    ],
+  },
+  {
+    id: "live",
+    label: "Live",
+    icon: Gauge,
+    subs: [
+      { id: "erg", label: "Live Erg", description: "Real-time erg session monitor", icon: Gauge },
+      { id: "hr", label: "Heart Rate", description: "Live heart rate monitoring", icon: HeartPulse },
+      { id: "devices", label: "Devices", description: "Connect and manage BLE devices", icon: Bluetooth },
+    ],
+  },
+  {
+    id: "community",
+    label: "Community",
+    icon: MessagesSquare,
+    subs: [
+      { id: "forum", label: "Forum", description: "Community discussion boards", icon: MessageCircleMore },
+      { id: "directory", label: "Directory", description: "Find clubs and programs", icon: Globe },
+      { id: "friends", label: "Friends", description: "Connect with other athletes", icon: UserPlus },
+      { id: "referrals", label: "Referrals", description: "Invite friends to CrewSync", icon: Share2 },
+      { id: "shareable", label: "Share", description: "Share your profile and workouts", icon: Share2 },
+    ],
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    subs: [
+      { id: "profile", label: "Profile", description: "Edit your account and profile", icon: User },
+      { id: "notifications", label: "Notifications", description: "Manage notification preferences", icon: Bell },
+      { id: "ask-ai", label: "Ask AI Coach", description: "Chat with your AI coach", icon: MessageSquare },
+      { id: "concept2", label: "Concept2", description: "Concept2 logbook integration", icon: Link2 },
+      { id: "integrations", label: "Integrations", description: "Connect third-party services", icon: Plug },
+    ],
+  },
+];
+
+// ─── PLACEHOLDER COMPONENT ────────────────────────────────────────────────────
+
+function PlaceholderSection({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+        <Construction className="h-8 w-8 text-primary" />
+      </div>
+      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
+      <p className="text-muted-foreground max-w-sm">{description}</p>
+    </div>
+  );
+}
+
+// ─── DASHBOARD OVERVIEW ───────────────────────────────────────────────────────
+
+function DashboardOverview({ navTo }: { navTo: (s: string, sub?: string) => void }) {
+  const quickActions = [
+    { label: "Log Erg", section: "training", sub: "erg", icon: Activity },
+    { label: "View Plan", section: "training", sub: "plan", icon: Calendar },
+    { label: "Analytics", section: "performance", sub: "analytics", icon: BarChart3 },
+    { label: "Live Erg", section: "live", sub: "erg", icon: Gauge },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StreakWidget />
+        <WeeklyChallengeWidget onNavigate={(tab) => {
+          if (tab === "challenges") navTo("competition", "challenges");
+        }} />
+      </div>
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {quickActions.map((action) => (
+            <button
+              key={action.sub}
+              onClick={() => navTo(action.section, action.sub)}
+              className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+            >
+              <action.icon className="h-5 w-5 text-primary" />
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SECTION LANDING PAGE ─────────────────────────────────────────────────────
+
+function SectionLanding({
+  section,
+  navTo,
+  isCoach,
+}: {
+  section: NavSection;
+  navTo: (s: string, sub?: string) => void;
+  isCoach: boolean;
+}) {
+  const visibleSubs = section.subs.filter((s) => !s.coachOnly || isCoach);
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">{section.label}</h1>
+        <p className="text-muted-foreground mt-1">Select a section to get started</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {visibleSubs.map((sub) => (
+          <button
+            key={sub.id}
+            onClick={() => navTo(section.id, sub.id)}
+            className="flex items-start gap-4 p-4 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-left group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+              <sub.icon className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground text-sm">{sub.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{sub.description}</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("plans");
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [activeSub, setActiveSub] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const navTo = (s: string, sub?: string) => {
+    setActiveSection(s);
+    setActiveSub(sub ?? null);
+    setMoreOpen(false);
+  };
 
   const handleRefresh = useCallback(async () => {
     await queryClient.invalidateQueries();
@@ -64,9 +351,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     checkUser();
-    
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+      if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
         navigate("/auth");
       }
     });
@@ -114,7 +401,8 @@ const Dashboard = () => {
     enabled: !loading,
   });
 
-  const isOnTeam = isCoach || (userTeams && userTeams.length > 0);
+  // kept for reference, teams now always visible
+  const _isOnTeam = isCoach || (userTeams && userTeams.length > 0);
 
   if (loading) {
     return (
@@ -130,96 +418,251 @@ const Dashboard = () => {
     );
   }
 
-  const mobileNavItems = [
-    { value: "plans", icon: Calendar, label: "Training" },
-    { value: "log", icon: PlusCircle, label: "Log" },
-    { value: "live", icon: Gauge, label: "Live Erg" },
-    { value: "history", icon: History, label: "History" },
+  const renderContent = () => {
+    const section = NAV_CONFIG.find((s) => s.id === activeSection);
+
+    // Dashboard always shows overview
+    if (activeSection === "dashboard") {
+      return <DashboardOverview navTo={navTo} />;
+    }
+
+    // Section with no sub selected → landing grid
+    if (!activeSub && section && section.subs.length > 0) {
+      return <SectionLanding section={section} navTo={navTo} isCoach={isCoach} />;
+    }
+
+    // ── Training ──────────────────────────────────────────────────────────────
+    if (activeSection === "training") {
+      switch (activeSub) {
+        case "plan":
+          return (
+            <div className="space-y-4">
+              <TodaysWorkouts profile={profile} />
+              <WorkoutPlanSection />
+            </div>
+          );
+        case "history":
+          return <HistorySection profile={profile} />;
+        case "erg":
+          return (
+            <div className="space-y-6">
+              <ErgWorkoutSection profile={profile} />
+              <MultiPieceSession profile={profile} />
+            </div>
+          );
+        case "strength":
+          return <MultiSetStrengthForm profile={profile} />;
+        case "nutrition":
+          return <MealPlanTab profile={profile} />;
+        case "load":
+          return <PlaceholderSection title="Load Management" description="Select a team to manage athlete training loads." />;
+        case "recovery":
+          return <RecoverySection profile={profile} />;
+        case "schedule":
+          return <TodaysWorkouts profile={profile} />;
+        case "library":
+          return <WorkoutPlanSection />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Performance ───────────────────────────────────────────────────────────
+    if (activeSection === "performance") {
+      switch (activeSub) {
+        case "analytics":
+          return <PerformanceSection profile={profile} />;
+        case "trends":
+          return <ComparisonSection profile={profile} />;
+        case "records":
+          return (
+            <div className="space-y-4">
+              <PlaceholderSection
+                title="Personal Records"
+                description="Your all-time best performances will appear here. Visit your public profile to see all PRs."
+              />
+            </div>
+          );
+        case "predictions":
+          return (
+            <div className="space-y-6">
+              <ErgPredictor />
+              <SplitCalculator />
+            </div>
+          );
+        case "pacing":
+          return <SplitCalculator />;
+        case "technique":
+          return <CritiqueSection />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Teams ─────────────────────────────────────────────────────────────────
+    if (activeSection === "teams") {
+      switch (activeSub) {
+        case "roster":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "lineups":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "seat-racing":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "race-optimizer":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "messages":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "attendance":
+          return <PlaceholderSection title="Attendance" description="Attendance tracking coming soon." />;
+        case "checkins":
+          return <PlaceholderSection title="Check-ins" description="Daily athlete check-ins coming soon." />;
+        case "leaderboard":
+          return <TeamsSection profile={profile} isCoach={isCoach} />;
+        case "comparison":
+          return <AthleteComparisonSection />;
+        case "teamsnap":
+          return <PlaceholderSection title="TeamSnap" description="TeamSnap integration coming soon." />;
+        case "plan-gen":
+          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
+        case "load-mgmt":
+          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
+        case "recruiting-gaps":
+          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
+        default:
+          return null;
+      }
+    }
+
+    // ── Recruiting ────────────────────────────────────────────────────────────
+    if (activeSection === "recruiting") {
+      switch (activeSub) {
+        case "my-profile":
+          return <PublicProfileSection />;
+        case "public-profile":
+          return <PublicProfileSection />;
+        case "recruiting-profile":
+          return <RecruitingProfileSection />;
+        case "college-targets":
+          return <CollegeTargetsSection />;
+        case "coach-directory":
+          return <CoachDirectorySection profile={profile} />;
+        case "combine":
+          return <CombineSection />;
+        case "alumni":
+          return <AlumniNetworkSection />;
+        case "commitments":
+          return <PlaceholderSection title="Commitments" description="Athlete commitment tracking coming soon." />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Competition ───────────────────────────────────────────────────────────
+    if (activeSection === "competition") {
+      switch (activeSub) {
+        case "leaderboard":
+          return <LeaderboardSection />;
+        case "h2h":
+          return <RaceSection />;
+        case "challenges":
+          return <WeeklyChallengeSection />;
+        case "achievements":
+          return <AwardsSection profile={profile} />;
+        case "rankings":
+          return <LeaderboardSection />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Live ──────────────────────────────────────────────────────────────────
+    if (activeSection === "live") {
+      switch (activeSub) {
+        case "erg":
+          return <LiveErgView />;
+        case "hr":
+          return <DeviceSection />;
+        case "devices":
+          return <DeviceSection />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Community ─────────────────────────────────────────────────────────────
+    if (activeSection === "community") {
+      switch (activeSub) {
+        case "forum":
+          return <ForumSection />;
+        case "directory":
+          return <DirectorySection />;
+        case "friends":
+          return <FriendsSection profile={profile} />;
+        case "referrals":
+          return <ReferralSection profile={profile} />;
+        case "shareable":
+          return <PlaceholderSection title="Share" description="Shareable profile and workout cards coming soon." />;
+        default:
+          return null;
+      }
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+    if (activeSection === "settings") {
+      switch (activeSub) {
+        case "profile":
+          return <ProfileSection />;
+        case "notifications":
+          return <ProfileSection />;
+        case "ask-ai":
+          return <AskSection />;
+        case "concept2":
+          return <PlaceholderSection title="Concept2 Integration" description="Connect your Concept2 logbook to sync workouts automatically." />;
+        case "integrations":
+          return <PlaceholderSection title="Integrations" description="Third-party integrations coming soon." />;
+        default:
+          return null;
+      }
+    }
+
+    return null;
+  };
+
+  // Mobile bottom nav sections
+  const mobileBottomNav = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "training", label: "Training", icon: Dumbbell },
+    { id: "teams", label: "Teams", icon: Users },
+    { id: "performance", label: "Performance", icon: BarChart3 },
   ];
 
-  const moreTabGroups = [
-    {
-      label: "Workouts",
-      items: [
-        { value: "ask", icon: MessageSquare, label: "Ask AI Coach" },
-        { value: "meals", icon: UtensilsCrossed, label: "Meals" },
-        { value: "stats", icon: BarChart3, label: "Stats" },
-        { value: "compare", icon: GitCompare, label: "Compare" },
-        { value: "awards", icon: Trophy, label: "Awards" },
-        { value: "predictor", icon: Calculator, label: "Predictor" },
-        { value: "recovery", icon: HeartPulse, label: "Recovery" },
-        { value: "critique", icon: Eye, label: "Video Critique" },
-      ],
-    },
-    {
-      label: "Race",
-      items: [
-        { value: "race", icon: Swords, label: "Head-to-Head Race" },
-        { value: "combine", icon: Award, label: "Virtual Combine" },
-        { value: "challenges", icon: Zap, label: "Weekly Challenges" },
-        { value: "leaderboard", icon: Medal, label: "Rankings" },
-      ],
-    },
-    {
-      label: "Recruiting",
-      items: [
-        { value: "recruit", icon: GraduationCap, label: "Recruitment" },
-        { value: "public-profile", icon: Globe, label: "My Public Profile" },
-        { value: "recruiting", icon: Target, label: "Recruiting Profile" },
-        { value: "college-targets", icon: School, label: "College List" },
-        { value: "coaches", icon: UsersRound, label: "Coach Directory" },
-      ],
-    },
-    {
-      label: "Community",
-      items: [
-        { value: "directory", icon: Globe, label: "Club Directory" },
-        { value: "forum", icon: MessagesSquare, label: "Forum" },
-        { value: "friends", icon: MessageCircle, label: "Friends" },
-        ...(isOnTeam ? [{ value: "teams", icon: UsersRound, label: "Teams" }] : []),
-      ],
-    },
-    {
-      label: "Settings",
-      items: [
-        { value: "profile", icon: User, label: "Profile" },
-        { value: "devices", icon: Bluetooth, label: "Devices & BLE" },
-        { value: "referral", icon: Sparkles, label: "Refer Friends" },
-      ],
-    },
-    ...(isCoach ? [{
-      label: "Coach Tools",
-      items: [
-        { value: "team-compare", icon: GitCompare, label: "Athlete Compare" },
-        { value: "alumni", icon: GraduationCap, label: "Alumni Network" },
-      ],
-    }] : []),
-  ];
-
-  const allMoreItems = moreTabGroups.flatMap(g => g.items);
-  const isMoreTabActive = allMoreItems.some(t => t.value === activeTab);
+  const moreNavSections = NAV_CONFIG.filter(
+    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id)
+  );
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-[#0a1628] sticky top-0 z-20 shadow-sm">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* ── Header ────────────────────────────────────────────────────────── */}
+      <header className="border-b border-white/10 bg-[#0a1628] z-20 shadow-sm shrink-0">
+        <div className="px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img
               src={crewsyncLogo}
               alt="CrewSync"
               className="h-10 w-10 rounded-xl shadow-sm border border-white/20 hover:scale-105 transition-transform cursor-pointer"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navTo("dashboard")}
             />
-            <span className="font-bold text-lg hidden sm:inline text-white">
-              CrewSync
-            </span>
+            <span className="font-bold text-lg hidden sm:inline text-white">CrewSync</span>
           </div>
-
           <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
             <NotificationBell />
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2 text-white/80 hover:text-white hover:bg-white/10">
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-white/80 hover:text-white hover:bg-white/10"
+            >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
             </Button>
@@ -227,191 +670,129 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div
-        ref={containerRef}
-        className="relative overflow-y-auto flex-1"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <PullToRefreshIndicator progress={progress} refreshing={refreshing} threshold={threshold} />
-      <main
-        className="container mx-auto px-4 py-6 pb-20 md:pb-8 animate-fade-in"
-        style={{ transform: pulling || refreshing ? `translateY(${Math.min(progress, threshold)}px)` : undefined, transition: refreshing ? "transform 0.2s" : undefined }}
-      >
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          {/* Desktop Tab Navigation - hidden on mobile */}
-          <div className="hidden md:block bg-card rounded-2xl p-2 shadow-card border border-border">
-            <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent h-auto p-0 gap-1.5">
-              <TabsTrigger value="plans" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Calendar className="h-4 w-4" /><span>Training</span>
-              </TabsTrigger>
-              <TabsTrigger value="log" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <PlusCircle className="h-4 w-4" /><span>Log</span>
-              </TabsTrigger>
-              <TabsTrigger value="meals" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <UtensilsCrossed className="h-4 w-4" /><span>Meals</span>
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <History className="h-4 w-4" /><span>History</span>
-              </TabsTrigger>
-              <TabsTrigger value="stats" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <BarChart3 className="h-4 w-4" /><span>Stats</span>
-              </TabsTrigger>
-              <TabsTrigger value="compare" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <GitCompare className="h-4 w-4" /><span>Compare</span>
-              </TabsTrigger>
-              <TabsTrigger value="awards" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Trophy className="h-4 w-4" /><span>Awards</span>
-              </TabsTrigger>
-              <TabsTrigger value="predictor" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Calculator className="h-4 w-4" /><span>Predictor</span>
-              </TabsTrigger>
-              <TabsTrigger value="leaderboard" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Medal className="h-4 w-4" /><span>Rankings</span>
-              </TabsTrigger>
-              <TabsTrigger value="recruit" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <GraduationCap className="h-4 w-4" /><span>Recruit</span>
-              </TabsTrigger>
-              <TabsTrigger value="public-profile" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Globe className="h-4 w-4" /><span>My Profile</span>
-              </TabsTrigger>
-              <TabsTrigger value="recruiting" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Target className="h-4 w-4" /><span>Recruiting</span>
-              </TabsTrigger>
-              <TabsTrigger value="college-targets" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <School className="h-4 w-4" /><span>Colleges</span>
-              </TabsTrigger>
-              <TabsTrigger value="coaches" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <UsersRound className="h-4 w-4" /><span>Coaches</span>
-              </TabsTrigger>
-              <TabsTrigger value="profile" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <User className="h-4 w-4" /><span>Profile</span>
-              </TabsTrigger>
-              <TabsTrigger value="friends" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <MessageCircle className="h-4 w-4" /><span>Friends</span>
-              </TabsTrigger>
-              {isOnTeam && (
-                <TabsTrigger value="teams" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                  <UsersRound className="h-4 w-4" /><span>Teams</span>
-                </TabsTrigger>
-              )}
-              <TabsTrigger value="critique" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Eye className="h-4 w-4" /><span>Critique</span>
-              </TabsTrigger>
-              <TabsTrigger value="ask" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <MessageSquare className="h-4 w-4" /><span>Ask</span>
-              </TabsTrigger>
-              <TabsTrigger value="forum" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <MessagesSquare className="h-4 w-4" /><span>Forum</span>
-              </TabsTrigger>
-              <TabsTrigger value="directory" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Globe className="h-4 w-4" /><span>Directory</span>
-              </TabsTrigger>
-              <TabsTrigger value="devices" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Bluetooth className="h-4 w-4" /><span>Devices</span>
-              </TabsTrigger>
-              <TabsTrigger value="recovery" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <HeartPulse className="h-4 w-4" /><span>Recovery</span>
-              </TabsTrigger>
-              <TabsTrigger value="live" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Gauge className="h-4 w-4" /><span>Live Erg</span>
-              </TabsTrigger>
-              <TabsTrigger value="race" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Swords className="h-4 w-4" /><span>Race</span>
-              </TabsTrigger>
-              <TabsTrigger value="combine" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Award className="h-4 w-4" /><span>Combine</span>
-              </TabsTrigger>
-              <TabsTrigger value="challenges" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                <Zap className="h-4 w-4" /><span>Challenges</span>
-              </TabsTrigger>
-              {isCoach && (
-                <TabsTrigger value="team-compare" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                  <GitCompare className="h-4 w-4" /><span>Compare</span>
-                </TabsTrigger>
-              )}
-              {isCoach && (
-                <TabsTrigger value="alumni" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
-                  <GraduationCap className="h-4 w-4" /><span>Alumni</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
+      {/* ── Below Header: Sidebar + Content ────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
+        <aside className="hidden md:flex flex-col w-60 shrink-0 bg-[#0a1628] border-r border-white/10 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-0.5">
+            {NAV_CONFIG.map((section) => (
+              <div key={section.id}>
+                <button
+                  onClick={() => navTo(section.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
+                    ${activeSection === section.id
+                      ? "bg-[#2d6be4] text-white"
+                      : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <section.icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 text-left">{section.label}</span>
+                  {section.subs.length > 0 && (
+                    activeSection === section.id
+                      ? <ChevronDown className="h-3.5 w-3.5" />
+                      : <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                {activeSection === section.id && section.subs.length > 0 && (
+                  <div className="ml-4 mt-1 space-y-0.5">
+                    {section.subs.filter((s) => !s.coachOnly || isCoach).map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => navTo(section.id, sub.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors
+                          ${activeSub === sub.id
+                            ? "bg-white/15 text-white font-semibold"
+                            : "text-white/55 hover:bg-white/10 hover:text-white/90"}`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full ${
+                            activeSub === sub.id ? "bg-[#2d6be4]" : "bg-white/30"
+                          }`}
+                        />
+                        {sub.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </nav>
 
-          {/* Tab Content */}
-          <div className="animate-fade-in-up">
-            <TabsContent value="plans" className="mt-0">
-              <div className="space-y-4">
-                <StreakWidget />
-                <WeeklyChallengeWidget onNavigate={setActiveTab} />
-                <WorkoutPlanSection />
+          {/* User info + logout at bottom */}
+          <div className="px-3 py-4 border-t border-white/10 space-y-2">
+            {profile && (
+              <div className="flex items-center gap-2 px-3 py-2">
+                <div className="w-7 h-7 rounded-full bg-[#2d6be4] flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white truncate">
+                    {(profile as any)?.full_name || (profile as any)?.username || "Athlete"}
+                  </p>
+                  <p className="text-[10px] text-white/50 capitalize">
+                    {(profile as any)?.user_type || "athlete"}
+                  </p>
+                </div>
               </div>
-            </TabsContent>
-            <TabsContent value="log" className="mt-0">
-              <div className="space-y-6">
-                <TodaysWorkouts profile={profile} />
-                <Separator className="my-2" />
-                <h2 className="text-lg font-semibold text-foreground">Custom Workout</h2>
-                <ErgWorkoutSection profile={profile} />
-                <MultiPieceSession profile={profile} />
-                <MultiSetStrengthForm profile={profile} />
-              </div>
-            </TabsContent>
-            <TabsContent value="meals" className="mt-0"><MealPlanTab profile={profile} /></TabsContent>
-            <TabsContent value="history" className="mt-0"><HistorySection profile={profile} /></TabsContent>
-            <TabsContent value="stats" className="mt-0"><PerformanceSection profile={profile} /></TabsContent>
-            <TabsContent value="compare" className="mt-0"><ComparisonSection profile={profile} /></TabsContent>
-            <TabsContent value="awards" className="mt-0"><AwardsSection profile={profile} /></TabsContent>
-            <TabsContent value="recruit" className="mt-0"><RecruitmentSection profile={profile} /></TabsContent>
-            <TabsContent value="public-profile" className="mt-0"><PublicProfileSection /></TabsContent>
-            <TabsContent value="recruiting" className="mt-0"><RecruitingProfileSection /></TabsContent>
-            <TabsContent value="college-targets" className="mt-0"><CollegeTargetsSection /></TabsContent>
-            <TabsContent value="coaches" className="mt-0"><CoachDirectorySection profile={profile} /></TabsContent>
-            <TabsContent value="predictor" className="mt-0">
-              <div className="space-y-6"><ErgPredictor /><SplitCalculator /></div>
-            </TabsContent>
-            <TabsContent value="leaderboard" className="mt-0"><LeaderboardSection /></TabsContent>
-            <TabsContent value="profile" className="mt-0"><ProfileSection /></TabsContent>
-            <TabsContent value="friends" className="mt-0"><FriendsSection profile={profile} /></TabsContent>
-            <TabsContent value="teams" className="mt-0"><TeamsSection profile={profile} isCoach={isCoach} /></TabsContent>
-            <TabsContent value="critique" className="mt-0"><CritiqueSection /></TabsContent>
-            <TabsContent value="ask" className="mt-0"><AskSection /></TabsContent>
-            <TabsContent value="forum" className="mt-0"><ForumSection /></TabsContent>
-            <TabsContent value="devices" className="mt-0"><DeviceSection /></TabsContent>
-            <TabsContent value="recovery" className="mt-0"><RecoverySection profile={profile} /></TabsContent>
-            <TabsContent value="live" className="mt-0 -mx-4 -mb-20 md:-mx-0 md:-mb-8"><LiveErgView /></TabsContent>
-            <TabsContent value="race" className="mt-0 -mx-4 -mb-20 md:-mx-0 md:-mb-8"><RaceSection /></TabsContent>
-            <TabsContent value="combine" className="mt-0"><CombineSection /></TabsContent>
-            <TabsContent value="challenges" className="mt-0"><WeeklyChallengeSection /></TabsContent>
-            {isCoach && <TabsContent value="team-compare" className="mt-0"><AthleteComparisonSection /></TabsContent>}
-            {isCoach && <TabsContent value="alumni" className="mt-0"><AlumniNetworkSection /></TabsContent>}
-            <TabsContent value="referral" className="mt-0"><ReferralSection profile={profile} /></TabsContent>
-            <TabsContent value="directory" className="mt-0"><DirectorySection /></TabsContent>
+            )}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </button>
           </div>
-        </Tabs>
-      </main>
+        </aside>
+
+        {/* ── Content Area ────────────────────────────────────────────────── */}
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto relative"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          <PullToRefreshIndicator progress={progress} refreshing={refreshing} threshold={threshold} />
+          <main
+            className="container mx-auto px-4 py-6 pb-24 md:pb-8 animate-fade-in"
+            style={{
+              transform:
+                pulling || refreshing
+                  ? `translateY(${Math.min(progress, threshold)}px)`
+                  : undefined,
+              transition: refreshing ? "transform 0.2s" : undefined,
+            }}
+          >
+            {renderContent()}
+          </main>
+        </div>
       </div>
 
-      {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-lg" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+      {/* ── Mobile Bottom Nav ───────────────────────────────────────────────── */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-lg"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
         <div className="flex justify-around items-center h-16 px-1">
-          {mobileNavItems.map((item) => (
+          {mobileBottomNav.map((item) => (
             <button
-              key={item.value}
-              onClick={() => setActiveTab(item.value)}
+              key={item.id}
+              onClick={() => navTo(item.id)}
               className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
-                activeTab === item.value ? "text-primary" : "text-muted-foreground"
+                activeSection === item.id ? "text-primary" : "text-muted-foreground"
               }`}
             >
               <item.icon className="h-5 w-5" />
               <span className="text-[10px] font-medium">{item.label}</span>
             </button>
           ))}
-          {/* More button */}
+
+          {/* More sheet */}
           <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
             <SheetTrigger asChild>
               <button
                 className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
-                  isMoreTabActive ? "text-primary" : "text-muted-foreground"
+                  moreNavSections.some((s) => s.id === activeSection)
+                    ? "text-primary"
+                    : "text-muted-foreground"
                 }`}
               >
                 <MoreHorizontal className="h-5 w-5" />
@@ -423,26 +804,38 @@ const Dashboard = () => {
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
               <div className="overflow-y-auto flex-1 pb-4 space-y-4">
-                {moreTabGroups.map((group) => (
-                  <div key={group.label}>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 mb-1">{group.label}</p>
-                    <div className="space-y-0.5">
-                      {group.items.map((item) => (
-                        <button
-                          key={item.value}
-                          onClick={() => { setActiveTab(item.value); setMoreOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors ${
-                            activeTab === item.value
-                              ? "bg-primary/10 text-primary"
-                              : "text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          <span className="flex-1 font-medium text-sm">{item.label}</span>
-                          {activeTab === item.value && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                        </button>
-                      ))}
-                    </div>
+                {moreNavSections.map((section) => (
+                  <div key={section.id}>
+                    <button
+                      onClick={() => navTo(section.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors font-semibold text-sm ${
+                        activeSection === section.id
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <section.icon className="h-4 w-4 shrink-0" />
+                      <span className="flex-1">{section.label}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    {activeSection === section.id && section.subs.length > 0 && (
+                      <div className="ml-4 mt-1 space-y-0.5">
+                        {section.subs.filter((s) => !s.coachOnly || isCoach).map((sub) => (
+                          <button
+                            key={sub.id}
+                            onClick={() => navTo(section.id, sub.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-left text-sm transition-colors ${
+                              activeSub === sub.id
+                                ? "bg-primary/10 text-primary font-semibold"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            }`}
+                          >
+                            <sub.icon className="h-3.5 w-3.5 shrink-0" />
+                            {sub.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

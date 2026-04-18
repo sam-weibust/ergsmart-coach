@@ -30,10 +30,11 @@ interface Props {
   teamMembers: any[];
   isCoach: boolean;
   profile: any;
+  initialSection?: string;
 }
 
-const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile }: Props) => {
-  const [activeSection, setActiveSection] = useState("overview");
+const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection }: Props) => {
+  const [activeSection, setActiveSection] = useState(initialSection ?? "overview");
 
   const renderSection = () => {
     const commonProps = { teamId, teamName, teamMembers, isCoach, profile };
