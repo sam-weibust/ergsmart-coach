@@ -17,13 +17,12 @@ interface HistorySectionProps {
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
 const PAGE_SIZE = 10;
 
-// Format pace from deciseconds/500m → "M:SS.d"
+// Format stored C2 pace field (deciseconds/500m) → "M:SS"
 function formatPace(deciseconds: number): string {
   const totalSec = deciseconds / 10;
   const mins = Math.floor(totalSec / 60);
-  const secs = Math.floor(totalSec % 60);
-  const tenths = Math.round((totalSec % 1) * 10);
-  return `${mins}:${String(secs).padStart(2, "0")}.${tenths}`;
+  const secs = Math.round(totalSec % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
 // Format split time in seconds → "M:SS"
@@ -31,6 +30,46 @@ function formatSplitTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.round(seconds % 60);
   return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+// Calculate pace per 500m from distance (m) and time (deciseconds) → "M:SS"
+function calcPacePer500(distM: number, timeDeciSec: number): string | null {
+  if (!distM || !timeDeciSec) return null;
+  const paceS = (timeDeciSec / 10 / distM) * 500;
+  const mins = Math.floor(paceS / 60);
+  const secs = Math.round(paceS % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+// Parse PostgreSQL interval string (HH:MM:SS or MM:SS or MM:SS.d) → total seconds
+function parseIntervalSec(interval: string | null | undefined): number | null {
+  if (!interval) return null;
+  const parts = interval.split(":");
+  if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+  if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+  return null;
+}
+
+// Format total seconds → "h:mm:ss" or "m:ss"
+function formatTotalTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.round(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Human-readable workout type label
+function workoutTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    JustRow: "Just Row",
+    FixedTimeInterval: "Fixed Time Interval",
+    FixedDistanceInterval: "Fixed Distance Interval",
+    FixedCalInterval: "Fixed Calorie Interval",
+    multi_piece: "Multi-Piece",
+    multi_piece_summary: "Multi-Piece Session",
+  };
+  return labels[type] ?? type.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
 }
 
 const HistorySection = ({ profile }: HistorySectionProps) => {
@@ -228,9 +267,16 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     const intervals = extractIntervals(d);
 
     // HR from workout_data.heart_rate object (C2 workouts) or individual columns
-    const hrAvg  = d ? safeHR(d.heart_rate?.average) : safeHR(workout.heart_rate_average ?? workout.avg_heart_rate);
-    const hrMax  = d ? safeHR(d.heart_rate?.max)     : safeHR(workout.heart_rate_max ?? workout.max_heart_rate);
-    const hrMin  = d ? safeHR(d.heart_rate?.min)     : safeHR(workout.heart_rate_min ?? workout.min_heart_rate);
+    const hrAvg = d ? safeHR(d.heart_rate?.average) : safeHR(workout.heart_rate_average ?? workout.avg_heart_rate);
+    const hrMax = d ? safeHR(d.heart_rate?.max)     : safeHR(workout.heart_rate_max ?? workout.max_heart_rate);
+    const hrMin = d ? safeHR(d.heart_rate?.min)     : safeHR(workout.heart_rate_min ?? workout.min_heart_rate);
+    const hasHR = hrAvg != null;
+
+    // Whether any interval row has HR data (hide HR column entirely if not)
+    const intervalsHaveHR = intervals.some((s: any) => {
+      const hr = typeof s.heart_rate === "object" ? safeHR(s.heart_rate?.average) : safeHR(s.heart_rate);
+      return hr != null;
+    });
 
     // Scalar metrics — prefer workout_data fields, fall back to columns
     const calories    = d?.calories_total ?? workout.calories_total ?? workout.calories;
@@ -240,32 +286,39 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     const dragFactor  = d?.drag_factor    ?? workout.drag_factor;
     const wps         = d?.work_per_stroke ?? workout.work_per_stroke;
     const avgWatts    = d?.watts           ?? workout.avg_watts;
-    const restTime    = d?.rest_time;     // deciseconds; only show when > 0
+    const restTime    = d?.rest_time;
     const restDist    = d?.rest_distance;
+
+    // Total time: parse the stored PostgreSQL interval, fall back to time_formatted string
+    const durationSec = parseIntervalSec(workout.duration);
+    const totalTimeStr = durationSec != null
+      ? formatTotalTime(durationSec)
+      : (d?.time_formatted ?? workout.time_formatted ?? null);
+
+    // Avg pace per 500m: calculate from total distance + time; fall back to stored avg_split
+    const totalDist = workout.distance;
+    const avgPaceStr = (totalDist && durationSec)
+      ? calcPacePer500(totalDist, durationSec * 10)
+      : (workout.avg_split ?? (d?.pace != null ? formatPace(d.pace) : null));
 
     return (
       <div className="space-y-3">
-        {/* Summary metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
-          {(d?.time_formatted ?? workout.time_formatted)
-            ? <span>Time: {d?.time_formatted ?? workout.time_formatted}</span>
-            : workout.duration && <span>Time: {workout.duration}</span>
-          }
-          {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
-          {d?.pace != null && workout.avg_split == null && (
-            <span>Avg Split: {formatPace(d.pace)}</span>
-          )}
+        {/* No heart rate monitor notice */}
+        {!hasHR && (
+          <p className="text-xs text-muted-foreground">— No heart rate monitor connected</p>
+        )}
 
-          {/* Heart rate — always show the avg row so user knows if it was recorded */}
-          <span className={hrAvg ? "" : "text-muted-foreground"}>
-            HR Avg: {hrAvg ? `${hrAvg} bpm` : "Not recorded"}
-          </span>
+        {/* Summary metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-sm">
+          {totalDist   && <span>Distance: {totalDist}m</span>}
+          {totalTimeStr && <span>Time: {totalTimeStr}</span>}
+          {avgPaceStr   && <span>Avg Pace: {avgPaceStr}/500m</span>}
+          {strokeRate  != null && <span>Avg SR: {strokeRate} spm</span>}
+          {hasHR && <span>HR Avg: {hrAvg} bpm</span>}
           {hrMax && <span>HR Max: {hrMax} bpm</span>}
           {hrMin && <span>HR Min: {hrMin} bpm</span>}
-
           {calories != null && <span>Calories: {calories}</span>}
           {calHour  != null && <span>Cal/hr: {Math.round(calHour)}</span>}
-          {strokeRate  != null && <span>Stroke Rate: {strokeRate} spm</span>}
           {strokeCount != null && <span>Strokes: {strokeCount}</span>}
           {dragFactor  != null && <span>Drag: {dragFactor}</span>}
           {wps         != null && <span>Work/Stroke: {Math.round(wps)} J</span>}
@@ -279,19 +332,19 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
         {/* Intervals / splits table from workout_data.splits or workout_data.workout.intervals */}
         {intervals.length > 0 && (
           <div className="overflow-x-auto">
-            <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">
+            <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
               {intervals.length} {intervals.length === 1 ? "Split" : "Splits / Intervals"}
             </p>
-            <table className="w-full text-xs border-collapse">
+            <table className="text-xs border-collapse w-full">
               <thead>
                 <tr className="border-b text-muted-foreground">
-                  <th className="text-left py-1 pr-3">#</th>
-                  <th className="text-right py-1 pr-3">Dist</th>
-                  <th className="text-right py-1 pr-3">Time</th>
-                  <th className="text-right py-1 pr-3">Pace/500m</th>
-                  <th className="text-right py-1 pr-3">SR</th>
-                  <th className="text-right py-1 pr-3">HR</th>
-                  <th className="text-right py-1">Rest</th>
+                  <th className="text-left py-1.5 px-2 w-7">#</th>
+                  <th className="text-right py-1.5 px-2 min-w-[64px]">Distance</th>
+                  <th className="text-right py-1.5 px-2 min-w-[56px]">Time</th>
+                  <th className="text-right py-1.5 px-2 min-w-[76px]">Pace/500m</th>
+                  <th className="text-right py-1.5 px-2 min-w-[44px]">SR</th>
+                  {intervalsHaveHR && <th className="text-right py-1.5 px-2 min-w-[52px]">HR</th>}
+                  <th className="text-right py-1.5 px-2 min-w-[52px]">Rest</th>
                 </tr>
               </thead>
               <tbody>
@@ -299,17 +352,21 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                   const splitHR = typeof s.heart_rate === "object"
                     ? safeHR(s.heart_rate?.average)
                     : safeHR(s.heart_rate);
-                  const pace    = s.pace ?? s.split ?? null;
-                  const rest    = s.rest_time ?? s.rest ?? null;
+                  // Use stored pace field (deciseconds/500m) if present; otherwise calculate
+                  const storedPace = s.pace ?? s.split ?? null;
+                  const paceStr = storedPace != null
+                    ? formatPace(storedPace)
+                    : (s.distance && s.time ? calcPacePer500(s.distance, s.time) : null);
+                  const rest = s.rest_time ?? s.rest ?? null;
                   return (
                     <tr key={idx} className="border-b border-muted/30 hover:bg-muted/20">
-                      <td className="py-1 pr-3">{idx + 1}</td>
-                      <td className="text-right py-1 pr-3">{s.distance != null ? `${s.distance}m` : "—"}</td>
-                      <td className="text-right py-1 pr-3">{s.time != null ? formatSplitTime(s.time / 10) : "—"}</td>
-                      <td className="text-right py-1 pr-3">{pace != null ? formatPace(pace) : "—"}</td>
-                      <td className="text-right py-1 pr-3">{s.stroke_rate ?? s.avg_stroke_rate ?? "—"}</td>
-                      <td className="text-right py-1 pr-3">{splitHR ?? "—"}</td>
-                      <td className="text-right py-1">{rest != null && rest > 0 ? formatSplitTime(rest / 10) : "—"}</td>
+                      <td className="py-1.5 px-2">{idx + 1}</td>
+                      <td className="text-right py-1.5 px-2">{s.distance != null ? `${s.distance}m` : "—"}</td>
+                      <td className="text-right py-1.5 px-2">{s.time != null ? formatSplitTime(s.time / 10) : "—"}</td>
+                      <td className="text-right py-1.5 px-2">{paceStr ?? "—"}</td>
+                      <td className="text-right py-1.5 px-2">{s.stroke_rate ?? s.avg_stroke_rate ?? "—"}</td>
+                      {intervalsHaveHR && <td className="text-right py-1.5 px-2">{splitHR ?? "—"}</td>}
+                      <td className="text-right py-1.5 px-2">{rest != null && rest > 0 ? formatSplitTime(rest / 10) : "—"}</td>
                     </tr>
                   );
                 })}
@@ -403,7 +460,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                               </CollapsibleTrigger>
                               <div>
                                 <h3 className="font-semibold capitalize flex items-center gap-2">
-                                  {isMultiSummary ? "Multi-Piece Session" : workout.workout_type.replace("_", " ")}
+                                  {workoutTypeLabel(workout.workout_type)}
                                   {isMultiSummary && (
                                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleSession(workout.session_id)}>
                                       {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
