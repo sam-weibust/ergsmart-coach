@@ -52,9 +52,7 @@ serve(async (req) => {
       .eq("user_id", user_id)
       .maybeSingle();
 
-    if (tokenErr) {
-      console.error("[sync-concept2] Error fetching token row:", tokenErr);
-    }
+    if (tokenErr) console.error("[sync-concept2] Error fetching token row:", tokenErr);
 
     if (!tokenRow) {
       return new Response(JSON.stringify({ error: "No Concept2 account connected" }), {
@@ -63,14 +61,9 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[sync-concept2] Token row found. expires_at=${tokenRow.expires_at}`);
-
     let { access_token, refresh_token, expires_at } = tokenRow;
 
-    // Refresh if expired or expiring within 5 minutes
     const isExpired = !expires_at || new Date(expires_at) <= new Date(Date.now() + 5 * 60 * 1000);
-    console.log(`[sync-concept2] Token isExpired=${isExpired}`);
-
     if (isExpired && refresh_token) {
       console.log("[sync-concept2] Refreshing access token...");
       const refreshRes = await fetch("https://log.concept2.com/oauth/access_token", {
@@ -83,36 +76,20 @@ serve(async (req) => {
           client_secret: C2_CLIENT_SECRET,
         }),
       });
-
       const refreshBody = await refreshRes.text();
-      console.log(`[sync-concept2] Refresh response status=${refreshRes.status} body=${refreshBody}`);
-
+      console.log(`[sync-concept2] Refresh status=${refreshRes.status}`);
       if (refreshRes.ok) {
         const refreshed = JSON.parse(refreshBody);
         access_token = refreshed.access_token;
         refresh_token = refreshed.refresh_token ?? refresh_token;
         expires_at = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-
-        const { error: updateErr } = await supabase.from("concept2_tokens").update({
-          access_token,
-          refresh_token,
-          expires_at,
-          updated_at: new Date().toISOString(),
+        await supabase.from("concept2_tokens").update({
+          access_token, refresh_token, expires_at, updated_at: new Date().toISOString(),
         }).eq("user_id", user_id);
-
-        if (updateErr) {
-          console.error("[sync-concept2] Failed to persist refreshed token:", updateErr);
-        } else {
-          console.log("[sync-concept2] Token refreshed and saved successfully.");
-        }
-      } else {
-        console.error("[sync-concept2] Token refresh failed — proceeding with existing token.");
       }
     }
 
-    console.log(`[sync-concept2] Using access_token (first 10 chars): ${access_token?.substring(0, 10)}...`);
-
-    // Fetch all workouts (paginate)
+    // ── Step 1: Fetch paginated list ──────────────────────────────────────────
     let allWorkouts: any[] = [];
     let page = 1;
     let apiError: string | null = null;
@@ -120,48 +97,32 @@ serve(async (req) => {
 
     while (true) {
       const url = `https://log.concept2.com/api/users/me/results?per_page=100&page=${page}`;
-      console.log(`[sync-concept2] Fetching page=${page} url=${url}`);
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-
+      console.log(`[sync-concept2] Fetching list page=${page}`);
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${access_token}` } });
       const rawBody = await res.text();
       if (page === 1) firstRawResponse = rawBody;
 
-      console.log(`[sync-concept2] Page ${page} status=${res.status} body=${rawBody.substring(0, 500)}`);
-
       if (!res.ok) {
         apiError = `HTTP ${res.status}: ${rawBody}`;
-        console.error(`[sync-concept2] API error on page ${page}: ${apiError}`);
+        console.error(`[sync-concept2] API error: ${apiError}`);
         break;
       }
 
       let json: any;
-      try {
-        json = JSON.parse(rawBody);
-      } catch (parseErr) {
-        apiError = `JSON parse error: ${parseErr}. Raw: ${rawBody.substring(0, 200)}`;
-        console.error(`[sync-concept2] ${apiError}`);
-        break;
-      }
+      try { json = JSON.parse(rawBody); }
+      catch (e) { apiError = `JSON parse error: ${e}`; break; }
 
       const items = json.data ?? [];
-      console.log(`[sync-concept2] Page ${page} returned ${items.length} items. meta=${JSON.stringify(json.meta)}`);
+      console.log(`[sync-concept2] Page ${page}: ${items.length} items`);
       allWorkouts = allWorkouts.concat(items);
-
       if (!json.meta?.pagination?.next) break;
       page++;
     }
 
-    console.log(`[sync-concept2] Total workouts fetched: ${allWorkouts.length}`);
+    console.log(`[sync-concept2] Total fetched: ${allWorkouts.length}`);
 
-    if (allWorkouts.length > 0) {
-      console.log("[sync-concept2] Sample workout[0]:", JSON.stringify(allWorkouts[0]));
-    }
-
-    // Map to erg_workouts schema
-    const rows = allWorkouts.map((w: any) => ({
+    // ── Step 2: Upsert basic data ─────────────────────────────────────────────
+    const basicRows = allWorkouts.map((w: any) => ({
       user_id,
       external_id: `c2_${w.id}`,
       workout_date: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
@@ -174,35 +135,114 @@ serve(async (req) => {
       notes: w.comments || null,
     }));
 
-    console.log(`[sync-concept2] Mapped ${rows.length} rows for upsert.`);
-    if (rows.length > 0) {
-      console.log("[sync-concept2] Sample mapped row[0]:", JSON.stringify(rows[0]));
-    }
-
-    // Upsert by (user_id, external_id)
     let imported = 0;
-    if (rows.length > 0) {
-      for (let i = 0; i < rows.length; i += 50) {
-        const batch = rows.slice(i, i + 50);
-        console.log(`[sync-concept2] Upserting batch ${Math.floor(i / 50) + 1} (${batch.length} rows)...`);
-        const { data: upsertData, error: upsertErr } = await supabase
-          .from("erg_workouts")
-          .upsert(batch, { onConflict: "user_id,external_id", ignoreDuplicates: false })
-          .select("id");
-
-        if (upsertErr) {
-          console.error(`[sync-concept2] Upsert error on batch starting at ${i}:`, upsertErr);
-        } else {
-          const count = upsertData?.length ?? batch.length;
-          console.log(`[sync-concept2] Batch upserted, ${count} rows affected.`);
-          imported += count;
-        }
+    for (let i = 0; i < basicRows.length; i += 50) {
+      const batch = basicRows.slice(i, i + 50);
+      const { data: upserted, error: upsertErr } = await supabase
+        .from("erg_workouts")
+        .upsert(batch, { onConflict: "user_id,external_id", ignoreDuplicates: false })
+        .select("id");
+      if (upsertErr) {
+        console.error(`[sync-concept2] Upsert error batch ${i}:`, upsertErr);
+      } else {
+        imported += upserted?.length ?? batch.length;
       }
     }
 
-    console.log(`[sync-concept2] Sync complete. imported=${imported} total=${allWorkouts.length}`);
+    // ── Step 3: Find workouts that still need detail data ─────────────────────
+    const externalIds = basicRows.map(r => r.external_id);
+    const { data: existingRows } = await supabase
+      .from("erg_workouts")
+      .select("id, external_id, stroke_rate")
+      .eq("user_id", user_id)
+      .in("external_id", externalIds);
 
-    // Update last_concept2_sync and last_sync_at on token
+    // Only fetch detail for workouts where stroke_rate is still null (never detailed)
+    const needsDetail = (existingRows ?? []).filter(r => r.stroke_rate == null);
+    const c2IdToDbId = new Map((existingRows ?? []).map(r => [r.external_id, r.id]));
+
+    console.log(`[sync-concept2] ${needsDetail.length} workouts need detail fetch`);
+
+    // ── Step 4: Fetch full detail in batches of 10 ────────────────────────────
+    const DETAIL_BATCH = 10;
+    let detailFetched = 0;
+    let detailErrors = 0;
+
+    for (let i = 0; i < needsDetail.length; i += DETAIL_BATCH) {
+      const batch = needsDetail.slice(i, i + DETAIL_BATCH);
+      await Promise.all(batch.map(async (row) => {
+        const c2Id = row.external_id.replace("c2_", "");
+        const dbId = c2IdToDbId.get(row.external_id);
+        if (!dbId) return;
+
+        const detailRes = await fetch(
+          `https://log.concept2.com/api/users/me/results/${c2Id}`,
+          { headers: { Authorization: `Bearer ${access_token}` } }
+        );
+
+        if (!detailRes.ok) {
+          console.error(`[sync-concept2] Detail fetch failed for c2_id=${c2Id}: ${detailRes.status}`);
+          detailErrors++;
+          return;
+        }
+
+        const detailJson = await detailRes.json();
+        const d = detailJson.data ?? detailJson;
+
+        // Update erg_workouts with detailed fields
+        const { error: updateErr } = await supabase.from("erg_workouts").update({
+          stroke_rate: d.avg_stroke_rate ?? null,
+          max_heart_rate: d.max_heart_rate ?? null,
+          min_heart_rate: d.min_heart_rate ?? null,
+          drag_factor: d.avg_drag_factor ?? null,
+          cal_hour: d.cal_hour ?? null,
+          work_per_stroke: d.work_per_stroke ?? null,
+          avg_watts: d.watts ?? null,
+        }).eq("id", dbId);
+
+        if (updateErr) {
+          console.error(`[sync-concept2] Detail update error for ${dbId}:`, updateErr);
+          detailErrors++;
+          return;
+        }
+
+        // Insert splits / intervals
+        const splits: any[] = d.splits ?? [];
+        if (splits.length > 0) {
+          const splitRows = splits.map((s: any, idx: number) => ({
+            workout_id: dbId,
+            split_number: idx + 1,
+            distance: s.distance ?? null,
+            time_seconds: s.time != null ? s.time / 10 : null,
+            pace_deciseconds: s.pace ?? null,
+            stroke_rate: s.stroke_rate ?? null,
+            avg_stroke_rate: s.avg_stroke_rate ?? null,
+            calories: s.calories ?? null,
+            cal_per_hour: s.cal_per_hour ?? null,
+            heart_rate_avg: s.heart_rate?.average ?? null,
+            heart_rate_min: s.heart_rate?.min ?? null,
+            heart_rate_max: s.heart_rate?.max ?? null,
+            drag_factor: s.avg_drag_factor ?? null,
+            rest_time_seconds: s.rest_time != null ? s.rest_time / 10 : null,
+            finish: s.finish ?? false,
+          }));
+
+          const { error: splitsErr } = await supabase
+            .from("erg_workout_splits")
+            .upsert(splitRows, { onConflict: "workout_id,split_number", ignoreDuplicates: false });
+
+          if (splitsErr) {
+            console.error(`[sync-concept2] Splits upsert error for workout ${dbId}:`, splitsErr);
+          }
+        }
+
+        detailFetched++;
+      }));
+    }
+
+    console.log(`[sync-concept2] Detail: fetched=${detailFetched} errors=${detailErrors}`);
+
+    // ── Step 5: Update sync timestamps ───────────────────────────────────────
     const nowIso = new Date().toISOString();
     await Promise.all([
       supabase.from("athlete_profiles").upsert(
@@ -217,6 +257,8 @@ serve(async (req) => {
         success: true,
         imported,
         total: allWorkouts.length,
+        detail_fetched: detailFetched,
+        detail_errors: detailErrors,
         ...(apiError ? { api_error: apiError } : {}),
         ...(firstRawResponse && allWorkouts.length === 0 ? { raw_response: firstRawResponse.substring(0, 1000) } : {}),
       }),
