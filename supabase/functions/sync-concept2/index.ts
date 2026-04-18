@@ -89,18 +89,25 @@ serve(async (req) => {
       }
     }
 
-    // ── Step 1: Fetch paginated list ──────────────────────────────────────────
+    // ── Step 1: Load user's manually-deleted external_ids ────────────────────
+    const { data: deletedRows } = await supabase
+      .from("deleted_c2_workouts")
+      .select("external_id")
+      .eq("user_id", user_id);
+    const deletedSet = new Set((deletedRows ?? []).map((r: any) => r.external_id));
+    console.log(`[sync-concept2] ${deletedSet.size} workouts in manual-delete list`);
+
+    // ── Step 2: Fetch full paginated list from Concept2 ───────────────────────
     let allWorkouts: any[] = [];
     let page = 1;
     let apiError: string | null = null;
-    let firstRawResponse: string | null = null;
+    let paginationComplete = false;
 
     while (true) {
       const url = `https://log.concept2.com/api/users/me/results?per_page=100&page=${page}`;
       console.log(`[sync-concept2] Fetching list page=${page}`);
       const res = await fetch(url, { headers: { Authorization: `Bearer ${access_token}` } });
       const rawBody = await res.text();
-      if (page === 1) firstRawResponse = rawBody;
 
       if (!res.ok) {
         apiError = `HTTP ${res.status}: ${rawBody}`;
@@ -115,14 +122,21 @@ serve(async (req) => {
       const items = json.data ?? [];
       console.log(`[sync-concept2] Page ${page}: ${items.length} items`);
       allWorkouts = allWorkouts.concat(items);
-      if (!json.meta?.pagination?.next) break;
+      if (!json.meta?.pagination?.next) { paginationComplete = true; break; }
       page++;
     }
 
-    console.log(`[sync-concept2] Total fetched: ${allWorkouts.length}`);
+    console.log(`[sync-concept2] Total fetched: ${allWorkouts.length}, paginationComplete=${paginationComplete}`);
 
-    // ── Step 2: Upsert basic data ─────────────────────────────────────────────
-    const basicRows = allWorkouts.map((w: any) => ({
+    // Build set of all C2 external_ids currently in the API (only if full list was retrieved)
+    const c2ExternalIds = new Set(allWorkouts.map((w: any) => `c2_${w.id}`));
+
+    // Filter out manually-deleted workouts before import
+    const workoutsToImport = allWorkouts.filter((w: any) => !deletedSet.has(`c2_${w.id}`));
+    console.log(`[sync-concept2] ${workoutsToImport.length} workouts to import (${allWorkouts.length - workoutsToImport.length} skipped — manually deleted)`);
+
+    // ── Step 3: Upsert basic data ─────────────────────────────────────────────
+    const basicRows = workoutsToImport.map((w: any) => ({
       user_id,
       external_id: `c2_${w.id}`,
       workout_date: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
@@ -130,9 +144,23 @@ serve(async (req) => {
       distance: w.distance ?? null,
       duration: w.time != null ? decisecondsToPgInterval(w.time) : null,
       avg_split: w.pace != null ? decisecondsToPgInterval(w.pace) : null,
-      avg_heart_rate: w.avg_heart_rate ?? null,
-      calories: w.cal_total ?? null,
+      // Map from actual C2 field names
+      avg_heart_rate: w.heart_rate?.average ?? null,
+      calories: w.calories_total ?? w.cal_total ?? null,
+      calories_total: w.calories_total ?? w.cal_total ?? null,
       notes: w.comments || null,
+      time_formatted: w.time_formatted ?? null,
+      stroke_rate_average: w.stroke_rate ?? null,
+      stroke_rate: w.stroke_rate ?? null,
+      stroke_count: w.stroke_count ?? null,
+      heart_rate_average: w.heart_rate?.average ?? null,
+      heart_rate_min: w.heart_rate?.min ?? null,
+      heart_rate_max: w.heart_rate?.max ?? null,
+      max_heart_rate: w.heart_rate?.max ?? null,
+      min_heart_rate: w.heart_rate?.min ?? null,
+      drag_factor: w.drag_factor ?? null,
+      rest_distance: w.rest_distance ?? null,
+      rest_time_seconds: w.rest_time != null ? w.rest_time / 10 : null,
     }));
 
     let imported = 0;
@@ -143,13 +171,43 @@ serve(async (req) => {
         .upsert(batch, { onConflict: "user_id,external_id", ignoreDuplicates: false })
         .select("id");
       if (upsertErr) {
-        console.error(`[sync-concept2] Upsert error batch ${i}:`, upsertErr);
+        console.error(`[sync-concept2] Upsert error batch ${i}:`, JSON.stringify(upsertErr));
       } else {
         imported += upserted?.length ?? batch.length;
       }
     }
 
-    // ── Step 3: Find workouts that still need detail data ─────────────────────
+    // ── Step 4: Deletion sync — remove workouts deleted from C2 logbook ───────
+    let deleted = 0;
+    if (paginationComplete && c2ExternalIds.size > 0) {
+      // Fetch all C2-sourced external_ids currently stored for this user
+      const { data: storedRows } = await supabase
+        .from("erg_workouts")
+        .select("id, external_id")
+        .eq("user_id", user_id)
+        .like("external_id", "c2_%");
+
+      const toDelete = (storedRows ?? []).filter(
+        (r: any) => r.external_id && !c2ExternalIds.has(r.external_id) && !deletedSet.has(r.external_id)
+      );
+
+      if (toDelete.length > 0) {
+        console.log(`[sync-concept2] Deleting ${toDelete.length} workouts removed from C2:`, toDelete.map((r: any) => r.external_id));
+        const { error: deleteErr } = await supabase
+          .from("erg_workouts")
+          .delete()
+          .in("id", toDelete.map((r: any) => r.id));
+        if (deleteErr) {
+          console.error("[sync-concept2] Deletion sync error:", JSON.stringify(deleteErr));
+        } else {
+          deleted = toDelete.length;
+        }
+      } else {
+        console.log("[sync-concept2] No workouts to delete — C2 logbook matches Supabase");
+      }
+    }
+
+    // ── Step 5: Fetch full detail for new workouts ────────────────────────────
     const externalIds = basicRows.map(r => r.external_id);
     const { data: existingRows } = await supabase
       .from("erg_workouts")
@@ -157,13 +215,11 @@ serve(async (req) => {
       .eq("user_id", user_id)
       .in("external_id", externalIds);
 
-    // Only fetch detail for workouts where detail_fetched_at is null (never detailed)
-    const needsDetail = (existingRows ?? []).filter(r => r.detail_fetched_at == null);
-    const c2IdToDbId = new Map((existingRows ?? []).map(r => [r.external_id, r.id]));
+    const needsDetail = (existingRows ?? []).filter((r: any) => r.detail_fetched_at == null);
+    const c2IdToDbId = new Map((existingRows ?? []).map((r: any) => [r.external_id, r.id]));
 
     console.log(`[sync-concept2] ${needsDetail.length} of ${existingRows?.length ?? 0} workouts need detail fetch`);
 
-    // ── Step 4: Fetch full detail in batches of 10 ────────────────────────────
     const DETAIL_BATCH = 10;
     let detailFetched = 0;
     let detailErrors = 0;
@@ -171,7 +227,7 @@ serve(async (req) => {
 
     for (let i = 0; i < needsDetail.length; i += DETAIL_BATCH) {
       const batch = needsDetail.slice(i, i + DETAIL_BATCH);
-      await Promise.all(batch.map(async (row) => {
+      await Promise.all(batch.map(async (row: any) => {
         const c2Id = row.external_id.replace("c2_", "");
         const dbId = c2IdToDbId.get(row.external_id);
         if (!dbId) return;
@@ -189,7 +245,7 @@ serve(async (req) => {
 
         const rawDetail = await detailRes.text();
 
-        // Log the complete raw JSON of the first detail response
+        // Log full raw JSON of the first detail response to verify field names
         if (!firstDetailLogged) {
           firstDetailLogged = true;
           console.log(`[sync-concept2] FIRST DETAIL RAW JSON (c2_id=${c2Id}):`, rawDetail);
@@ -203,35 +259,56 @@ serve(async (req) => {
           return;
         }
 
-        // Concept2 wraps single-result responses in { data: { ... } }
+        // Concept2 wraps single results in { data: { ... } }
         const d = detailJson.data ?? detailJson;
 
-        console.log(`[sync-concept2] Detail top-level keys for c2_id=${c2Id}: ${Object.keys(d).join(", ")}`);
-        console.log(`[sync-concept2] splits field: ${JSON.stringify(d.splits ?? d.intervals ?? "NOT FOUND").substring(0, 500)}`);
+        console.log(`[sync-concept2] Detail keys for c2_id=${c2Id}: ${Object.keys(d).join(", ")}`);
 
-        // Derive best split from splits array (lowest pace value)
-        const splits: any[] = d.splits ?? [];
-        let bestSplitDeciseconds: number | null = null;
-        for (const s of splits) {
-          const pace = s.pace ?? s.split ?? null;
-          if (pace != null && (bestSplitDeciseconds == null || pace < bestSplitDeciseconds)) {
-            bestSplitDeciseconds = pace;
-          }
-        }
-
-        // Build the detail update object and log it
+        // Build mapped update using actual Concept2 field names
         const detailUpdate: Record<string, any> = {
-          stroke_rate: d.avg_stroke_rate ?? d.stroke_rate ?? null,
-          max_heart_rate: d.max_heart_rate ?? null,
-          min_heart_rate: d.min_heart_rate ?? null,
-          drag_factor: d.avg_drag_factor ?? d.drag_factor ?? null,
-          cal_hour: d.cal_hour ?? d.calories_per_hour ?? null,
+          // Duration / pace (override basic upsert with detail values if present)
+          duration: d.time != null ? decisecondsToPgInterval(d.time) : undefined,
+          avg_split: d.pace != null ? decisecondsToPgInterval(d.pace) : undefined,
+          time_formatted: d.time_formatted ?? null,
+
+          // Calories — actual field name is calories_total on detail endpoint
+          calories: d.calories_total ?? d.cal_total ?? null,
+          calories_total: d.calories_total ?? d.cal_total ?? null,
+
+          // Heart rate — nested object: { average, min, max }
+          avg_heart_rate: d.heart_rate?.average ?? null,
+          heart_rate_average: d.heart_rate?.average ?? null,
+          heart_rate_min: d.heart_rate?.min ?? null,
+          heart_rate_max: d.heart_rate?.max ?? null,
+          max_heart_rate: d.heart_rate?.max ?? null,
+          min_heart_rate: d.heart_rate?.min ?? null,
+
+          // Stroke data
+          stroke_rate: d.stroke_rate ?? null,
+          stroke_rate_average: d.stroke_rate ?? null,
+          stroke_count: d.stroke_count ?? null,
+
+          // Machine / effort metrics
+          drag_factor: d.drag_factor ?? null,
           work_per_stroke: d.work_per_stroke ?? null,
           avg_watts: d.watts ?? d.avg_watts ?? null,
-          split_best: bestSplitDeciseconds != null ? decisecondsToPgInterval(bestSplitDeciseconds) : null,
-          intervals: splits.length > 0 ? JSON.stringify(splits) : null,
+          cal_hour: d.cal_hour ?? null,
+
+          // Rest (for interval workouts)
+          rest_distance: d.rest_distance ?? null,
+          rest_time_seconds: d.rest_time != null ? d.rest_time / 10 : null,
+
+          // Raw full objects — preserve everything regardless of workout type
+          workout_data: d,
+          real_time_data: d.real_time ?? null,
+
           detail_fetched_at: new Date().toISOString(),
         };
+
+        // Remove undefined values (don't overwrite duration/split if not returned)
+        for (const key of Object.keys(detailUpdate)) {
+          if (detailUpdate[key] === undefined) delete detailUpdate[key];
+        }
 
         console.log(`[sync-concept2] MAPPED DETAIL for c2_id=${c2Id}:`, JSON.stringify(detailUpdate));
 
@@ -245,7 +322,9 @@ serve(async (req) => {
           return;
         }
 
-        // Insert splits into erg_workout_splits
+        // Also insert into erg_workout_splits if the detail contains split-level data
+        // (Concept2 may return this as splits, real_time, or workout_intervals depending on type)
+        const splits: any[] = d.splits ?? d.workout_intervals ?? [];
         if (splits.length > 0) {
           const splitRows = splits.map((s: any, idx: number) => ({
             workout_id: dbId,
@@ -254,18 +333,18 @@ serve(async (req) => {
             time_seconds: s.time != null ? s.time / 10 : null,
             pace_deciseconds: s.pace ?? s.split ?? null,
             stroke_rate: s.stroke_rate ?? null,
-            avg_stroke_rate: s.avg_stroke_rate ?? null,
-            calories: s.calories ?? null,
-            cal_per_hour: s.cal_per_hour ?? s.calories_per_hour ?? null,
-            heart_rate_avg: s.heart_rate?.average ?? s.avg_heart_rate ?? null,
-            heart_rate_min: s.heart_rate?.min ?? s.min_heart_rate ?? null,
-            heart_rate_max: s.heart_rate?.max ?? s.max_heart_rate ?? null,
-            drag_factor: s.avg_drag_factor ?? s.drag_factor ?? null,
+            avg_stroke_rate: s.avg_stroke_rate ?? s.stroke_rate ?? null,
+            calories: s.calories ?? s.calories_total ?? null,
+            cal_per_hour: s.cal_per_hour ?? s.cal_hour ?? null,
+            heart_rate_avg: s.heart_rate?.average ?? null,
+            heart_rate_min: s.heart_rate?.min ?? null,
+            heart_rate_max: s.heart_rate?.max ?? null,
+            drag_factor: s.drag_factor ?? null,
             rest_time_seconds: s.rest_time != null ? s.rest_time / 10 : null,
             finish: s.finish ?? false,
           }));
 
-          console.log(`[sync-concept2] Inserting ${splitRows.length} splits for workout ${dbId}. First split:`, JSON.stringify(splitRows[0]));
+          console.log(`[sync-concept2] Inserting ${splitRows.length} splits for workout ${dbId}`);
 
           const { error: splitsErr } = await supabase
             .from("erg_workout_splits")
@@ -273,11 +352,9 @@ serve(async (req) => {
 
           if (splitsErr) {
             console.error(`[sync-concept2] Splits upsert error for workout ${dbId}:`, JSON.stringify(splitsErr));
-          } else {
-            console.log(`[sync-concept2] Splits saved OK for workout ${dbId}`);
           }
         } else {
-          console.log(`[sync-concept2] No splits array found for c2_id=${c2Id}. Keys present: ${Object.keys(d).join(", ")}`);
+          console.log(`[sync-concept2] No splits/intervals for c2_id=${c2Id} (workout_type=${d.workout_type})`);
         }
 
         detailFetched++;
@@ -286,7 +363,7 @@ serve(async (req) => {
 
     console.log(`[sync-concept2] Detail: fetched=${detailFetched} errors=${detailErrors}`);
 
-    // ── Step 5: Update sync timestamps ───────────────────────────────────────
+    // ── Step 6: Update sync timestamps ───────────────────────────────────────
     const nowIso = new Date().toISOString();
     await Promise.all([
       supabase.from("athlete_profiles").upsert(
@@ -301,10 +378,10 @@ serve(async (req) => {
         success: true,
         imported,
         total: allWorkouts.length,
+        deleted,
         detail_fetched: detailFetched,
         detail_errors: detailErrors,
         ...(apiError ? { api_error: apiError } : {}),
-        ...(firstRawResponse && allWorkouts.length === 0 ? { raw_response: firstRawResponse.substring(0, 1000) } : {}),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

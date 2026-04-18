@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, Dumbbell, Download, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
 import { RacePaceBoat } from "./RacePaceBoat";
@@ -38,6 +38,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const [strengthWorkouts, setStrengthWorkouts] = useState<any[]>([]);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [splitsByWorkoutId, setSplitsByWorkoutId] = useState<Record<string, any[]>>({});
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [ergPage, setErgPage] = useState(0);
   const [strengthPage, setStrengthPage] = useState(0);
 
@@ -90,6 +91,22 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
       .eq("workout_id", workoutId)
       .order("split_number", { ascending: true });
     setSplitsByWorkoutId(prev => ({ ...prev, [workoutId]: data || [] }));
+  };
+
+  const deleteWorkout = async (workout: any) => {
+    // If this came from Concept2, record the external_id so the sync never re-imports it
+    if (workout.external_id) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("deleted_c2_workouts").upsert(
+          { user_id: user.id, external_id: workout.external_id },
+          { onConflict: "user_id,external_id" }
+        );
+      }
+    }
+    await supabase.from("erg_workouts").delete().eq("id", workout.id);
+    setErgWorkouts(prev => prev.filter(w => w.id !== workout.id));
+    setPendingDeleteId(null);
   };
 
   const toggleSession = (sessionId: string) => {
@@ -172,17 +189,30 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
 
   const WorkoutDetailGrid = ({ workout }: { workout: any }) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
-      {workout.duration && <span>Time: {workout.duration}</span>}
+      {workout.time_formatted
+        ? <span>Time: {workout.time_formatted}</span>
+        : workout.duration && <span>Time: {workout.duration}</span>}
       {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
-      {workout.avg_heart_rate && <span>Avg HR: {workout.avg_heart_rate} bpm</span>}
-      {workout.max_heart_rate && <span>Max HR: {workout.max_heart_rate} bpm</span>}
-      {workout.min_heart_rate && <span>Min HR: {workout.min_heart_rate} bpm</span>}
-      {workout.calories && <span>Calories: {workout.calories}</span>}
-      {workout.cal_hour && <span>Cal/hr: {Math.round(workout.cal_hour)}</span>}
-      {workout.stroke_rate && <span>Stroke Rate: {workout.stroke_rate} spm</span>}
-      {workout.drag_factor && <span>Drag Factor: {workout.drag_factor}</span>}
-      {workout.work_per_stroke && <span>Work/Stroke: {Math.round(workout.work_per_stroke)} J</span>}
-      {workout.avg_watts && <span>Avg Watts: {workout.avg_watts} W</span>}
+      {(workout.heart_rate_average ?? workout.avg_heart_rate) != null && (
+        <span>Avg HR: {workout.heart_rate_average ?? workout.avg_heart_rate} bpm</span>
+      )}
+      {(workout.heart_rate_max ?? workout.max_heart_rate) != null && (
+        <span>Max HR: {workout.heart_rate_max ?? workout.max_heart_rate} bpm</span>
+      )}
+      {(workout.heart_rate_min ?? workout.min_heart_rate) != null && (
+        <span>Min HR: {workout.heart_rate_min ?? workout.min_heart_rate} bpm</span>
+      )}
+      {(workout.calories_total ?? workout.calories) != null && (
+        <span>Calories: {workout.calories_total ?? workout.calories}</span>
+      )}
+      {workout.cal_hour != null && <span>Cal/hr: {Math.round(workout.cal_hour)}</span>}
+      {(workout.stroke_rate_average ?? workout.stroke_rate) != null && (
+        <span>Stroke Rate: {workout.stroke_rate_average ?? workout.stroke_rate} spm</span>
+      )}
+      {workout.stroke_count != null && <span>Strokes: {workout.stroke_count}</span>}
+      {workout.drag_factor != null && <span>Drag: {workout.drag_factor}</span>}
+      {workout.work_per_stroke != null && <span>Work/Stroke: {Math.round(workout.work_per_stroke)} J</span>}
+      {workout.avg_watts != null && <span>Avg Watts: {workout.avg_watts} W</span>}
     </div>
   );
 
@@ -286,6 +316,23 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                             <div className="flex items-center gap-2">
                               {workout.distance && <span className="text-lg font-bold">{workout.distance}m</span>}
                               {profile?.id && <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />}
+                              {coachInfo?.coachId === profile?.id && (
+                                pendingDeleteId === workout.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-destructive">Delete?</span>
+                                    <Button variant="destructive" size="sm" className="h-6 px-2 text-xs" onClick={() => deleteWorkout(workout)}>
+                                      Yes
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPendingDeleteId(null)}>
+                                      No
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => setPendingDeleteId(workout.id)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )
+                              )}
                             </div>
                           </div>
                           <CollapsibleContent className="space-y-3">
