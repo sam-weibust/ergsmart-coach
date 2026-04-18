@@ -72,12 +72,13 @@ export default function AthleteProfile() {
 
       if (!baseProfile) return null;
 
-      const [apRes, ergRes, strengthRes, followersRes, followingRes] = await Promise.all([
+      const [apRes, ergRes, strengthRes, followersRes, followingRes, combineRes] = await Promise.all([
         supabase.from("athlete_profiles").select("*").eq("user_id", baseProfile.id).maybeSingle(),
         supabase.from("erg_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(20),
         supabase.from("strength_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(10),
         supabase.from("profile_follows").select("id").eq("following_id", baseProfile.id),
         supabase.from("profile_follows").select("id").eq("follower_id", baseProfile.id),
+        (supabase as any).from("combine_entries").select("combine_score, two_k_seconds, six_k_seconds, two_k_watts").eq("user_id", baseProfile.id).maybeSingle(),
       ]);
 
       const ap = apRes.data;
@@ -106,6 +107,7 @@ export default function AthleteProfile() {
         totalVolume,
         followers: (followersRes.data || []).length,
         following: (followingRes.data || []).length,
+        combine: combineRes.data || null,
       };
     },
   });
@@ -192,7 +194,7 @@ export default function AthleteProfile() {
     );
   }
 
-  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers } = profileData;
+  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine } = profileData;
   const watts = wattFromSplit(bestErg?.avg_split);
   const wkg = watts && base.weight ? (parseFloat(watts) / base.weight).toFixed(2) : null;
   const socialLinks = ap.social_links || {};
@@ -429,6 +431,20 @@ export default function AthleteProfile() {
                     <div className="text-xs text-muted-foreground mt-1">Monthly m</div>
                   </div>
                 </div>
+                {combine && (
+                  <div className="mt-3 p-3 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border border-primary/20 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CrewSync Combine Score</p>
+                      <p className="text-2xl font-bold text-primary">{combine.combine_score?.toFixed(1) || "—"}</p>
+                    </div>
+                    {combine.two_k_seconds && (
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">2k: {Math.floor(combine.two_k_seconds/60)}:{String(combine.two_k_seconds%60).padStart(2,"0")}</p>
+                        {combine.two_k_watts && <p className="text-xs text-muted-foreground">{combine.two_k_watts}W</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {ergs.length > 0 && (
                   <div className="space-y-2">

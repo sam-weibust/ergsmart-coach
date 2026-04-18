@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School } from "lucide-react";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School, Award, Zap } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -38,6 +38,11 @@ import { PublicProfileSection } from "@/components/dashboard/PublicProfileSectio
 import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
 import { CollegeTargetsSection } from "@/components/dashboard/CollegeTargetsSection";
 import { CoachDirectorySection } from "@/components/dashboard/CoachDirectorySection";
+import CombineSection from "@/components/dashboard/CombineSection";
+import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
+import AthleteComparisonSection from "@/components/dashboard/AthleteComparisonSection";
+import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
+import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -141,6 +146,10 @@ const Dashboard = () => {
     { value: "recovery", icon: HeartPulse, label: "Recovery" },
     { value: "live", icon: Gauge, label: "Live Erg" },
     { value: "race", icon: Swords, label: "Race" },
+    { value: "combine", icon: Award, label: "Combine" },
+    { value: "challenges", icon: Zap, label: "Challenges" },
+    { value: "team-compare", icon: GitCompare, label: "Compare" },
+    { value: "alumni", icon: GraduationCap, label: "Alumni" },
   ];
 
   const isMoreTabActive = moreTabItems.some(t => t.value === activeTab);
@@ -252,12 +261,33 @@ const Dashboard = () => {
               <TabsTrigger value="race" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Swords className="h-4 w-4" /><span>Race</span>
               </TabsTrigger>
+              <TabsTrigger value="combine" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <Award className="h-4 w-4" /><span>Combine</span>
+              </TabsTrigger>
+              <TabsTrigger value="challenges" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <Zap className="h-4 w-4" /><span>Challenges</span>
+              </TabsTrigger>
+              {isCoach && (
+                <TabsTrigger value="team-compare" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                  <GitCompare className="h-4 w-4" /><span>Compare</span>
+                </TabsTrigger>
+              )}
+              {isCoach && (
+                <TabsTrigger value="alumni" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                  <GraduationCap className="h-4 w-4" /><span>Alumni</span>
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
           {/* Tab Content */}
           <div className="animate-fade-in-up">
-            <TabsContent value="plans" className="mt-0"><WorkoutPlanSection /></TabsContent>
+            <TabsContent value="plans" className="mt-0">
+              <div className="space-y-4">
+                <WeeklyChallengeWidget onNavigate={setActiveTab} />
+                <WorkoutPlanSection />
+              </div>
+            </TabsContent>
             <TabsContent value="log" className="mt-0">
               <div className="space-y-6">
                 <TodaysWorkouts profile={profile} />
@@ -292,6 +322,10 @@ const Dashboard = () => {
             <TabsContent value="recovery" className="mt-0"><RecoverySection profile={profile} /></TabsContent>
             <TabsContent value="live" className="mt-0 -mx-4 -mb-20 md:-mx-0 md:-mb-8"><LiveErgView /></TabsContent>
             <TabsContent value="race" className="mt-0 -mx-4 -mb-20 md:-mx-0 md:-mb-8"><RaceSection /></TabsContent>
+            <TabsContent value="combine" className="mt-0"><CombineSection /></TabsContent>
+            <TabsContent value="challenges" className="mt-0"><WeeklyChallengeSection /></TabsContent>
+            {isCoach && <TabsContent value="team-compare" className="mt-0"><AthleteComparisonSection /></TabsContent>}
+            {isCoach && <TabsContent value="alumni" className="mt-0"><AlumniNetworkSection /></TabsContent>}
           </div>
         </Tabs>
       </main>

@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Clock, Trash2, Edit2, Send, ImagePlus, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Clock, Trash2, Edit2, Send, ImagePlus, X, ThumbsUp, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -50,12 +51,53 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("forum_posts")
-        .select("*, author:profiles!forum_posts_author_id_fkey(username, full_name)")
+        .select("*, author:profiles!forum_posts_author_id_fkey(username, full_name, user_type)")
         .eq("topic_id", topicId)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
+  });
+
+  const { data: myPostVotes } = useQuery({
+    queryKey: ["my-post-votes", topicId],
+    queryFn: async () => {
+      if (!currentUser) return new Set<string>();
+      const { data } = await (supabase as any)
+        .from("forum_votes")
+        .select("post_id")
+        .eq("user_id", currentUser.id)
+        .not("post_id", "is", null);
+      return new Set<string>((data || []).map((v: any) => v.post_id));
+    },
+    enabled: !!currentUser,
+  });
+
+  // Real-time subscription for new posts
+  useEffect(() => {
+    const channel = supabase
+      .channel(`forum-posts-${topicId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_posts", filter: `topic_id=eq.${topicId}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [topicId, queryClient]);
+
+  const votePost = useMutation({
+    mutationFn: async ({ postId, upvoteCount, hasVoted }: { postId: string; upvoteCount: number; hasVoted: boolean }) => {
+      if (!currentUser) throw new Error("Not authenticated");
+      if (hasVoted) {
+        await (supabase as any).from("forum_votes").delete().eq("user_id", currentUser.id).eq("post_id", postId);
+      } else {
+        await (supabase as any).from("forum_votes").insert({ user_id: currentUser.id, post_id: postId });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
+      queryClient.invalidateQueries({ queryKey: ["my-post-votes", topicId] });
+    },
+    onError: () => toast.error("Failed to vote"),
   });
 
   const addReply = useMutation({
@@ -274,6 +316,11 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
                       <span className="font-medium text-sm text-foreground">
                         {getDisplayName(post.author)}
                       </span>
+                      {(post.author as any)?.user_type === "coach" && (
+                        <Badge variant="outline" className="text-[10px] h-4 py-0 gap-0.5 border-primary text-primary">
+                          <ShieldCheck className="h-2.5 w-2.5" />Coach
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
@@ -325,31 +372,44 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
                       </>
                     )}
                   </div>
-                  {currentUser?.id === post.author_id && editingPostId !== post.id && (
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          setEditingPostId(post.id);
-                          setEditContent(post.content);
-                        }}
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          if (confirm("Delete this reply?")) deletePost.mutate(post.id);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex gap-1 shrink-0 items-start">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-7 w-7 gap-1 ${myPostVotes?.has(post.id) ? "text-primary" : "text-muted-foreground"}`}
+                      onClick={() => votePost.mutate({ postId: post.id, upvoteCount: (post as any).upvote_count || 0, hasVoted: !!myPostVotes?.has(post.id) })}
+                    >
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                    </Button>
+                    {((post as any).upvote_count > 0) && (
+                      <span className="text-xs text-muted-foreground pt-1.5">{(post as any).upvote_count}</span>
+                    )}
+                    {currentUser?.id === post.author_id && editingPostId !== post.id && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => {
+                            setEditingPostId(post.id);
+                            setEditContent(post.content);
+                          }}
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (confirm("Delete this reply?")) deletePost.mutate(post.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

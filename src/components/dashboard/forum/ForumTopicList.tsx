@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, MessageSquare, Pin, Lock, Clock, ImagePlus, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Plus, MessageSquare, Pin, Lock, Clock, ImagePlus, X, ThumbsUp, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
@@ -24,18 +25,56 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: currentUser } = useQuery({
+    queryKey: ["current-user"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user;
+    },
+  });
+
   const { data: topics, isLoading } = useQuery({
     queryKey: ["forum-topics", categoryId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("forum_topics")
-        .select("*, author:profiles!forum_topics_author_id_fkey(username, full_name), last_post_author:profiles!forum_topics_last_post_author_id_fkey(username, full_name)")
+        .select("*, author:profiles!forum_topics_author_id_fkey(username, full_name, user_type), last_post_author:profiles!forum_topics_last_post_author_id_fkey(username, full_name)")
         .eq("category_id", categoryId)
         .order("is_pinned", { ascending: false })
         .order("last_post_at", { ascending: false });
       if (error) throw error;
       return data;
     },
+  });
+
+  const { data: myTopicVotes } = useQuery({
+    queryKey: ["my-topic-votes", categoryId],
+    queryFn: async () => {
+      if (!currentUser) return new Set<string>();
+      const { data } = await (supabase as any)
+        .from("forum_votes")
+        .select("topic_id")
+        .eq("user_id", currentUser.id)
+        .not("topic_id", "is", null);
+      return new Set<string>((data || []).map((v: any) => v.topic_id));
+    },
+    enabled: !!currentUser,
+  });
+
+  const voteTopic = useMutation({
+    mutationFn: async ({ topicId, hasVoted }: { topicId: string; hasVoted: boolean }) => {
+      if (!currentUser) throw new Error("Not authenticated");
+      if (hasVoted) {
+        await (supabase as any).from("forum_votes").delete().eq("user_id", currentUser.id).eq("topic_id", topicId);
+      } else {
+        await (supabase as any).from("forum_votes").insert({ user_id: currentUser.id, topic_id: topicId });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forum-topics", categoryId] });
+      queryClient.invalidateQueries({ queryKey: ["my-topic-votes", categoryId] });
+    },
+    onError: () => toast.error("Failed to vote"),
   });
 
   const createTopic = useMutation({
@@ -269,12 +308,24 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                     <span>by {(topic.author as any)?.username || (topic.author as any)?.full_name || "Unknown"}</span>
+                    {(topic.author as any)?.user_type === "coach" && (
+                      <Badge variant="outline" className="text-[10px] h-4 py-0 gap-0.5 border-primary text-primary">
+                        <ShieldCheck className="h-2.5 w-2.5" />Coach
+                      </Badge>
+                    )}
                     <span>·</span>
                     <Clock className="h-3 w-3" />
                     <span>{formatDistanceToNow(new Date(topic.created_at), { addSuffix: true })}</span>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    className={`flex items-center gap-1 text-xs ${myTopicVotes?.has(topic.id) ? "text-primary" : "text-muted-foreground"} hover:text-primary transition-colors`}
+                    onClick={(e) => { e.stopPropagation(); voteTopic.mutate({ topicId: topic.id, hasVoted: !!myTopicVotes?.has(topic.id) }); }}
+                  >
+                    <ThumbsUp className="h-3.5 w-3.5" />
+                    <span>{(topic as any).upvote_count || 0}</span>
+                  </button>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
                     <MessageSquare className="h-3.5 w-3.5" />
                     <span>{topic.reply_count || 0}</span>
