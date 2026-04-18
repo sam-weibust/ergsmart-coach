@@ -226,7 +226,7 @@ serve(async (req) => {
       .is("workout_data", null);
     const needsDetail = needsDetailRows ?? [];
 
-    console.log(`[sync-concept2] ${needsDetail.length} of ${existingRows?.length ?? 0} workouts need detail fetch`);
+    console.log(`[sync-concept2] ${needsDetail.length} of ${allExistingRows?.length ?? 0} workouts need detail fetch`);
 
     const DETAIL_BATCH = 10;
     let detailFetched = 0;

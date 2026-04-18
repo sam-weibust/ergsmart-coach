@@ -39,6 +39,8 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [splitsByWorkoutId, setSplitsByWorkoutId] = useState<Record<string, any[]>>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [ergPage, setErgPage] = useState(0);
   const [strengthPage, setStrengthPage] = useState(0);
 
@@ -107,6 +109,30 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     await supabase.from("erg_workouts").delete().eq("id", workout.id);
     setErgWorkouts(prev => prev.filter(w => w.id !== workout.id));
     setPendingDeleteId(null);
+  };
+
+  const deleteAllWorkouts = async () => {
+    setDeletingAll(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Collect all external_ids that came from C2 before deleting
+      const c2Workouts = ergWorkouts.filter(w => w.external_id);
+      if (c2Workouts.length > 0) {
+        await supabase.from("deleted_c2_workouts").upsert(
+          c2Workouts.map(w => ({ user_id: user.id, external_id: w.external_id })),
+          { onConflict: "user_id,external_id" }
+        );
+      }
+
+      // Delete all erg workouts for this user
+      await supabase.from("erg_workouts").delete().eq("user_id", user.id);
+      setErgWorkouts([]);
+      setConfirmDeleteAll(false);
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const toggleSession = (sessionId: string) => {
@@ -320,10 +346,46 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
           </TabsList>
 
           <TabsContent value="erg" className="space-y-4 mt-4">
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
               <Button variant="outline" size="sm" onClick={() => exportCSV("erg")} className="gap-1.5">
                 <Download className="h-3.5 w-3.5" /> Export CSV
               </Button>
+              {coachInfo?.coachId === profile?.id && ergWorkouts.length > 0 && (
+                confirmDeleteAll ? (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/5 px-3 py-1.5">
+                    <span className="text-sm text-destructive font-medium">
+                      Delete all {ergWorkouts.length} workouts permanently?
+                    </span>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 px-3"
+                      disabled={deletingAll}
+                      onClick={deleteAllWorkouts}
+                    >
+                      {deletingAll ? "Deleting…" : "Yes, delete all"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-3"
+                      disabled={deletingAll}
+                      onClick={() => setConfirmDeleteAll(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setConfirmDeleteAll(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete All
+                  </Button>
+                )
+              )}
             </div>
             {displayErgWorkouts.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No erg workouts logged yet.</p>
