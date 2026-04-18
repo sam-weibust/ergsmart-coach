@@ -140,18 +140,26 @@ export const PublicProfileSection = () => {
     if (!currentUser) return;
     setGeneratingSummary(true);
     try {
+      const session = await supabase.auth.getSession();
       const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-athlete-summary`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": API_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": API_KEY,
+          "Authorization": `Bearer ${session.data.session?.access_token}`,
+        },
         body: JSON.stringify({ user_id: currentUser.id }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       if (data.summary) {
         queryClient.invalidateQueries({ queryKey: ["athlete-profile"] });
         toast({ title: "AI summary generated!" });
       }
-    } catch {
-      toast({ title: "Failed to generate summary", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Failed to generate summary", description: e.message, variant: "destructive" });
     } finally {
       setGeneratingSummary(false);
     }
