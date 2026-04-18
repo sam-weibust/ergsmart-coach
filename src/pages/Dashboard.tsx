@@ -45,6 +45,8 @@ import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSectio
 import AthleteComparisonSection from "@/components/dashboard/AthleteComparisonSection";
 import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
 import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget";
+import { StreakWidget } from "@/components/dashboard/StreakWidget";
+import { ReferralSection } from "@/components/dashboard/ReferralSection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -180,6 +182,7 @@ const Dashboard = () => {
       items: [
         { value: "profile", icon: User, label: "Profile" },
         { value: "devices", icon: Bluetooth, label: "Devices & BLE" },
+        { value: "referral", icon: Sparkles, label: "Refer Friends" },
       ],
     },
     ...(isCoach ? [{
@@ -333,6 +336,7 @@ const Dashboard = () => {
           <div className="animate-fade-in-up">
             <TabsContent value="plans" className="mt-0">
               <div className="space-y-4">
+                <StreakWidget />
                 <WeeklyChallengeWidget onNavigate={setActiveTab} />
                 <WorkoutPlanSection />
               </div>
@@ -375,6 +379,7 @@ const Dashboard = () => {
             <TabsContent value="challenges" className="mt-0"><WeeklyChallengeSection /></TabsContent>
             {isCoach && <TabsContent value="team-compare" className="mt-0"><AthleteComparisonSection /></TabsContent>}
             {isCoach && <TabsContent value="alumni" className="mt-0"><AlumniNetworkSection /></TabsContent>}
+            <TabsContent value="referral" className="mt-0"><ReferralSection profile={profile} /></TabsContent>
           </div>
         </Tabs>
       </main>

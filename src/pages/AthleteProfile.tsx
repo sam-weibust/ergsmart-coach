@@ -11,8 +11,9 @@ import {
   MapPin, School, Users, Globe, Instagram, Twitter, Youtube,
   ExternalLink, UserPlus, UserCheck, Eye, GraduationCap, TrendingUp,
   Dumbbell, BarChart3, Heart, Star, ArrowLeft, Mail, Link2,
-  RefreshCw, Unplug, Plug
+  RefreshCw, Unplug, Plug, Trophy
 } from "lucide-react";
+import { CalendarHeatmap } from "@/components/dashboard/CalendarHeatmap";
 import { useToast } from "@/hooks/use-toast";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -456,6 +457,28 @@ export default function AthleteProfile() {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Calendar Heatmap */}
+            <Card className="bg-gradient-to-br from-[#0a1628] to-[#112240] border-white/10">
+              <CardContent className="p-5">
+                <CalendarHeatmap userId={base.id} />
+              </CardContent>
+            </Card>
+
+            {/* PR Wall Link */}
+            <Card className="border-[#f59e0b]/30 bg-gradient-to-r from-[#f59e0b]/5 to-transparent cursor-pointer hover:border-[#f59e0b]/50 transition-colors"
+              onClick={() => navigate(`/athlete/${username}/prs`)}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Trophy className="h-6 w-6 text-[#f59e0b]" />
+                  <div>
+                    <p className="font-semibold text-foreground">Personal Records</p>
+                    <p className="text-xs text-muted-foreground">View all-time PRs</p>
+                  </div>
+                </div>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardContent>
             </Card>
 

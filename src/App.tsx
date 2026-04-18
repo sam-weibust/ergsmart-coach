@@ -9,6 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import AthleteProfile from "./pages/AthleteProfile";
 import Concept2Callback from "./pages/Concept2Callback";
+import DirectoryPage from "./pages/DirectoryPage";
+import PersonalRecordsPage from "./pages/PersonalRecordsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +27,8 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/athlete/:username" element={<AthleteProfile />} />
+            <Route path="/athlete/:username/prs" element={<PersonalRecordsPage />} />
+            <Route path="/directory" element={<DirectoryPage />} />
             <Route path="/auth/concept2/callback" element={<Concept2Callback />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

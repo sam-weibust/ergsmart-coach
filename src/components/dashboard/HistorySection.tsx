@@ -12,6 +12,7 @@ import { Activity, Dumbbell, Download, ChevronDown, Trash2, Link as LinkIcon } f
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
 import { RacePaceBoat } from "./RacePaceBoat";
 import { WorkoutAnnotations } from "./WorkoutAnnotations";
+import { ShareWorkoutButton } from "./WorkoutShareCard";
 
 interface HistorySectionProps {
   profile: any;
@@ -499,6 +500,11 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
 
                               {/* Right: actions + chevron */}
                               <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                <ShareWorkoutButton
+                                  workout={workout}
+                                  athleteName={profile?.full_name || profile?.username || "Athlete"}
+                                  workoutType={workoutTypeLabel(workout.workout_type || "Erg")}
+                                />
                                 {profile?.id && (
                                   <ShareWorkoutDialog workoutId={workout.id} workoutType="erg" userId={profile.id} />
                                 )}

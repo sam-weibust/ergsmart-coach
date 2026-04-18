@@ -9,6 +9,100 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { WorkoutFeedback } from "./WorkoutFeedback";
+import { toast } from "sonner";
+
+// PR distance labels
+const PR_DISTANCES: Record<number, string> = {
+  2000: "2k",
+  5000: "5k",
+  6000: "6k",
+  10000: "10k",
+};
+
+async function checkAndUpdatePR(userId: string, distanceM: number | null, splitStr: string | null, durationStr: string | null, strokeRate: string | null) {
+  try {
+    // Convert split string (e.g. "2:05.5") to seconds per 500m
+    const parseSplit = (s: string | null): number | null => {
+      if (!s) return null;
+      const parts = s.split(":");
+      if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+      return parseFloat(s);
+    };
+
+    const parseDuration = (d: string | null): number | null => {
+      if (!d) return null;
+      const parts = d.split(":");
+      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+      return parseFloat(d);
+    };
+
+    const splitSec = parseSplit(splitStr);
+    const durationSec = parseDuration(durationStr);
+
+    // Calculate total time for standard distance
+    let distanceLabel: string | null = null;
+    let timeSec: number | null = null;
+    let watts: number | null = null;
+
+    if (distanceM && PR_DISTANCES[distanceM] && splitSec && splitSec > 0) {
+      distanceLabel = PR_DISTANCES[distanceM];
+      timeSec = (splitSec / 500) * distanceM;
+      watts = Math.round(2.80 / Math.pow(splitSec / 500, 3));
+    } else if (durationSec && Math.abs(durationSec - 3600) < 10 && splitSec) {
+      // 60 minute piece
+      distanceLabel = "60min";
+      timeSec = durationSec;
+      watts = Math.round(2.80 / Math.pow(splitSec / 500, 3));
+    } else if (durationSec && Math.abs(durationSec - 1800) < 10 && splitSec) {
+      distanceLabel = "30min";
+      timeSec = durationSec;
+    }
+
+    if (!distanceLabel || !timeSec) return;
+
+    // Get existing PR
+    const { data: existing } = await supabase
+      .from("personal_records" as any)
+      .select("id, time_seconds")
+      .eq("user_id", userId)
+      .eq("distance_label", distanceLabel)
+      .order("time_seconds", { ascending: true })
+      .limit(1);
+
+    const prevBest = existing && existing.length > 0 ? (existing[0] as any).time_seconds : null;
+
+    // Only save if it's a new PR (lower time is better for distance pieces; higher is better for time pieces)
+    const isTimePiece = distanceLabel === "60min" || distanceLabel === "30min";
+    const isBetter = isTimePiece
+      ? !prevBest || timeSec >= prevBest
+      : !prevBest || timeSec < prevBest;
+
+    if (!isBetter) return;
+
+    const improvementSeconds = prevBest ? Math.abs(prevBest - timeSec) : null;
+
+    await supabase.from("personal_records" as any).insert({
+      user_id: userId,
+      distance_label: distanceLabel,
+      time_seconds: timeSec,
+      split_seconds: splitSec,
+      watts,
+      stroke_rate: strokeRate ? parseInt(strokeRate) : null,
+      set_at: new Date().toISOString().split("T")[0],
+      previous_time_seconds: prevBest,
+      improvement_seconds: improvementSeconds,
+    });
+
+    if (prevBest) {
+      toast.success(`🏆 New ${distanceLabel} PR! ${improvementSeconds ? Math.round(improvementSeconds) + "s faster" : ""}`);
+    } else {
+      toast.success(`🏆 First ${distanceLabel} recorded!`);
+    }
+  } catch {
+    // PR tracking shouldn't block workout save
+  }
+}
 
 interface ErgWorkout {
   distance: string;
@@ -90,6 +184,15 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
       if (!fnError && fbData?.feedback) {
         setFeedback(fbData.feedback);
       }
+
+      // Check for PR
+      await checkAndUpdatePR(
+        user_id,
+        workout.distance ? parseInt(workout.distance) : null,
+        workout.split || null,
+        workout.duration || null,
+        workout.stroke_rate || null,
+      );
 
       setWorkout({
         distance: "",

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const referralCode = searchParams.get("ref");
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +36,31 @@ const Auth = () => {
 
       if (error) throw error;
 
-      toast.success("Account created successfully! Redirecting...");
+      // Handle referral
+      if (referralCode && data.user) {
+        try {
+          // Find referrer by username (referral code = username)
+          const { data: referrer } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("username", referralCode)
+            .maybeSingle();
+
+          if (referrer) {
+            await supabase.from("referrals" as any).insert({
+              referrer_user_id: referrer.id,
+              referred_user_id: data.user.id,
+              referrer_code: referralCode,
+              rewarded_at: new Date().toISOString(),
+            });
+            toast.success("🎉 Welcome! You and your referrer both earned a reward!");
+          }
+        } catch {
+          // Referral tracking failure shouldn't block signup
+        }
+      } else {
+        toast.success("Account created successfully! Redirecting...");
+      }
       navigate("/dashboard");
     } catch (error: any) {
       toast.error(error.message || "Failed to create account");
