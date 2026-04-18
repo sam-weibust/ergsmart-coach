@@ -36,7 +36,7 @@ serve(async (req) => {
     }
 
     // Exchange authorization code for tokens
-    const tokenRes = await fetch("https://log.concept2.com/oauth/token", {
+    const tokenRes = await fetch("https://log.concept2.com/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
