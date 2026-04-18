@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School, Award, Zap } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { LogOut, Calendar, User, Bluetooth, History, UsersRound, MessageCircle, PlusCircle, BarChart3, GitCompare, Trophy, Sparkles, UtensilsCrossed, MessageSquare, Eye, GraduationCap, MessagesSquare, Medal, Calculator, HeartPulse, MoreHorizontal, ChevronRight, Gauge, Swords, Globe, Target, School, Award, Zap } from "lucide-react";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
@@ -46,9 +48,16 @@ import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget"
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("plans");
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  const { containerRef, pulling, refreshing, progress, threshold } = usePullToRefresh(handleRefresh);
 
   useEffect(() => {
     checkUser();
@@ -121,41 +130,72 @@ const Dashboard = () => {
   const mobileNavItems = [
     { value: "plans", icon: Calendar, label: "Training" },
     { value: "log", icon: PlusCircle, label: "Log" },
-    { value: "ask", icon: MessageSquare, label: "Ask" },
+    { value: "live", icon: Gauge, label: "Live Erg" },
     { value: "history", icon: History, label: "History" },
   ];
 
-  const moreTabItems = [
-    { value: "meals", icon: UtensilsCrossed, label: "Meals" },
-    { value: "stats", icon: BarChart3, label: "Stats" },
-    { value: "compare", icon: GitCompare, label: "Compare" },
-    { value: "awards", icon: Trophy, label: "Awards" },
-    { value: "predictor", icon: Calculator, label: "Predictor" },
-    { value: "leaderboard", icon: Medal, label: "Rankings" },
-    { value: "recruit", icon: GraduationCap, label: "Recruit" },
-    { value: "public-profile", icon: Globe, label: "My Profile" },
-    { value: "recruiting", icon: Target, label: "Recruiting" },
-    { value: "college-targets", icon: School, label: "Colleges" },
-    { value: "coaches", icon: UsersRound, label: "Coaches" },
-    { value: "profile", icon: User, label: "Profile" },
-    { value: "friends", icon: MessageCircle, label: "Friends" },
-    { value: "teams", icon: UsersRound, label: "Teams" },
-    { value: "critique", icon: Eye, label: "Critique" },
-    { value: "forum", icon: MessagesSquare, label: "Forum" },
-    { value: "devices", icon: Bluetooth, label: "Devices" },
-    { value: "recovery", icon: HeartPulse, label: "Recovery" },
-    { value: "live", icon: Gauge, label: "Live Erg" },
-    { value: "race", icon: Swords, label: "Race" },
-    { value: "combine", icon: Award, label: "Combine" },
-    { value: "challenges", icon: Zap, label: "Challenges" },
-    { value: "team-compare", icon: GitCompare, label: "Compare" },
-    { value: "alumni", icon: GraduationCap, label: "Alumni" },
+  const moreTabGroups = [
+    {
+      label: "Workouts",
+      items: [
+        { value: "ask", icon: MessageSquare, label: "Ask AI Coach" },
+        { value: "meals", icon: UtensilsCrossed, label: "Meals" },
+        { value: "stats", icon: BarChart3, label: "Stats" },
+        { value: "compare", icon: GitCompare, label: "Compare" },
+        { value: "awards", icon: Trophy, label: "Awards" },
+        { value: "predictor", icon: Calculator, label: "Predictor" },
+        { value: "recovery", icon: HeartPulse, label: "Recovery" },
+        { value: "critique", icon: Eye, label: "Video Critique" },
+      ],
+    },
+    {
+      label: "Race",
+      items: [
+        { value: "race", icon: Swords, label: "Head-to-Head Race" },
+        { value: "combine", icon: Award, label: "Virtual Combine" },
+        { value: "challenges", icon: Zap, label: "Weekly Challenges" },
+        { value: "leaderboard", icon: Medal, label: "Rankings" },
+      ],
+    },
+    {
+      label: "Recruiting",
+      items: [
+        { value: "recruit", icon: GraduationCap, label: "Recruitment" },
+        { value: "public-profile", icon: Globe, label: "My Public Profile" },
+        { value: "recruiting", icon: Target, label: "Recruiting Profile" },
+        { value: "college-targets", icon: School, label: "College List" },
+        { value: "coaches", icon: UsersRound, label: "Coach Directory" },
+      ],
+    },
+    {
+      label: "Community",
+      items: [
+        { value: "forum", icon: MessagesSquare, label: "Forum" },
+        { value: "friends", icon: MessageCircle, label: "Friends" },
+        ...(isOnTeam ? [{ value: "teams", icon: UsersRound, label: "Teams" }] : []),
+      ],
+    },
+    {
+      label: "Settings",
+      items: [
+        { value: "profile", icon: User, label: "Profile" },
+        { value: "devices", icon: Bluetooth, label: "Devices & BLE" },
+      ],
+    },
+    ...(isCoach ? [{
+      label: "Coach Tools",
+      items: [
+        { value: "team-compare", icon: GitCompare, label: "Athlete Compare" },
+        { value: "alumni", icon: GraduationCap, label: "Alumni Network" },
+      ],
+    }] : []),
   ];
 
-  const isMoreTabActive = moreTabItems.some(t => t.value === activeTab);
+  const allMoreItems = moreTabGroups.flatMap(g => g.items);
+  const isMoreTabActive = allMoreItems.some(t => t.value === activeTab);
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-gradient-subtle flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-card/90 backdrop-blur-xl sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
@@ -182,7 +222,16 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 pb-20 md:pb-8 animate-fade-in">
+      <div
+        ref={containerRef}
+        className="relative overflow-y-auto flex-1"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <PullToRefreshIndicator progress={progress} refreshing={refreshing} threshold={threshold} />
+      <main
+        className="container mx-auto px-4 py-6 pb-20 md:pb-8 animate-fade-in"
+        style={{ transform: pulling || refreshing ? `translateY(${Math.min(progress, threshold)}px)` : undefined, transition: refreshing ? "transform 0.2s" : undefined }}
+      >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           {/* Desktop Tab Navigation - hidden on mobile */}
           <div className="hidden md:block bg-card rounded-2xl p-2 shadow-card border border-border">
@@ -329,6 +378,7 @@ const Dashboard = () => {
           </div>
         </Tabs>
       </main>
+      </div>
 
       {/* Mobile Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-lg" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
@@ -357,25 +407,32 @@ const Dashboard = () => {
                 <span className="text-[10px] font-medium">More</span>
               </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[80vh] flex flex-col">
-              <SheetHeader className="shrink-0">
-                <SheetTitle>All Tabs</SheetTitle>
+            <SheetContent side="bottom" className="max-h-[85vh] flex flex-col">
+              <SheetHeader className="shrink-0 pb-2">
+                <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
-              <div className="overflow-y-auto flex-1 mt-4 space-y-1 pb-4">
-                {moreTabItems.map((item) => (
-                  <button
-                    key={item.value}
-                    onClick={() => { setActiveTab(item.value); setMoreOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      activeTab === item.value
-                        ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5 shrink-0" />
-                    <span className="flex-1 font-medium text-sm">{item.label}</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </button>
+              <div className="overflow-y-auto flex-1 pb-4 space-y-4">
+                {moreTabGroups.map((group) => (
+                  <div key={group.label}>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 mb-1">{group.label}</p>
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => (
+                        <button
+                          key={item.value}
+                          onClick={() => { setActiveTab(item.value); setMoreOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors ${
+                            activeTab === item.value
+                              ? "bg-primary/10 text-primary"
+                              : "text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span className="flex-1 font-medium text-sm">{item.label}</span>
+                          {activeTab === item.value && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </SheetContent>
