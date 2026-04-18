@@ -117,14 +117,8 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Collect all external_ids that came from C2 before deleting
-      const c2Workouts = ergWorkouts.filter(w => w.external_id);
-      if (c2Workouts.length > 0) {
-        await supabase.from("deleted_c2_workouts").upsert(
-          c2Workouts.map(w => ({ user_id: user.id, external_id: w.external_id })),
-          { onConflict: "user_id,external_id" }
-        );
-      }
+      // Clear any previously-suppressed IDs so the next sync can re-import everything
+      await supabase.from("deleted_c2_workouts").delete().eq("user_id", user.id);
 
       // Delete all erg workouts for this user
       await supabase.from("erg_workouts").delete().eq("user_id", user.id);
