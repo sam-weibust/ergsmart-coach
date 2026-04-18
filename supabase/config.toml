@@ -62,3 +62,27 @@ verify_jwt = false
 
 [functions.daily-c2-sync]
 verify_jwt = false
+
+[functions.generate-weekly-challenge]
+verify_jwt = false
+
+[functions.compare-athletes]
+verify_jwt = false
+
+[functions.analyze-seat-race]
+verify_jwt = false
+
+[functions.optimize-race-lineup]
+verify_jwt = false
+
+[functions.suggest-boat-lineup]
+verify_jwt = false
+
+[functions.analyze-load-management]
+verify_jwt = false
+
+[functions.generate-team-training-plan]
+verify_jwt = false
+
+[functions.analyze-recruiting-gaps]
+verify_jwt = false

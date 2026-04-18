@@ -182,7 +182,7 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 16000,
           stream: false,
 

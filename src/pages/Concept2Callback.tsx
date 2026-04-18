@@ -35,11 +35,22 @@ export default function Concept2Callback() {
         if (data.error) {
           setStatus("error");
           setErrorMsg(data.error);
+          if (window.opener) {
+            window.opener.postMessage({ type: "c2_auth_error", error: data.error }, "*");
+            setTimeout(() => window.close(), 2000);
+          }
           return;
         }
 
         setImported(data.imported ?? 0);
         setStatus("success");
+
+        // If opened as a popup from DeviceSection, signal the opener and close
+        if (window.opener) {
+          window.opener.postMessage({ type: "c2_auth_success", imported: data.imported ?? 0 }, "*");
+          setTimeout(() => window.close(), 1500);
+          return;
+        }
 
         // Redirect to profile with success param after 3 seconds
         const { data: profile } = await supabase

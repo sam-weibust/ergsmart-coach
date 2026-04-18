@@ -131,11 +131,15 @@ serve(async (req) => {
       }
     }
 
-    // Update last_concept2_sync
-    await supabase.from("athlete_profiles").upsert(
-      { user_id, last_concept2_sync: new Date().toISOString() },
-      { onConflict: "user_id" }
-    );
+    // Update last_concept2_sync and last_sync_at on token
+    const nowIso = new Date().toISOString();
+    await Promise.all([
+      supabase.from("athlete_profiles").upsert(
+        { user_id, last_concept2_sync: nowIso },
+        { onConflict: "user_id" }
+      ),
+      supabase.from("concept2_tokens").update({ last_sync_at: nowIso }).eq("user_id", user_id),
+    ]);
 
     return new Response(JSON.stringify({ success: true, imported, total: allWorkouts.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
