@@ -90,12 +90,13 @@ serve(async (req) => {
     }
 
     // ── Step 1: Load user's manually-deleted external_ids ────────────────────
-    const { data: deletedRows } = await supabase
+    const { data: deletedRows, error: deletedErr } = await supabase
       .from("deleted_c2_workouts")
       .select("external_id")
       .eq("user_id", user_id);
+    if (deletedErr) console.error("[sync-concept2] deleted_c2_workouts query error:", JSON.stringify(deletedErr));
     const deletedSet = new Set((deletedRows ?? []).map((r: any) => r.external_id));
-    console.log(`[sync-concept2] ${deletedSet.size} workouts in manual-delete list`);
+    console.log(`[sync-concept2] deleted_c2_workouts: ${deletedSet.size} entries, error=${deletedErr?.message ?? "none"}`);
 
     // ── Step 2: Fetch full paginated list from Concept2 ───────────────────────
     let allWorkouts: any[] = [];
@@ -133,49 +134,47 @@ serve(async (req) => {
 
     // Filter out manually-deleted workouts before import
     const workoutsToImport = allWorkouts.filter((w: any) => !deletedSet.has(`c2_${w.id}`));
-    console.log(`[sync-concept2] ${workoutsToImport.length} workouts to import (${allWorkouts.length - workoutsToImport.length} skipped — manually deleted)`);
+    const skippedDeleted = allWorkouts.length - workoutsToImport.length;
+    console.log(`[sync-concept2] Filter: total=${allWorkouts.length} toImport=${workoutsToImport.length} skippedDeleted=${skippedDeleted}`);
 
     // ── Step 3: Upsert basic data ─────────────────────────────────────────────
+    // Keep only core columns on the basic upsert — new detail columns are populated
+    // in Step 5 (detail fetch) to avoid type-mismatch errors from list-endpoint nulls.
     const basicRows = workoutsToImport.map((w: any) => ({
       user_id,
       external_id: `c2_${w.id}`,
       workout_date: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
       workout_type: w.workout_type ?? w.type ?? "unknown",
-      distance: w.distance ?? null,
-      duration: w.time != null ? decisecondsToPgInterval(w.time) : null,
-      avg_split: w.pace != null ? decisecondsToPgInterval(w.pace) : null,
-      // Map from actual C2 field names
-      avg_heart_rate: w.heart_rate?.average ?? null,
-      calories: w.calories_total ?? w.cal_total ?? null,
-      calories_total: w.calories_total ?? w.cal_total ?? null,
+      distance: w.distance != null ? Math.round(Number(w.distance)) : null,
+      duration: w.time != null ? decisecondsToPgInterval(Number(w.time)) : null,
+      avg_split: w.pace != null ? decisecondsToPgInterval(Number(w.pace)) : null,
+      avg_heart_rate: w.heart_rate?.average != null ? Math.round(Number(w.heart_rate.average)) : null,
+      calories: w.calories_total != null ? Math.round(Number(w.calories_total)) : null,
       notes: w.comments || null,
-      time_formatted: w.time_formatted ?? null,
-      stroke_rate_average: w.stroke_rate ?? null,
-      stroke_rate: w.stroke_rate ?? null,
-      stroke_count: w.stroke_count ?? null,
-      heart_rate_average: w.heart_rate?.average ?? null,
-      heart_rate_min: w.heart_rate?.min ?? null,
-      heart_rate_max: w.heart_rate?.max ?? null,
-      max_heart_rate: w.heart_rate?.max ?? null,
-      min_heart_rate: w.heart_rate?.min ?? null,
-      drag_factor: w.drag_factor ?? null,
-      rest_distance: w.rest_distance ?? null,
-      rest_time_seconds: w.rest_time != null ? w.rest_time / 10 : null,
     }));
 
+    if (basicRows.length > 0) {
+      console.log(`[sync-concept2] First basicRow sample:`, JSON.stringify(basicRows[0]));
+    }
+
     let imported = 0;
+    let upsertErrorCount = 0;
     for (let i = 0; i < basicRows.length; i += 50) {
       const batch = basicRows.slice(i, i + 50);
-      const { data: upserted, error: upsertErr } = await supabase
+      const { error: upsertErr } = await supabase
         .from("erg_workouts")
-        .upsert(batch, { onConflict: "user_id,external_id", ignoreDuplicates: false })
-        .select("id");
+        .upsert(batch, { onConflict: "user_id,external_id", ignoreDuplicates: false });
       if (upsertErr) {
-        console.error(`[sync-concept2] Upsert error batch ${i}:`, JSON.stringify(upsertErr));
+        console.error(`[sync-concept2] Upsert error batch i=${i}:`, JSON.stringify(upsertErr));
+        upsertErrorCount++;
       } else {
-        imported += upserted?.length ?? batch.length;
+        // Count all rows in the batch — upsert may INSERT or UPDATE, Supabase
+        // only returns inserted rows from .select(), so count batch size directly.
+        imported += batch.length;
+        console.log(`[sync-concept2] Upsert batch i=${i} OK — ${batch.length} rows`);
       }
     }
+    console.log(`[sync-concept2] Upsert complete: imported=${imported} errorBatches=${upsertErrorCount}`);
 
     // ── Step 4: Deletion sync — remove workouts deleted from C2 logbook ───────
     let deleted = 0;
