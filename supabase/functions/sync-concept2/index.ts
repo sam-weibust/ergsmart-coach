@@ -153,20 +153,21 @@ serve(async (req) => {
     const externalIds = basicRows.map(r => r.external_id);
     const { data: existingRows } = await supabase
       .from("erg_workouts")
-      .select("id, external_id, stroke_rate")
+      .select("id, external_id, detail_fetched_at")
       .eq("user_id", user_id)
       .in("external_id", externalIds);
 
-    // Only fetch detail for workouts where stroke_rate is still null (never detailed)
-    const needsDetail = (existingRows ?? []).filter(r => r.stroke_rate == null);
+    // Only fetch detail for workouts where detail_fetched_at is null (never detailed)
+    const needsDetail = (existingRows ?? []).filter(r => r.detail_fetched_at == null);
     const c2IdToDbId = new Map((existingRows ?? []).map(r => [r.external_id, r.id]));
 
-    console.log(`[sync-concept2] ${needsDetail.length} workouts need detail fetch`);
+    console.log(`[sync-concept2] ${needsDetail.length} of ${existingRows?.length ?? 0} workouts need detail fetch`);
 
     // ── Step 4: Fetch full detail in batches of 10 ────────────────────────────
     const DETAIL_BATCH = 10;
     let detailFetched = 0;
     let detailErrors = 0;
+    let firstDetailLogged = false;
 
     for (let i = 0; i < needsDetail.length; i += DETAIL_BATCH) {
       const batch = needsDetail.slice(i, i + DETAIL_BATCH);
@@ -186,54 +187,97 @@ serve(async (req) => {
           return;
         }
 
-        const detailJson = await detailRes.json();
-        const d = detailJson.data ?? detailJson;
+        const rawDetail = await detailRes.text();
 
-        // Update erg_workouts with detailed fields
-        const { error: updateErr } = await supabase.from("erg_workouts").update({
-          stroke_rate: d.avg_stroke_rate ?? null,
-          max_heart_rate: d.max_heart_rate ?? null,
-          min_heart_rate: d.min_heart_rate ?? null,
-          drag_factor: d.avg_drag_factor ?? null,
-          cal_hour: d.cal_hour ?? null,
-          work_per_stroke: d.work_per_stroke ?? null,
-          avg_watts: d.watts ?? null,
-        }).eq("id", dbId);
+        // Log the complete raw JSON of the first detail response
+        if (!firstDetailLogged) {
+          firstDetailLogged = true;
+          console.log(`[sync-concept2] FIRST DETAIL RAW JSON (c2_id=${c2Id}):`, rawDetail);
+        }
 
-        if (updateErr) {
-          console.error(`[sync-concept2] Detail update error for ${dbId}:`, updateErr);
+        let detailJson: any;
+        try { detailJson = JSON.parse(rawDetail); }
+        catch (e) {
+          console.error(`[sync-concept2] Detail JSON parse error for c2_id=${c2Id}:`, e);
           detailErrors++;
           return;
         }
 
-        // Insert splits / intervals
+        // Concept2 wraps single-result responses in { data: { ... } }
+        const d = detailJson.data ?? detailJson;
+
+        console.log(`[sync-concept2] Detail top-level keys for c2_id=${c2Id}: ${Object.keys(d).join(", ")}`);
+        console.log(`[sync-concept2] splits field: ${JSON.stringify(d.splits ?? d.intervals ?? "NOT FOUND").substring(0, 500)}`);
+
+        // Derive best split from splits array (lowest pace value)
         const splits: any[] = d.splits ?? [];
+        let bestSplitDeciseconds: number | null = null;
+        for (const s of splits) {
+          const pace = s.pace ?? s.split ?? null;
+          if (pace != null && (bestSplitDeciseconds == null || pace < bestSplitDeciseconds)) {
+            bestSplitDeciseconds = pace;
+          }
+        }
+
+        // Build the detail update object and log it
+        const detailUpdate: Record<string, any> = {
+          stroke_rate: d.avg_stroke_rate ?? d.stroke_rate ?? null,
+          max_heart_rate: d.max_heart_rate ?? null,
+          min_heart_rate: d.min_heart_rate ?? null,
+          drag_factor: d.avg_drag_factor ?? d.drag_factor ?? null,
+          cal_hour: d.cal_hour ?? d.calories_per_hour ?? null,
+          work_per_stroke: d.work_per_stroke ?? null,
+          avg_watts: d.watts ?? d.avg_watts ?? null,
+          split_best: bestSplitDeciseconds != null ? decisecondsToPgInterval(bestSplitDeciseconds) : null,
+          intervals: splits.length > 0 ? JSON.stringify(splits) : null,
+          detail_fetched_at: new Date().toISOString(),
+        };
+
+        console.log(`[sync-concept2] MAPPED DETAIL for c2_id=${c2Id}:`, JSON.stringify(detailUpdate));
+
+        const { error: updateErr } = await supabase.from("erg_workouts")
+          .update(detailUpdate)
+          .eq("id", dbId);
+
+        if (updateErr) {
+          console.error(`[sync-concept2] Detail update error for ${dbId}:`, JSON.stringify(updateErr));
+          detailErrors++;
+          return;
+        }
+
+        // Insert splits into erg_workout_splits
         if (splits.length > 0) {
           const splitRows = splits.map((s: any, idx: number) => ({
             workout_id: dbId,
             split_number: idx + 1,
             distance: s.distance ?? null,
             time_seconds: s.time != null ? s.time / 10 : null,
-            pace_deciseconds: s.pace ?? null,
+            pace_deciseconds: s.pace ?? s.split ?? null,
             stroke_rate: s.stroke_rate ?? null,
             avg_stroke_rate: s.avg_stroke_rate ?? null,
             calories: s.calories ?? null,
-            cal_per_hour: s.cal_per_hour ?? null,
-            heart_rate_avg: s.heart_rate?.average ?? null,
-            heart_rate_min: s.heart_rate?.min ?? null,
-            heart_rate_max: s.heart_rate?.max ?? null,
-            drag_factor: s.avg_drag_factor ?? null,
+            cal_per_hour: s.cal_per_hour ?? s.calories_per_hour ?? null,
+            heart_rate_avg: s.heart_rate?.average ?? s.avg_heart_rate ?? null,
+            heart_rate_min: s.heart_rate?.min ?? s.min_heart_rate ?? null,
+            heart_rate_max: s.heart_rate?.max ?? s.max_heart_rate ?? null,
+            drag_factor: s.avg_drag_factor ?? s.drag_factor ?? null,
             rest_time_seconds: s.rest_time != null ? s.rest_time / 10 : null,
             finish: s.finish ?? false,
           }));
+
+          console.log(`[sync-concept2] Inserting ${splitRows.length} splits for workout ${dbId}. First split:`, JSON.stringify(splitRows[0]));
 
           const { error: splitsErr } = await supabase
             .from("erg_workout_splits")
             .upsert(splitRows, { onConflict: "workout_id,split_number", ignoreDuplicates: false });
 
           if (splitsErr) {
-            console.error(`[sync-concept2] Splits upsert error for workout ${dbId}:`, splitsErr);
+            console.error(`[sync-concept2] Splits upsert error for workout ${dbId}:`, JSON.stringify(splitsErr));
+          } else {
+            console.log(`[sync-concept2] Splits saved OK for workout ${dbId}`);
           }
+        } else {
+          console.log(`[sync-concept2] No splits array found for c2_id=${c2Id}. Keys present: ${Object.keys(d).join(", ")}`);
         }
 
         detailFetched++;
