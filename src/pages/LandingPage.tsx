@@ -122,48 +122,6 @@ const LandingPage = () => {
           }}>For coaches</button>
         </div>
 
-        {/* Animated rowers illustration */}
-        <div style={{ width: "100%", maxWidth: "540px", marginBottom: "48px" }}>
-          <svg viewBox="0 0 540 100" style={{ width: "100%", overflow: "visible" }} aria-hidden="true">
-            {/* Water */}
-            <path d="M0 86 Q135 82 270 86 Q405 90 540 86" stroke="rgba(45,107,228,0.5)" strokeWidth="1.5" fill="none"/>
-            <path d="M0 90 Q135 87 270 90 Q405 93 540 90" stroke="rgba(45,107,228,0.2)" strokeWidth="1" fill="none"/>
-            {/* Wake ripples */}
-            <ellipse cx="80" cy="88" rx="18" ry="3" stroke="rgba(255,255,255,0.1)" strokeWidth="1" fill="none"/>
-            <ellipse cx="460" cy="88" rx="12" ry="2" stroke="rgba(255,255,255,0.1)" strokeWidth="1" fill="none"/>
-            {/* Hull — racing shell shape */}
-            <path d="M25 74 C80 80 200 82 270 82 C340 82 460 80 515 74 L510 70 C460 74 340 76 270 76 C200 76 80 74 25 70 Z"
-              fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1.2"/>
-            {/* Rigger lines */}
-            {[110, 200, 295, 385].map((x, i) => (
-              <line key={`rig-${i}`} x1={x} y1="74" x2={x - 28} y2="64" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
-            ))}
-            {/* 4 rowers */}
-            {[110, 200, 295, 385].map((x, i) => (
-              <g key={`rower-${i}`} style={{
-                transformOrigin: `${x}px 74px`,
-                animation: "row-stroke 1.55s cubic-bezier(0.4,0,0.2,1) infinite",
-                animationDelay: `${i * -0.3}s`
-              } as React.CSSProperties}>
-                {/* Torso */}
-                <line x1={x} y1="74" x2={x} y2="52" stroke="rgba(255,255,255,0.9)" strokeWidth="3" strokeLinecap="round"/>
-                {/* Head */}
-                <circle cx={x} cy="46" r="6" fill="rgba(255,255,255,0.9)"/>
-                {/* Arms */}
-                <line x1={x} y1="60" x2={x + 24} y2="65" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" strokeLinecap="round"/>
-                {/* Oar handle to blade */}
-                <line x1={x + 24} y1="65" x2={x + 48} y2="80" stroke="rgba(45,107,228,0.85)" strokeWidth="2" strokeLinecap="round"/>
-                {/* Oar blade */}
-                <ellipse cx={x + 50} cy="82" rx="5" ry="3" fill="rgba(45,107,228,0.7)" transform={`rotate(-20,${x + 50},82)`}/>
-              </g>
-            ))}
-            {/* Coxswain */}
-            <circle cx="490" cy="68" r="5.5" fill="rgba(255,255,255,0.65)"/>
-            <line x1="490" y1="63" x2="490" y2="50" stroke="rgba(255,255,255,0.65)" strokeWidth="2.5" strokeLinecap="round"/>
-            <circle cx="490" cy="45" r="5" fill="rgba(255,255,255,0.65)"/>
-          </svg>
-        </div>
-
         <div style={{
           display: "flex", gap: "0", flexWrap: "wrap", justifyContent: "center",
           border: "1px solid rgba(255,255,255,0.15)", borderRadius: "12px",
