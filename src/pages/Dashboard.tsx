@@ -204,7 +204,7 @@ const Dashboard = () => {
               src={crewsyncLogo} 
               alt="CrewSync" 
               className="h-10 w-10 rounded-xl shadow-sm border border-border hover:scale-105 transition-transform cursor-pointer" 
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
             />
             <span className="font-bold text-lg hidden sm:inline text-gradient">
               CrewSync

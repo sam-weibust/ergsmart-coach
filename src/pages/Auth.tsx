@@ -35,7 +35,7 @@ const Auth = () => {
       if (error) throw error;
 
       toast.success("Account created successfully! Redirecting...");
-      navigate("/");
+      navigate("/dashboard");
     } catch (error: any) {
       toast.error(error.message || "Failed to create account");
     } finally {
@@ -56,7 +56,7 @@ const Auth = () => {
       if (error) throw error;
 
       toast.success("Signed in successfully!");
-      navigate("/");
+      navigate("/dashboard");
     } catch (error: any) {
       toast.error(error.message || "Failed to sign in");
     } finally {

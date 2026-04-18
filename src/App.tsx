@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import AthleteProfile from "./pages/AthleteProfile";
@@ -20,7 +21,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/athlete/:username" element={<AthleteProfile />} />
             <Route path="/auth/concept2/callback" element={<Concept2Callback />} />
