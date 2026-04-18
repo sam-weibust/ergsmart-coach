@@ -8,13 +8,13 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle,
   Loader2, Zap, Timer, Gauge, RotateCcw, Link, RefreshCw,
-  Scan, Radio, WifiOff,
+  Scan, Radio, WifiOff, AlertTriangle,
 } from "lucide-react";
 import {
   initBle, listDevices, connectToDevice, startStreaming, disconnectDevice,
+  startNotification, isNativePlatform, isWebBluetoothSupported,
   BleDevice, PM5StreamData, parseHRMeasurement, HR_SERVICE, HR_MEASUREMENT,
 } from "@/lib/ble";
-import { BleClient } from "@capacitor-community/bluetooth-le";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -151,11 +151,29 @@ const DeviceSection = () => {
     setFoundDevices([]);
     try {
       await initBle();
-      const devices = await listDevices(5000);
-      setFoundDevices(devices);
-      if (devices.length === 0) toast({ title: "No devices found", description: "Make sure your device is on and in range." });
+      if (!isNativePlatform()) {
+        // Web: requestDevice opens the browser's native picker.
+        // After selection, close our dialog and connect directly.
+        const devices = await listDevices(5000);
+        if (devices.length > 0) {
+          setScannerOpen(false);
+          if (scanTarget === "erg") {
+            await connectErg(devices[0].deviceId, devices[0].name);
+          } else {
+            await connectHR(devices[0].deviceId, devices[0].name);
+          }
+        }
+      } else {
+        const devices = await listDevices(5000);
+        setFoundDevices(devices);
+        if (devices.length === 0) toast({ title: "No devices found", description: "Make sure your device is on and in range." });
+      }
     } catch (e: any) {
-      toast({ title: "Scan failed", description: e.message, variant: "destructive" });
+      // Ignore user-cancelled picker
+      const msg: string = e?.message || "";
+      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("chooser")) {
+        toast({ title: "Scan failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setScanning(false);
     }
@@ -212,7 +230,7 @@ const DeviceSection = () => {
         setHeartRate(null);
         toast({ title: "HR Monitor disconnected" });
       });
-      await BleClient.startNotifications(deviceId, HR_SERVICE, HR_MEASUREMENT, (value) => {
+      await startNotification(deviceId, HR_SERVICE, HR_MEASUREMENT, (value) => {
         const hr = parseHRMeasurement(value);
         if (hr !== null) {
           setHeartRate(hr);
@@ -285,8 +303,23 @@ const DeviceSection = () => {
   const stateLabel = STATE_LABELS[ergData.workoutState ?? 5];
   const isRowing = ergData.workoutState === 2;
 
+  const webBtUnsupported = !isNativePlatform() && !isWebBluetoothSupported();
+
   return (
     <div className="space-y-6">
+
+      {/* Browser compatibility warning */}
+      {webBtUnsupported && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-400">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Bluetooth not supported in this browser</p>
+            <p className="mt-0.5 text-yellow-600 dark:text-yellow-500">
+              Safari and Firefox do not support Web Bluetooth. To connect your PM5 or heart rate monitor, please open this page in <strong>Chrome</strong> or <strong>Edge</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* PM5 Card */}
       <Card>
@@ -311,7 +344,7 @@ const DeviceSection = () => {
             {ergConnected ? (
               <Button variant="outline" size="sm" onClick={disconnectErg}>Disconnect</Button>
             ) : (
-              <Button size="sm" onClick={() => openScanner("erg")} disabled={ergConnecting}>
+              <Button size="sm" onClick={() => openScanner("erg")} disabled={ergConnecting || webBtUnsupported}>
                 {ergConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Scan className="h-4 w-4 mr-2" />Scan for PM5</>}
               </Button>
             )}
@@ -373,7 +406,7 @@ const DeviceSection = () => {
             {hrConnected ? (
               <Button variant="outline" size="sm" onClick={disconnectHR}>Disconnect</Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => openScanner("hr")} disabled={hrConnecting}>
+              <Button size="sm" variant="outline" onClick={() => openScanner("hr")} disabled={hrConnecting || webBtUnsupported}>
                 {hrConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Bluetooth className="h-4 w-4 mr-2" />Connect HR Monitor</>}
               </Button>
             )}

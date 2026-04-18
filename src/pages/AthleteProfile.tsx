@@ -57,6 +57,13 @@ export default function AthleteProfile() {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Concept2 state — must be declared unconditionally before any early returns
+  const [c2Connected, setC2Connected] = useState<boolean | null>(null);
+  const [c2LastSync, setC2LastSync] = useState<string | null>(null);
+  const [c2Syncing, setC2Syncing] = useState(false);
+  const [c2Connecting, setC2Connecting] = useState(false);
+  const [c2ImportedCount, setC2ImportedCount] = useState<number | null>(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
   }, []);
@@ -146,6 +153,21 @@ export default function AthleteProfile() {
     },
   });
 
+  // Sync C2 state when profileData loads — must be before early returns
+  useEffect(() => {
+    if (!profileData || profileData.notPublic || !profileData.ap) return;
+    const ap = profileData.ap;
+    const isOwn = currentUser?.id === profileData.base?.id;
+    if (!isOwn) return;
+    setC2Connected(!!ap.last_concept2_sync);
+    setC2LastSync(ap.last_concept2_sync ?? null);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("c2") === "connected" && params.get("imported")) {
+      setC2Connected(true);
+      setC2ImportedCount(parseInt(params.get("imported")!, 10));
+    }
+  }, [profileData, currentUser]);
+
   // Record view + increment count
   useEffect(() => {
     if (!profileData?.base?.id) return;
@@ -200,29 +222,6 @@ export default function AthleteProfile() {
   const socialLinks = ap.social_links || {};
   const personalFacts = ap.personal_facts || [];
   const isOwnProfile = currentUser?.id === base.id;
-
-  const [c2Connected, setC2Connected] = useState<boolean | null>(null);
-  const [c2LastSync, setC2LastSync] = useState<string | null>(ap.last_concept2_sync ?? null);
-  const [c2Syncing, setC2Syncing] = useState(false);
-  const [c2Connecting, setC2Connecting] = useState(false);
-  const [c2ImportedCount, setC2ImportedCount] = useState<number | null>(null);
-
-  // Check from URL if just connected
-  const urlParams = new URLSearchParams(window.location.search);
-  const justConnected = urlParams.get("c2") === "connected";
-  const importedFromUrl = urlParams.get("imported");
-
-  useEffect(() => {
-    if (!isOwnProfile || !currentUser) return;
-    // Check Concept2 connection status via athlete_profiles last_concept2_sync
-    // We use last_concept2_sync as a proxy for being connected
-    setC2Connected(!!ap.last_concept2_sync);
-    setC2LastSync(ap.last_concept2_sync ?? null);
-    if (justConnected && importedFromUrl) {
-      setC2Connected(true);
-      setC2ImportedCount(parseInt(importedFromUrl, 10));
-    }
-  }, [isOwnProfile, currentUser, ap.last_concept2_sync]);
 
   const handleC2Connect = async () => {
     if (!currentUser) return;
