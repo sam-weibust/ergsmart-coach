@@ -209,14 +209,23 @@ serve(async (req) => {
 
     // ── Step 5: Fetch full detail for new workouts ────────────────────────────
     const externalIds = basicRows.map(r => r.external_id);
-    const { data: existingRows } = await supabase
+
+    // Build ID map from all rows
+    const { data: allExistingRows } = await supabase
       .from("erg_workouts")
-      .select("id, external_id, detail_fetched_at")
+      .select("id, external_id")
       .eq("user_id", user_id)
       .in("external_id", externalIds);
+    const c2IdToDbId = new Map((allExistingRows ?? []).map((r: any) => [r.external_id, r.id]));
 
-    const needsDetail = (existingRows ?? []).filter((r: any) => r.detail_fetched_at == null);
-    const c2IdToDbId = new Map((existingRows ?? []).map((r: any) => [r.external_id, r.id]));
+    // Only fetch detail for workouts that don't yet have workout_data stored
+    const { data: needsDetailRows } = await supabase
+      .from("erg_workouts")
+      .select("id, external_id")
+      .eq("user_id", user_id)
+      .in("external_id", externalIds)
+      .is("workout_data", null);
+    const needsDetail = needsDetailRows ?? [];
 
     console.log(`[sync-concept2] ${needsDetail.length} of ${existingRows?.length ?? 0} workouts need detail fetch`);
 

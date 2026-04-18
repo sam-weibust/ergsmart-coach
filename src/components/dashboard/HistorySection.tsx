@@ -187,70 +187,116 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     );
   };
 
-  const WorkoutDetailGrid = ({ workout }: { workout: any }) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
-      {workout.time_formatted
-        ? <span>Time: {workout.time_formatted}</span>
-        : workout.duration && <span>Time: {workout.duration}</span>}
-      {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
-      {(workout.heart_rate_average ?? workout.avg_heart_rate) != null && (
-        <span>Avg HR: {workout.heart_rate_average ?? workout.avg_heart_rate} bpm</span>
-      )}
-      {(workout.heart_rate_max ?? workout.max_heart_rate) != null && (
-        <span>Max HR: {workout.heart_rate_max ?? workout.max_heart_rate} bpm</span>
-      )}
-      {(workout.heart_rate_min ?? workout.min_heart_rate) != null && (
-        <span>Min HR: {workout.heart_rate_min ?? workout.min_heart_rate} bpm</span>
-      )}
-      {(workout.calories_total ?? workout.calories) != null && (
-        <span>Calories: {workout.calories_total ?? workout.calories}</span>
-      )}
-      {workout.cal_hour != null && <span>Cal/hr: {Math.round(workout.cal_hour)}</span>}
-      {(workout.stroke_rate_average ?? workout.stroke_rate) != null && (
-        <span>Stroke Rate: {workout.stroke_rate_average ?? workout.stroke_rate} spm</span>
-      )}
-      {workout.stroke_count != null && <span>Strokes: {workout.stroke_count}</span>}
-      {workout.drag_factor != null && <span>Drag: {workout.drag_factor}</span>}
-      {workout.work_per_stroke != null && <span>Work/Stroke: {Math.round(workout.work_per_stroke)} J</span>}
-      {workout.avg_watts != null && <span>Avg Watts: {workout.avg_watts} W</span>}
-    </div>
-  );
+  // Extract a positive-or-null heart rate value (0 means no monitor connected)
+  const safeHR = (val: any): number | null => (val != null && Number(val) > 0 ? Number(val) : null);
 
-  const SplitsTable = ({ workoutId }: { workoutId: string }) => {
-    const splits = splitsByWorkoutId[workoutId];
-    if (!splits) return <p className="text-xs text-muted-foreground">Loading splits...</p>;
-    if (splits.length === 0) return null;
+  // Pull intervals/splits out of real_time_data regardless of nesting
+  const extractIntervals = (rt: any): any[] => {
+    if (!rt) return [];
+    if (Array.isArray(rt)) return rt;
+    if (Array.isArray(rt.data)) return rt.data;
+    if (Array.isArray(rt.intervals)) return rt.intervals;
+    if (Array.isArray(rt.splits)) return rt.splits;
+    return [];
+  };
+
+  // Detailed expandable card body — reads from workout_data JSONB when available,
+  // falls back to individual columns for manually-entered workouts.
+  const WorkoutDetailBody = ({ workout }: { workout: any }) => {
+    const d: any = workout.workout_data;
+    const rt: any = workout.real_time_data;
+    const intervals = extractIntervals(rt);
+
+    // HR from workout_data.heart_rate object (C2 workouts) or individual columns
+    const hrAvg  = d ? safeHR(d.heart_rate?.average) : safeHR(workout.heart_rate_average ?? workout.avg_heart_rate);
+    const hrMax  = d ? safeHR(d.heart_rate?.max)     : safeHR(workout.heart_rate_max ?? workout.max_heart_rate);
+    const hrMin  = d ? safeHR(d.heart_rate?.min)     : safeHR(workout.heart_rate_min ?? workout.min_heart_rate);
+
+    // Scalar metrics — prefer workout_data fields, fall back to columns
+    const calories    = d?.calories_total ?? workout.calories_total ?? workout.calories;
+    const calHour     = d?.cal_hour       ?? workout.cal_hour;
+    const strokeRate  = d?.stroke_rate    ?? workout.stroke_rate_average ?? workout.stroke_rate;
+    const strokeCount = d?.stroke_count   ?? workout.stroke_count;
+    const dragFactor  = d?.drag_factor    ?? workout.drag_factor;
+    const wps         = d?.work_per_stroke ?? workout.work_per_stroke;
+    const avgWatts    = d?.watts           ?? workout.avg_watts;
+    const restTime    = d?.rest_time;     // deciseconds; only show when > 0
+    const restDist    = d?.rest_distance;
 
     return (
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="text-left py-1 pr-3">#</th>
-              <th className="text-right py-1 pr-3">Dist</th>
-              <th className="text-right py-1 pr-3">Time</th>
-              <th className="text-right py-1 pr-3">Pace/500m</th>
-              <th className="text-right py-1 pr-3">SR</th>
-              <th className="text-right py-1 pr-3">HR</th>
-              <th className="text-right py-1 pr-3">Drag</th>
-              <th className="text-right py-1">Rest</th>
-            </tr>
-          </thead>
-          <tbody>
-            {splits.map((s) => (
-              <tr key={s.split_number} className="border-b border-muted/30 hover:bg-muted/20">
-                <td className="py-1 pr-3">{s.split_number}</td>
-                <td className="text-right py-1 pr-3">{s.distance ? `${s.distance}m` : "—"}</td>
-                <td className="text-right py-1 pr-3">{s.time_seconds != null ? formatSplitTime(s.time_seconds) : "—"}</td>
-                <td className="text-right py-1 pr-3">{s.pace_deciseconds != null ? formatPace(s.pace_deciseconds) : "—"}</td>
-                <td className="text-right py-1 pr-3">{s.avg_stroke_rate ?? s.stroke_rate ?? "—"}</td>
-                <td className="text-right py-1 pr-3">{s.heart_rate_avg ?? "—"}</td>
-                <td className="text-right py-1 pr-3">{s.drag_factor ?? "—"}</td>
-                <td className="text-right py-1">{s.rest_time_seconds ? formatSplitTime(s.rest_time_seconds) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-3">
+        {/* Summary metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-sm">
+          {(d?.time_formatted ?? workout.time_formatted)
+            ? <span>Time: {d?.time_formatted ?? workout.time_formatted}</span>
+            : workout.duration && <span>Time: {workout.duration}</span>
+          }
+          {workout.avg_split && <span>Avg Split: {workout.avg_split}</span>}
+          {d?.pace != null && workout.avg_split == null && (
+            <span>Avg Split: {formatPace(d.pace)}</span>
+          )}
+
+          {/* Heart rate — always show the avg row so user knows if it was recorded */}
+          <span className={hrAvg ? "" : "text-muted-foreground"}>
+            HR Avg: {hrAvg ? `${hrAvg} bpm` : "Not recorded"}
+          </span>
+          {hrMax && <span>HR Max: {hrMax} bpm</span>}
+          {hrMin && <span>HR Min: {hrMin} bpm</span>}
+
+          {calories != null && <span>Calories: {calories}</span>}
+          {calHour  != null && <span>Cal/hr: {Math.round(calHour)}</span>}
+          {strokeRate  != null && <span>Stroke Rate: {strokeRate} spm</span>}
+          {strokeCount != null && <span>Strokes: {strokeCount}</span>}
+          {dragFactor  != null && <span>Drag: {dragFactor}</span>}
+          {wps         != null && <span>Work/Stroke: {Math.round(wps)} J</span>}
+          {avgWatts    != null && <span>Avg Watts: {avgWatts} W</span>}
+          {restTime != null && restTime > 0 && <span>Rest: {formatSplitTime(restTime / 10)}</span>}
+          {restDist != null && restDist > 0 && <span>Rest Dist: {restDist}m</span>}
+        </div>
+
+        {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
+
+        {/* Intervals / splits table from real_time_data */}
+        {intervals.length > 0 && (
+          <div className="overflow-x-auto">
+            <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">
+              {intervals.length} {intervals.length === 1 ? "Split" : "Splits / Intervals"}
+            </p>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-left py-1 pr-3">#</th>
+                  <th className="text-right py-1 pr-3">Dist</th>
+                  <th className="text-right py-1 pr-3">Time</th>
+                  <th className="text-right py-1 pr-3">Pace/500m</th>
+                  <th className="text-right py-1 pr-3">SR</th>
+                  <th className="text-right py-1 pr-3">HR</th>
+                  <th className="text-right py-1">Rest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {intervals.map((s: any, idx: number) => {
+                  const splitHR = typeof s.heart_rate === "object"
+                    ? safeHR(s.heart_rate?.average)
+                    : safeHR(s.heart_rate);
+                  const pace    = s.pace ?? s.split ?? null;
+                  const rest    = s.rest_time ?? s.rest ?? null;
+                  return (
+                    <tr key={idx} className="border-b border-muted/30 hover:bg-muted/20">
+                      <td className="py-1 pr-3">{idx + 1}</td>
+                      <td className="text-right py-1 pr-3">{s.distance != null ? `${s.distance}m` : "—"}</td>
+                      <td className="text-right py-1 pr-3">{s.time != null ? formatSplitTime(s.time / 10) : "—"}</td>
+                      <td className="text-right py-1 pr-3">{pace != null ? formatPace(pace) : "—"}</td>
+                      <td className="text-right py-1 pr-3">{s.stroke_rate ?? s.avg_stroke_rate ?? "—"}</td>
+                      <td className="text-right py-1 pr-3">{splitHR ?? "—"}</td>
+                      <td className="text-right py-1">{rest != null && rest > 0 ? formatSplitTime(rest / 10) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };
@@ -290,7 +336,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
 
                   return (
                     <div key={workout.id}>
-                      <Collapsible onOpenChange={(open) => open && fetchSplits(workout.id)}>
+                      <Collapsible>
                         <div className="p-4 border rounded-lg space-y-2">
                           <div className="flex justify-between items-start">
                             <div className="flex items-center gap-2">
@@ -336,9 +382,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                             </div>
                           </div>
                           <CollapsibleContent className="space-y-3">
-                            <WorkoutDetailGrid workout={workout} />
-                            {workout.notes && <p className="text-sm text-muted-foreground italic">{workout.notes}</p>}
-                            <SplitsTable workoutId={workout.id} />
+                            <WorkoutDetailBody workout={workout} />
                             <RacePaceBoat workout={workout} />
                             <WorkoutAnnotations
                               workoutId={workout.id}
