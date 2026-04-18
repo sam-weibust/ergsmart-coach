@@ -6,12 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function formatDuration(deciseconds: number): string {
+// Convert Concept2 deciseconds to HH:MM:SS (valid PostgreSQL interval)
+function decisecondsToPgInterval(deciseconds: number): string {
   const totalSec = Math.floor(deciseconds / 10);
-  const tenths = deciseconds % 10;
-  const mins = Math.floor(totalSec / 60);
+  const hours = Math.floor(totalSec / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
   const secs = totalSec % 60;
-  return `${mins}:${String(secs).padStart(2, "0")}.${tenths}`;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 serve(async (req) => {
@@ -166,8 +167,8 @@ serve(async (req) => {
       workout_date: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
       workout_type: w.workout_type ?? w.type ?? "unknown",
       distance: w.distance ?? null,
-      duration: w.time != null ? formatDuration(w.time) : null,
-      avg_split: w.pace ?? null,
+      duration: w.time != null ? decisecondsToPgInterval(w.time) : null,
+      avg_split: w.pace != null ? decisecondsToPgInterval(w.pace) : null,
       avg_heart_rate: w.avg_heart_rate ?? null,
       calories: w.cal_total ?? null,
       notes: w.comments || null,
