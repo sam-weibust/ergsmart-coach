@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Share2, Copy, Check, X } from "lucide-react";
+import { Download, Share2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import logoSrc from "@/assets/crewsync-logo-icon.jpg";
 
@@ -9,18 +9,22 @@ interface WorkoutStats {
   athleteName: string;
   workoutType: string;
   date: string;
+  // Primary stats
   distance?: string;
   time?: string;
   avgSplit?: string;
   watts?: string | number;
   strokeRate?: string | number;
+  // Secondary stats
+  avgHR?: string | number;
+  maxHR?: string | number;
+  minHR?: string | number;
+  calories?: string | number;
+  calHour?: string | number;
+  dragFactor?: string | number;
+  workPerStroke?: string | number;
+  notes?: string;
   improvement?: string;
-}
-
-interface WorkoutShareCardProps {
-  open: boolean;
-  onClose: () => void;
-  stats: WorkoutStats;
 }
 
 function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -37,183 +41,259 @@ function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   ctx.closePath();
 }
 
+function drawCard(canvas: HTMLCanvasElement, stats: WorkoutStats, onDone: () => void) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const W = 1080;
+  const H = 1080;
+  canvas.width = W;
+  canvas.height = H;
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, "#0a1628");
+  bg.addColorStop(0.5, "#112240");
+  bg.addColorStop(1, "#0a1628");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Glow top-right
+  const glow1 = ctx.createRadialGradient(W * 0.85, H * 0.12, 0, W * 0.85, H * 0.12, 420);
+  glow1.addColorStop(0, "rgba(45,107,228,0.22)");
+  glow1.addColorStop(1, "transparent");
+  ctx.fillStyle = glow1;
+  ctx.fillRect(0, 0, W, H);
+
+  // Glow bottom-left
+  const glow2 = ctx.createRadialGradient(W * 0.12, H * 0.88, 0, W * 0.12, H * 0.88, 350);
+  glow2.addColorStop(0, "rgba(45,107,228,0.14)");
+  glow2.addColorStop(1, "transparent");
+  ctx.fillStyle = glow2;
+  ctx.fillRect(0, 0, W, H);
+
+  // Card border
+  ctx.save();
+  drawRoundedRect(ctx, 48, 48, W - 96, H - 96, 32);
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Top accent line
+  const accent = ctx.createLinearGradient(48, 48, W - 48, 48);
+  accent.addColorStop(0, "#2d6be4");
+  accent.addColorStop(1, "#1e55c4");
+  ctx.save();
+  drawRoundedRect(ctx, 48, 48, W - 96, 5, 2.5);
+  ctx.fillStyle = accent;
+  ctx.fill();
+  ctx.restore();
+
+  const img = new Image();
+  img.onload = () => {
+    // Logo
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(120, 170, 38, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, 82, 132, 76, 76);
+    ctx.restore();
+
+    // Brand
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 48px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("CrewSync", 178, 185);
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "26px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("Rowing Performance", 180, 216);
+
+    // Divider
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(80, 246, W - 160, 1);
+
+    // Athlete name
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${stats.athleteName.length > 18 ? 58 : 68}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.fillText(stats.athleteName, 80, 330);
+
+    // Workout type badge
+    ctx.save();
+    const typeText = stats.workoutType.toUpperCase();
+    ctx.font = "bold 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const typeW = ctx.measureText(typeText).width + 36;
+    drawRoundedRect(ctx, 80, 348, typeW, 42, 21);
+    ctx.fillStyle = "#2d6be4";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(typeText, 98, 375);
+    ctx.restore();
+
+    // Date (right-aligned)
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const dateW = ctx.measureText(stats.date).width;
+    ctx.fillText(stats.date, W - 80 - dateW, 375);
+
+    // Divider
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(80, 406, W - 160, 1);
+
+    // Build stat items — primary and secondary
+    const primary: { label: string; value: string }[] = [];
+    const secondary: { label: string; value: string }[] = [];
+
+    if (stats.distance) primary.push({ label: "Distance", value: stats.distance });
+    if (stats.time) primary.push({ label: "Time", value: stats.time });
+    if (stats.avgSplit) primary.push({ label: "Avg Split /500m", value: stats.avgSplit });
+    if (stats.watts) primary.push({ label: "Watts", value: String(stats.watts) + "W" });
+    if (stats.strokeRate) secondary.push({ label: "Stroke Rate", value: String(stats.strokeRate) + " spm" });
+    if (stats.avgHR) secondary.push({ label: "Avg HR", value: String(stats.avgHR) + " bpm" });
+    if (stats.maxHR) secondary.push({ label: "Max HR", value: String(stats.maxHR) + " bpm" });
+    if (stats.calories) secondary.push({ label: "Calories", value: String(stats.calories) + " cal" });
+    if (stats.calHour) secondary.push({ label: "Cal/Hour", value: String(stats.calHour) });
+    if (stats.dragFactor) secondary.push({ label: "Drag Factor", value: String(stats.dragFactor) });
+    if (stats.workPerStroke) secondary.push({ label: "Work/Stroke", value: String(stats.workPerStroke) + "J" });
+
+    const MARGIN = 80;
+    const GAP = 16;
+    const CONTENT_W = W - MARGIN * 2;
+
+    // PRIMARY stats — larger cards, 2 or 4 across
+    const primCols = primary.length <= 2 ? primary.length : 4;
+    const primCardW = (CONTENT_W - GAP * (primCols - 1)) / primCols;
+    const primCardH = 148;
+    const primStartY = 428;
+
+    primary.forEach((item, i) => {
+      const col = i % primCols;
+      const row = Math.floor(i / primCols);
+      const x = MARGIN + col * (primCardW + GAP);
+      const y = primStartY + row * (primCardH + GAP);
+
+      ctx.save();
+      drawRoundedRect(ctx, x, y, primCardW, primCardH, 14);
+      ctx.fillStyle = "rgba(255,255,255,0.07)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(item.label.toUpperCase(), x + 16, y + 34);
+
+      ctx.fillStyle = "#ffffff";
+      const valFontSize = item.value.length > 7 ? 36 : 44;
+      ctx.font = `bold ${valFontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+      ctx.fillText(item.value, x + 16, y + 102);
+    });
+
+    const primRows = Math.ceil(primary.length / primCols);
+    const secStartY = primStartY + primRows * (primCardH + GAP) + 8;
+
+    // SECONDARY stats — smaller cards, up to 4 across
+    if (secondary.length > 0) {
+      const secCols = Math.min(4, secondary.length);
+      const secCardW = (CONTENT_W - GAP * (secCols - 1)) / secCols;
+      const secCardH = 110;
+
+      // Section label
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.font = "18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText("ADDITIONAL METRICS", MARGIN, secStartY - 6);
+
+      secondary.forEach((item, i) => {
+        const col = i % secCols;
+        const row = Math.floor(i / secCols);
+        const x = MARGIN + col * (secCardW + GAP);
+        const y = secStartY + row * (secCardH + GAP) + 10;
+
+        ctx.save();
+        drawRoundedRect(ctx, x, y, secCardW, secCardH, 12);
+        ctx.fillStyle = "rgba(45,107,228,0.12)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(45,107,228,0.2)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.font = "15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(item.label.toUpperCase(), x + 14, y + 28);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(item.value, x + 14, y + 78);
+      });
+
+      const secRows = Math.ceil(secondary.length / secCols);
+      const afterSec = secStartY + secRows * (secCardH + GAP) + 24;
+
+      // Notes (if short enough)
+      if (stats.notes && stats.notes.length < 80 && afterSec < H - 120) {
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.font = "italic 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        ctx.fillText(`"${stats.notes}"`, MARGIN, afterSec);
+      }
+    } else if (stats.notes && stats.notes.length < 80) {
+      // No secondary — show notes
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.font = "italic 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(`"${stats.notes}"`, MARGIN, secStartY + 16);
+    }
+
+    // Improvement badge (above watermark)
+    if (stats.improvement) {
+      ctx.save();
+      drawRoundedRect(ctx, MARGIN, H - 110, 480, 54, 27);
+      ctx.fillStyle = "rgba(16,185,129,0.2)";
+      ctx.fill();
+      ctx.fillStyle = "#10b981";
+      ctx.font = "bold 26px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText("▲ " + stats.improvement + " vs previous best", MARGIN + 20, H - 76);
+      ctx.restore();
+    }
+
+    // Watermark
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.font = "22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const wm = "crewsync.app";
+    ctx.fillText(wm, W - MARGIN - ctx.measureText(wm).width, H - 62);
+
+    onDone();
+  };
+
+  img.onerror = () => {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 48px sans-serif";
+    ctx.fillText("CrewSync", 80, 185);
+    onDone();
+  };
+  img.src = logoSrc;
+}
+
+// ─── Dialog component ────────────────────────────────────────────────────────
+
+interface WorkoutShareCardProps {
+  open: boolean;
+  onClose: () => void;
+  stats: WorkoutStats;
+}
+
 export function WorkoutShareCard({ open, onClose, stats }: WorkoutShareCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [copied, setCopied] = useState(false);
   const [rendered, setRendered] = useState(false);
 
-  const drawCard = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const W = 1080;
-    const H = 1080;
-    canvas.width = W;
-    canvas.height = H;
-
-    // Background gradient — deep navy
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, "#0a1628");
-    bg.addColorStop(0.5, "#112240");
-    bg.addColorStop(1, "#0a1628");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    // Subtle blue glow top-right
-    const glowGrad = ctx.createRadialGradient(W * 0.85, H * 0.15, 0, W * 0.85, H * 0.15, 400);
-    glowGrad.addColorStop(0, "rgba(45,107,228,0.18)");
-    glowGrad.addColorStop(1, "transparent");
-    ctx.fillStyle = glowGrad;
-    ctx.fillRect(0, 0, W, H);
-
-    // Bottom-left glow
-    const glow2 = ctx.createRadialGradient(W * 0.15, H * 0.85, 0, W * 0.15, H * 0.85, 350);
-    glow2.addColorStop(0, "rgba(45,107,228,0.12)");
-    glow2.addColorStop(1, "transparent");
-    ctx.fillStyle = glow2;
-    ctx.fillRect(0, 0, W, H);
-
-    // White card body
-    ctx.save();
-    drawRoundedRect(ctx, 60, 120, W - 120, H - 180, 32);
-    ctx.fillStyle = "rgba(255,255,255,0.05)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.restore();
-
-    // Top accent bar
-    const accentGrad = ctx.createLinearGradient(60, 120, 60 + W - 120, 120);
-    accentGrad.addColorStop(0, "#2d6be4");
-    accentGrad.addColorStop(1, "#1e55c4");
-    ctx.save();
-    drawRoundedRect(ctx, 60, 120, W - 120, 6, 3);
-    ctx.fillStyle = accentGrad;
-    ctx.fill();
-    ctx.restore();
-
-    // Logo & CrewSync brand — load image
-    const img = new Image();
-    img.onload = () => {
-      // Logo circle
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(140, 220, 45, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(img, 95, 175, 90, 90);
-      ctx.restore();
-
-      // Brand name next to logo
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 52px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("CrewSync", 210, 236);
-
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      ctx.font = "28px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("Rowing Performance", 212, 272);
-
-      // Athlete name
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 72px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(stats.athleteName, 80, 390);
-
-      // Workout type badge
-      ctx.save();
-      const typeText = stats.workoutType.toUpperCase();
-      const typeW = ctx.measureText(typeText).width + 40;
-      drawRoundedRect(ctx, 80, 410, typeW, 48, 24);
-      ctx.fillStyle = "#2d6be4";
-      ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(typeText, 100, 443);
-      ctx.restore();
-
-      // Date
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.font = "26px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(stats.date, 80, 510);
-
-      // Stats grid
-      const statItems = [
-        { label: "Distance", value: stats.distance || "—" },
-        { label: "Time", value: stats.time || "—" },
-        { label: "Avg Split /500m", value: stats.avgSplit || "—" },
-        { label: "Watts", value: stats.watts ? String(stats.watts) + "W" : "—" },
-        { label: "Stroke Rate", value: stats.strokeRate ? String(stats.strokeRate) + " spm" : "—" },
-      ].filter(s => s.value !== "—");
-
-      const cols = Math.min(3, statItems.length);
-      const cardW = (W - 120 - 60) / cols - 20;
-      const cardH = 160;
-      const startX = 80;
-      const startY = 560;
-
-      statItems.forEach((item, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = startX + col * (cardW + 20);
-        const y = startY + row * (cardH + 20);
-
-        ctx.save();
-        drawRoundedRect(ctx, x, y, cardW, cardH, 16);
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.font = "20px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-        ctx.fillText(item.label.toUpperCase(), x + 20, y + 38);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 44px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-        ctx.fillText(item.value, x + 20, y + 110);
-      });
-
-      // Improvement badge
-      if (stats.improvement) {
-        const impRow = Math.ceil(statItems.length / cols);
-        const impY = startY + impRow * (cardH + 20) + 10;
-
-        ctx.save();
-        ctx.fillStyle = "rgba(16,185,129,0.2)";
-        drawRoundedRect(ctx, 80, impY, 400, 64, 32);
-        ctx.fill();
-        ctx.fillStyle = "#10b981";
-        ctx.font = "bold 30px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-        ctx.fillText("▲ " + stats.improvement + " vs previous best", 110, impY + 41);
-        ctx.restore();
-      }
-
-      // Bottom: crewsync.app watermark
-      ctx.fillStyle = "rgba(255,255,255,0.3)";
-      ctx.font = "24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("crewsync.app", W - 60 - ctx.measureText("crewsync.app").width, H - 40);
-
-      setRendered(true);
-    };
-    img.onerror = () => {
-      // Draw without logo
-      ctx.fillStyle = "#2d6be4";
-      ctx.font = "bold 52px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("CrewSync", 80, 240);
-      setRendered(true);
-    };
-    img.src = logoSrc;
+  const render = useCallback(() => {
+    if (canvasRef.current) drawCard(canvasRef.current, stats, () => setRendered(true));
   }, [stats]);
 
   useEffect(() => {
-    if (open) {
-      setRendered(false);
-      setTimeout(drawCard, 50);
-    }
-  }, [open, drawCard]);
+    if (open) { setRendered(false); setTimeout(render, 60); }
+  }, [open, render]);
 
   const handleDownload = () => {
     const canvas = canvasRef.current;
@@ -246,11 +326,7 @@ export function WorkoutShareCard({ open, onClose, stats }: WorkoutShareCardProps
 
         <div className="space-y-4">
           <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10">
-            <canvas
-              ref={canvasRef}
-              className="w-full h-full object-contain"
-              style={{ background: "#0a1628" }}
-            />
+            <canvas ref={canvasRef} className="w-full h-full object-contain" style={{ background: "#0a1628" }} />
             {!rendered && (
               <div className="absolute inset-0 flex items-center justify-center bg-[#0a1628]">
                 <div className="w-8 h-8 border-2 border-[#2d6be4] border-t-transparent rounded-full animate-spin" />
@@ -259,32 +335,22 @@ export function WorkoutShareCard({ open, onClose, stats }: WorkoutShareCardProps
           </div>
 
           <div className="flex gap-3">
-            <Button
-              onClick={handleDownload}
-              disabled={!rendered}
-              className="flex-1 bg-[#2d6be4] hover:bg-[#1e55c4] text-white gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Download Image
+            <Button onClick={handleDownload} disabled={!rendered} className="flex-1 bg-[#2d6be4] hover:bg-[#1e55c4] text-white gap-2">
+              <Download className="h-4 w-4" />Download Image
             </Button>
-            <Button
-              onClick={handleCopyLink}
-              variant="outline"
-              className="flex-1 border-white/20 text-white hover:bg-white/10 gap-2"
-            >
+            <Button onClick={handleCopyLink} variant="outline" className="flex-1 border-white/20 text-white hover:bg-white/10 gap-2">
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copied!" : "Copy Link"}
             </Button>
           </div>
-
-          <p className="text-xs text-white/40 text-center">
-            1080×1080px — optimized for Instagram & Twitter
-          </p>
+          <p className="text-xs text-white/40 text-center">1080×1080px — optimized for Instagram & Twitter</p>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+// ─── Button that wires up workout data ───────────────────────────────────────
 
 interface ShareWorkoutButtonProps {
   workout: any;
@@ -293,46 +359,85 @@ interface ShareWorkoutButtonProps {
   previousBest?: number | null;
 }
 
+// Parse PostgreSQL interval "HH:MM:SS" or "MM:SS" → total seconds
+function parseInterval(v: string | null | undefined): number | null {
+  if (!v) return null;
+  const parts = v.split(":");
+  if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+  if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+  return null;
+}
+
+// Format deciseconds → "H:MM:SS" or "M:SS"
+function fmtDeciSec(ds: number | null | undefined): string | undefined {
+  if (!ds) return undefined;
+  const s = ds / 10;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.round(s % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+// Format total seconds → "H:MM:SS" or "M:SS"
+function fmtSec(s: number | null | undefined): string | undefined {
+  if (!s) return undefined;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.round(s % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+// Format deciseconds split → "M:SS"
+function fmtSplitDeciSec(ds: number | null | undefined): string | undefined {
+  if (!ds) return undefined;
+  const s = ds / 10;
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+// Watts from split deciseconds
+function wattFromDeciSec(ds: number | null | undefined): number | undefined {
+  if (!ds) return undefined;
+  const s = ds / 10;
+  return Math.round(2.80 / Math.pow(s / 500, 3));
+}
+
 export function ShareWorkoutButton({ workout, athleteName, workoutType = "Erg", previousBest }: ShareWorkoutButtonProps) {
   const [open, setOpen] = useState(false);
 
-  const fmtTime = (ds: number | null | undefined) => {
-    if (!ds) return undefined;
-    const s = ds / 10;
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.round(s % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-    return `${m}:${String(sec).padStart(2, "0")}`;
-  };
+  const splitDS = workout.split_for_pace ?? workout.avg_split;
 
-  const fmtSplit = (ds: number | null | undefined) => {
-    if (!ds) return undefined;
-    const s = ds / 10;
-    const m = Math.floor(s / 60);
-    const sec = Math.round(s % 60);
-    return `${m}:${String(sec).padStart(2, "0")}`;
-  };
-
-  const fmtDist = (m: number | null | undefined) => {
-    if (!m) return undefined;
-    return m >= 1000 ? `${(m / 1000).toFixed(1)}k m` : `${m} m`;
-  };
-
-  const wattFromSplit = (ds: number | null | undefined) => {
-    if (!ds) return undefined;
-    const s = ds / 10;
-    return Math.round(2.80 / Math.pow(s / 500, 3));
-  };
+  // Time: prefer total_time_seconds (deciseconds from C2), else parse interval duration
+  const totalTimeSec = workout.total_time_seconds
+    ? workout.total_time_seconds / 10
+    : parseInterval(workout.duration);
 
   const improvement = (() => {
-    if (!previousBest || !workout.total_time_seconds) return undefined;
-    const diff = previousBest - workout.total_time_seconds / 10;
+    if (!previousBest || !totalTimeSec) return undefined;
+    const diff = previousBest - totalTimeSec;
     if (diff <= 0) return undefined;
     const m = Math.floor(diff / 60);
     const s = Math.round(diff % 60);
     return m > 0 ? `${m}m ${s}s faster` : `${s}s faster`;
   })();
+
+  // Strip SR/DF annotations from notes if embedded
+  const rawNotes = workout.notes || "";
+  const cleanNotes = rawNotes.replace(/SR:\s*\d+\s*spm\s*\|?\s*/gi, "").replace(/DF:\s*\d+\s*\|?\s*/gi, "").trim();
+
+  // Parse SR / DF from notes if not in dedicated columns
+  const srMatch = rawNotes.match(/SR:\s*(\d+)/i);
+  const dfMatch = rawNotes.match(/DF:\s*(\d+)/i);
+  const strokeRate = workout.stroke_rate ?? (srMatch ? parseInt(srMatch[1]) : undefined);
+  const dragFactor = workout.drag_factor ?? (dfMatch ? parseInt(dfMatch[1]) : undefined);
+
+  const fmtDist = (m: number | null | undefined) => {
+    if (!m) return undefined;
+    return m >= 1000 ? `${(m / 1000).toFixed(1)}k m` : `${m} m`;
+  };
 
   const stats: WorkoutStats = {
     athleteName,
@@ -340,11 +445,21 @@ export function ShareWorkoutButton({ workout, athleteName, workoutType = "Erg", 
     date: workout.workout_date
       ? new Date(workout.workout_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
       : new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    // Primary
     distance: fmtDist(workout.distance),
-    time: fmtTime(workout.total_time_seconds),
-    avgSplit: fmtSplit(workout.split_for_pace ?? workout.avg_split),
-    watts: wattFromSplit(workout.split_for_pace ?? workout.avg_split),
-    strokeRate: workout.stroke_rate,
+    time: workout.total_time_seconds ? fmtDeciSec(workout.total_time_seconds) : fmtSec(totalTimeSec ?? undefined),
+    avgSplit: fmtSplitDeciSec(splitDS),
+    watts: wattFromDeciSec(splitDS),
+    strokeRate: strokeRate || undefined,
+    // Secondary
+    avgHR: workout.avg_heart_rate || undefined,
+    maxHR: workout.max_heart_rate || undefined,
+    minHR: workout.min_heart_rate || undefined,
+    calories: workout.calories || undefined,
+    calHour: workout.cal_hour || undefined,
+    dragFactor: dragFactor || undefined,
+    workPerStroke: workout.work_per_stroke || undefined,
+    notes: cleanNotes || undefined,
     improvement,
   };
 

@@ -47,6 +47,7 @@ import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
 import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget";
 import { StreakWidget } from "@/components/dashboard/StreakWidget";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
+import DirectorySection from "@/components/dashboard/DirectorySection";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -172,6 +173,7 @@ const Dashboard = () => {
     {
       label: "Community",
       items: [
+        { value: "directory", icon: Globe, label: "Club Directory" },
         { value: "forum", icon: MessagesSquare, label: "Forum" },
         { value: "friends", icon: MessageCircle, label: "Friends" },
         ...(isOnTeam ? [{ value: "teams", icon: UsersRound, label: "Teams" }] : []),
@@ -301,6 +303,9 @@ const Dashboard = () => {
               <TabsTrigger value="forum" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <MessagesSquare className="h-4 w-4" /><span>Forum</span>
               </TabsTrigger>
+              <TabsTrigger value="directory" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
+                <Globe className="h-4 w-4" /><span>Directory</span>
+              </TabsTrigger>
               <TabsTrigger value="devices" className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <Bluetooth className="h-4 w-4" /><span>Devices</span>
               </TabsTrigger>
@@ -380,6 +385,7 @@ const Dashboard = () => {
             {isCoach && <TabsContent value="team-compare" className="mt-0"><AthleteComparisonSection /></TabsContent>}
             {isCoach && <TabsContent value="alumni" className="mt-0"><AlumniNetworkSection /></TabsContent>}
             <TabsContent value="referral" className="mt-0"><ReferralSection profile={profile} /></TabsContent>
+            <TabsContent value="directory" className="mt-0"><DirectorySection /></TabsContent>
           </div>
         </Tabs>
       </main>
