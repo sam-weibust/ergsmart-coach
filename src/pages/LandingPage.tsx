@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import logoIcon from "@/assets/crewsync-logo-icon.jpg";
+import logoFull from "@/assets/crewsync-logo-full.jpg";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -19,13 +21,8 @@ const LandingPage = () => {
         borderBottom: "1px solid rgba(255,255,255,0.08)"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{
-            width: "32px", height: "32px", backgroundColor: "#2d6be4",
-            borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center"
-          }}>
-            <span style={{ color: "#ffffff", fontWeight: 700, fontSize: "16px" }}>C</span>
-          </div>
-          <span style={{ color: "#ffffff", fontWeight: 700, fontSize: "18px" }}>CrewSync</span>
+          <img src={logoIcon} alt="CrewSync" style={{ width: "36px", height: "36px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)" }} />
+          <img src={logoFull} alt="CrewSync" style={{ height: "28px", objectFit: "contain" }} className="nav-logo-full" />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "32px" }} className="nav-links">
           {["Training", "Coaching", "Competition", "Pricing"].map(link => (
@@ -45,9 +42,48 @@ const LandingPage = () => {
 
       {/* HERO */}
       <section style={{
-        backgroundColor: "#0a1628", padding: "96px 24px 80px",
-        textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
+        backgroundColor: "#0a1628", padding: "80px 24px 80px",
+        textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center",
+        position: "relative", overflow: "hidden"
       }}>
+        {/* Background glow effects */}
+        <div style={{
+          position: "absolute", top: "-100px", left: "50%", transform: "translateX(-50%)",
+          width: "600px", height: "400px",
+          background: "radial-gradient(ellipse, rgba(45,107,228,0.18) 0%, transparent 70%)",
+          pointerEvents: "none"
+        }} />
+
+        {/* Logo lockup */}
+        <div style={{ marginBottom: "36px", position: "relative" }}>
+          <div style={{
+            display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "16px"
+          }}>
+            <div style={{ position: "relative" }}>
+              <div style={{
+                position: "absolute", inset: "-6px",
+                background: "radial-gradient(circle, rgba(45,107,228,0.35) 0%, transparent 70%)",
+                borderRadius: "28px"
+              }} />
+              <img
+                src={logoIcon}
+                alt="CrewSync"
+                style={{
+                  width: "80px", height: "80px", borderRadius: "20px",
+                  border: "2px solid rgba(255,255,255,0.25)",
+                  boxShadow: "0 8px 32px rgba(45,107,228,0.4)",
+                  position: "relative"
+                }}
+              />
+            </div>
+            <img
+              src={logoFull}
+              alt="CrewSync"
+              style={{ height: "36px", objectFit: "contain", opacity: 0.95 }}
+            />
+          </div>
+        </div>
+
         <div style={{
           display: "inline-flex", alignItems: "center", gap: "8px",
           backgroundColor: "rgba(45,107,228,0.2)", border: "1px solid rgba(45,107,228,0.4)",
@@ -410,6 +446,9 @@ const LandingPage = () => {
       {/* FINAL CTA */}
       <section style={{ backgroundColor: "#0a1628", padding: "80px 24px", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+          <div style={{ marginBottom: "24px" }}>
+            <img src={logoIcon} alt="CrewSync" style={{ width: "64px", height: "64px", borderRadius: "16px", border: "2px solid rgba(255,255,255,0.2)", boxShadow: "0 4px 24px rgba(45,107,228,0.3)", marginBottom: "16px" }} />
+          </div>
           <h2 style={{ color: "#ffffff", fontSize: "36px", fontWeight: 700, margin: "0 0 16px" }}>
             Start building your training system today.
           </h2>
@@ -455,13 +494,8 @@ const LandingPage = () => {
           flexWrap: "wrap", gap: "16px"
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{
-              width: "28px", height: "28px", backgroundColor: "#2d6be4",
-              borderRadius: "5px", display: "flex", alignItems: "center", justifyContent: "center"
-            }}>
-              <span style={{ color: "#ffffff", fontWeight: 700, fontSize: "14px" }}>C</span>
-            </div>
-            <span style={{ color: "#ffffff", fontWeight: 700, fontSize: "15px" }}>CrewSync</span>
+            <img src={logoIcon} alt="CrewSync" style={{ width: "30px", height: "30px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.2)" }} />
+            <img src={logoFull} alt="CrewSync" style={{ height: "22px", objectFit: "contain" }} />
           </div>
 
           <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
@@ -481,6 +515,7 @@ const LandingPage = () => {
       <style>{`
         @media (max-width: 640px) {
           .nav-links { display: none !important; }
+          .nav-logo-full { display: none !important; }
         }
       `}</style>
     </div>
