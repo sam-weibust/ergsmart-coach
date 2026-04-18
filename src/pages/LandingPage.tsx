@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import logoIcon from "@/assets/crewsync-logo-icon.jpg";
-import logoFull from "@/assets/crewsync-logo-full.jpg";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -22,7 +21,7 @@ const LandingPage = () => {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <img src={logoIcon} alt="CrewSync" style={{ width: "36px", height: "36px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)" }} />
-          <img src={logoFull} alt="CrewSync" style={{ height: "28px", objectFit: "contain" }} className="nav-logo-full" />
+          <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.3px" }}>CrewSync</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "32px" }} className="nav-links">
           {["Training", "Coaching", "Competition", "Pricing"].map(link => (
@@ -56,31 +55,28 @@ const LandingPage = () => {
 
         {/* Logo lockup */}
         <div style={{ marginBottom: "36px", position: "relative" }}>
-          <div style={{
-            display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "16px"
-          }}>
+          <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
             <div style={{ position: "relative" }}>
               <div style={{
-                position: "absolute", inset: "-6px",
-                background: "radial-gradient(circle, rgba(45,107,228,0.35) 0%, transparent 70%)",
-                borderRadius: "28px"
+                position: "absolute", inset: "-8px",
+                background: "radial-gradient(circle, rgba(45,107,228,0.38) 0%, transparent 70%)",
+                borderRadius: "30px"
               }} />
               <img
                 src={logoIcon}
                 alt="CrewSync"
                 style={{
-                  width: "80px", height: "80px", borderRadius: "20px",
+                  width: "84px", height: "84px", borderRadius: "20px",
                   border: "2px solid rgba(255,255,255,0.25)",
-                  boxShadow: "0 8px 32px rgba(45,107,228,0.4)",
+                  boxShadow: "0 8px 32px rgba(45,107,228,0.45)",
                   position: "relative"
                 }}
               />
             </div>
-            <img
-              src={logoFull}
-              alt="CrewSync"
-              style={{ height: "36px", objectFit: "contain", opacity: 0.95 }}
-            />
+            <span style={{
+              color: "#ffffff", fontWeight: 800, fontSize: "32px", letterSpacing: "-0.5px",
+              textShadow: "0 2px 20px rgba(45,107,228,0.4)"
+            }}>CrewSync</span>
           </div>
         </div>
 
@@ -114,7 +110,7 @@ const LandingPage = () => {
           From structured training to live racing — everything your performance needs in one system.
         </p>
 
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", marginBottom: "56px" }}>
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", marginBottom: "48px" }}>
           <button onClick={() => navigate("/auth")} style={{
             backgroundColor: "#2d6be4", color: "#ffffff", border: "none",
             padding: "14px 28px", borderRadius: "8px", fontSize: "16px", fontWeight: 600, cursor: "pointer"
@@ -124,6 +120,48 @@ const LandingPage = () => {
             border: "2px solid rgba(255,255,255,0.6)",
             padding: "14px 28px", borderRadius: "8px", fontSize: "16px", fontWeight: 600, cursor: "pointer"
           }}>For coaches</button>
+        </div>
+
+        {/* Animated rowers illustration */}
+        <div style={{ width: "100%", maxWidth: "540px", marginBottom: "48px" }}>
+          <svg viewBox="0 0 540 100" style={{ width: "100%", overflow: "visible" }} aria-hidden="true">
+            {/* Water */}
+            <path d="M0 86 Q135 82 270 86 Q405 90 540 86" stroke="rgba(45,107,228,0.5)" strokeWidth="1.5" fill="none"/>
+            <path d="M0 90 Q135 87 270 90 Q405 93 540 90" stroke="rgba(45,107,228,0.2)" strokeWidth="1" fill="none"/>
+            {/* Wake ripples */}
+            <ellipse cx="80" cy="88" rx="18" ry="3" stroke="rgba(255,255,255,0.1)" strokeWidth="1" fill="none"/>
+            <ellipse cx="460" cy="88" rx="12" ry="2" stroke="rgba(255,255,255,0.1)" strokeWidth="1" fill="none"/>
+            {/* Hull — racing shell shape */}
+            <path d="M25 74 C80 80 200 82 270 82 C340 82 460 80 515 74 L510 70 C460 74 340 76 270 76 C200 76 80 74 25 70 Z"
+              fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1.2"/>
+            {/* Rigger lines */}
+            {[110, 200, 295, 385].map((x, i) => (
+              <line key={`rig-${i}`} x1={x} y1="74" x2={x - 28} y2="64" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+            ))}
+            {/* 4 rowers */}
+            {[110, 200, 295, 385].map((x, i) => (
+              <g key={`rower-${i}`} style={{
+                transformOrigin: `${x}px 74px`,
+                animation: "row-stroke 1.55s cubic-bezier(0.4,0,0.2,1) infinite",
+                animationDelay: `${i * -0.3}s`
+              } as React.CSSProperties}>
+                {/* Torso */}
+                <line x1={x} y1="74" x2={x} y2="52" stroke="rgba(255,255,255,0.9)" strokeWidth="3" strokeLinecap="round"/>
+                {/* Head */}
+                <circle cx={x} cy="46" r="6" fill="rgba(255,255,255,0.9)"/>
+                {/* Arms */}
+                <line x1={x} y1="60" x2={x + 24} y2="65" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" strokeLinecap="round"/>
+                {/* Oar handle to blade */}
+                <line x1={x + 24} y1="65" x2={x + 48} y2="80" stroke="rgba(45,107,228,0.85)" strokeWidth="2" strokeLinecap="round"/>
+                {/* Oar blade */}
+                <ellipse cx={x + 50} cy="82" rx="5" ry="3" fill="rgba(45,107,228,0.7)" transform={`rotate(-20,${x + 50},82)`}/>
+              </g>
+            ))}
+            {/* Coxswain */}
+            <circle cx="490" cy="68" r="5.5" fill="rgba(255,255,255,0.65)"/>
+            <line x1="490" y1="63" x2="490" y2="50" stroke="rgba(255,255,255,0.65)" strokeWidth="2.5" strokeLinecap="round"/>
+            <circle cx="490" cy="45" r="5" fill="rgba(255,255,255,0.65)"/>
+          </svg>
         </div>
 
         <div style={{
@@ -246,7 +284,7 @@ const LandingPage = () => {
                 bullets: ["Recovery scoring and training load monitoring", "Performance readiness score", "Daily check-in system"]
               },
               {
-                num: "6", title: "Live systems",
+                num: "6", title: "Live systems", isLive: true,
                 desc: "Real-time visibility during every session.",
                 bullets: ["Real-time erg tracking and heart rate integration", "Live split visualization", "Race mode H2H (beta)"]
               },
@@ -255,12 +293,32 @@ const LandingPage = () => {
                 backgroundColor: "#ffffff", border: "1px solid #e2e8f0",
                 borderRadius: "12px", padding: "24px"
               }}>
-                <div style={{
-                  width: "36px", height: "36px", backgroundColor: "#0a1628",
-                  borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
-                  marginBottom: "16px"
-                }}>
-                  <span style={{ color: "#2d6be4", fontWeight: 700, fontSize: "15px" }}>{card.num}</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                  <div style={{
+                    width: "36px", height: "36px", backgroundColor: "#0a1628",
+                    borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ color: "#2d6be4", fontWeight: 700, fontSize: "15px" }}>{card.num}</span>
+                  </div>
+                  {(card as any).isLive && (
+                    <div style={{ position: "relative", width: "28px", height: "28px" }}>
+                      {/* Pulse rings */}
+                      <div className="wifi-ring wifi-ring-1" style={{
+                        position: "absolute", inset: "-6px", borderRadius: "50%",
+                        border: "1.5px solid rgba(45,107,228,0.4)"
+                      }}/>
+                      <div className="wifi-ring wifi-ring-2" style={{
+                        position: "absolute", inset: "-12px", borderRadius: "50%",
+                        border: "1px solid rgba(45,107,228,0.2)"
+                      }}/>
+                      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#2d6be4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                        <circle cx="12" cy="20" r="1" fill="#2d6be4" stroke="none"/>
+                      </svg>
+                    </div>
+                  )}
                 </div>
                 <h3 style={{ color: "#0a1628", fontSize: "16px", fontWeight: 600, margin: "0 0 8px" }}>{card.title}</h3>
                 <p style={{ color: "#4a5568", fontSize: "14px", margin: "0 0 16px", lineHeight: 1.5 }}>{card.desc}</p>
@@ -493,9 +551,9 @@ const LandingPage = () => {
           display: "flex", alignItems: "center", justifyContent: "space-between",
           flexWrap: "wrap", gap: "16px"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
             <img src={logoIcon} alt="CrewSync" style={{ width: "30px", height: "30px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.2)" }} />
-            <img src={logoFull} alt="CrewSync" style={{ height: "22px", objectFit: "contain" }} />
+            <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "15px", letterSpacing: "-0.2px" }}>CrewSync</span>
           </div>
 
           <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
@@ -515,8 +573,23 @@ const LandingPage = () => {
       <style>{`
         @media (max-width: 640px) {
           .nav-links { display: none !important; }
-          .nav-logo-full { display: none !important; }
         }
+
+        /* Rowing stroke animation */
+        @keyframes row-stroke {
+          0%   { transform: rotate(-22deg); }
+          38%  { transform: rotate(17deg); }
+          62%  { transform: rotate(17deg); }
+          100% { transform: rotate(-22deg); }
+        }
+
+        /* WiFi pulse rings */
+        @keyframes wifi-ring-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%       { transform: scale(1.4); opacity: 0; }
+        }
+        .wifi-ring-1 { animation: wifi-ring-pulse 1.8s ease-out infinite; }
+        .wifi-ring-2 { animation: wifi-ring-pulse 1.8s ease-out infinite 0.4s; }
       `}</style>
     </div>
   );
