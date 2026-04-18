@@ -195,26 +195,26 @@ const Dashboard = () => {
   const isMoreTabActive = allMoreItems.some(t => t.value === activeTab);
 
   return (
-    <div className="min-h-screen bg-gradient-subtle flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border bg-card/90 backdrop-blur-xl sticky top-0 z-20 shadow-sm">
+      <header className="border-b border-white/10 bg-[#0a1628] sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img 
-              src={crewsyncLogo} 
-              alt="CrewSync" 
-              className="h-10 w-10 rounded-xl shadow-sm border border-border hover:scale-105 transition-transform cursor-pointer" 
+            <img
+              src={crewsyncLogo}
+              alt="CrewSync"
+              className="h-10 w-10 rounded-xl shadow-sm border border-white/20 hover:scale-105 transition-transform cursor-pointer"
               onClick={() => navigate("/dashboard")}
             />
-            <span className="font-bold text-lg hidden sm:inline text-gradient">
+            <span className="font-bold text-lg hidden sm:inline text-white">
               CrewSync
             </span>
           </div>
-          
+
           <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
             <NotificationBell />
-            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2 hover:bg-destructive/10 hover:text-destructive">
+            <Button onClick={handleLogout} variant="ghost" size="sm" className="gap-2 text-white/80 hover:text-white hover:bg-white/10">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
             </Button>

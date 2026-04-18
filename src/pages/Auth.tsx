@@ -67,10 +67,10 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Left side - Branding panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-hero relative overflow-hidden items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 bg-[#0a1628] relative overflow-hidden items-center justify-center p-12">
         {/* Background decorations */}
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[hsl(280_70%_55%/0.2)] rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[#2d6be4]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#2d6be4]/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
       
         <div className="relative text-center text-white max-w-md animate-fade-in">
           <img 
@@ -96,7 +96,7 @@ const Auth = () => {
       </div>
 
       {/* Right side - Auth forms */}
-      <div className="flex-1 flex flex-col bg-gradient-subtle">
+      <div className="flex-1 flex flex-col bg-[#f8f9fb]">
         {/* Back button */}
         <div className="p-4">
           <Button 
