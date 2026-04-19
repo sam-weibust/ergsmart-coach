@@ -43,7 +43,7 @@ export default function ClubSearch() {
   const { data: clubs = [], isLoading } = useQuery<Club[]>({
     queryKey: ["clubs-search", query, state, clubType],
     queryFn: async () => {
-      let q = supabase.from("clubs").select("*").order("name").limit(100);
+      let q = supabase.from("clubs").select("*").order("name").limit(200);
       if (query) q = q.ilike("name", `%${query}%`);
       if (state && state !== "all") q = q.eq("state", state);
       if (clubType && clubType !== "all") q = q.eq("club_type", clubType);
@@ -54,6 +54,7 @@ export default function ClubSearch() {
 
   const fetchFromRC = useMutation({
     mutationFn: async () => {
+      // Try RC first; if it returns nothing, the DB already has seeded clubs
       const { data, error } = await supabase.functions.invoke("fetch-regattacentral", {
         body: {
           action: "search_clubs",
@@ -68,10 +69,13 @@ export default function ClubSearch() {
     },
     onSuccess: (data) => {
       const count = data?.clubs?.length ?? 0;
-      toast({ title: "Clubs updated", description: `Found ${count} clubs.` });
+      toast({ title: "Clubs refreshed", description: count > 0 ? `Found ${count} clubs from RegattaCentral.` : "Showing saved clubs." });
       queryClient.invalidateQueries({ queryKey: ["clubs-search"] });
     },
-    onError: (e: Error) => toast({ title: "Fetch failed", description: e.message, variant: "destructive" }),
+    onError: () => {
+      toast({ title: "RC unavailable", description: "Showing saved clubs.", variant: "default" });
+      queryClient.invalidateQueries({ queryKey: ["clubs-search"] });
+    },
   });
 
   const handleSearch = () => setQuery(inputValue);
@@ -136,11 +140,11 @@ export default function ClubSearch() {
         <div className="text-center py-16 text-muted-foreground">
           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No clubs found</p>
-          <p className="text-sm mt-1">Try searching RegattaCentral to load club data</p>
-          <Button variant="outline" className="mt-4 gap-2" onClick={() => fetchFromRC.mutate()} disabled={fetchFromRC.isPending}>
-            {fetchFromRC.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Load from RegattaCentral
-          </Button>
+          <p className="text-sm mt-1">
+            {query || (state && state !== "all") || (clubType && clubType !== "all")
+              ? "Try adjusting your filters"
+              : "No clubs match your search"}
+          </p>
         </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
