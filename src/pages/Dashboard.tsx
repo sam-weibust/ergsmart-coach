@@ -160,13 +160,13 @@ const NAV_CONFIG: NavSection[] = [
     label: "Teams",
     icon: Users,
     subs: [
-      { id: "roster", label: "Roster", description: "View and manage team roster", icon: Users },
-      { id: "lineups", label: "Lineups", description: "Build boat lineups", icon: Ship },
-      { id: "seat-racing", label: "Seat Racing", description: "Analyze seat racing results", icon: ArrowLeftRight },
-      { id: "race-optimizer", label: "Race Optimizer", description: "Optimize race lineups", icon: Target },
       { id: "messages", label: "Messages", description: "Team message board", icon: MessageCircle },
-      { id: "leaderboard", label: "Leaderboard", description: "Team erg leaderboard", icon: Medal },
-      { id: "comparison", label: "Athlete Compare", description: "Compare athletes side by side", icon: GitCompare },
+      { id: "lineups", label: "Lineups", description: "View boat lineups", icon: Ship },
+      { id: "roster", label: "Roster", description: "View and manage team roster", icon: Users, coachOnly: true },
+      { id: "seat-racing", label: "Seat Racing", description: "Analyze seat racing results", icon: ArrowLeftRight, coachOnly: true },
+      { id: "race-optimizer", label: "Race Optimizer", description: "Optimize race lineups", icon: Target, coachOnly: true },
+      { id: "leaderboard", label: "Leaderboard", description: "Team erg leaderboard", icon: Medal, coachOnly: true },
+      { id: "comparison", label: "Athlete Compare", description: "Compare athletes side by side", icon: GitCompare, coachOnly: true },
       { id: "plan-gen", label: "Plan Generator", description: "Generate team training plans", icon: Calendar, coachOnly: true },
       { id: "load-mgmt", label: "Load Management", description: "Manage athlete training loads", icon: Activity, coachOnly: true },
       { id: "recruiting-gaps", label: "Recruiting Gaps", description: "Identify recruiting needs", icon: GraduationCap, coachOnly: true },
@@ -396,7 +396,10 @@ const Dashboard = () => {
   });
 
   // Coach = user_type is "coach" OR they have created a team
-  const isCoach = (profile as any)?.user_type === "coach" || (coachTeams && coachTeams.length > 0);
+  // Only evaluate after both queries have settled (not undefined)
+  const isCoach =
+    profile != null &&
+    ((profile as any)?.user_type === "coach" || (Array.isArray(coachTeams) && coachTeams.length > 0));
 
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
