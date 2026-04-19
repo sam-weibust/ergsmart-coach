@@ -102,6 +102,7 @@ import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
 import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
+import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -201,9 +202,21 @@ const NAV_CONFIG: NavSection[] = [
     ],
   },
   {
+    id: "regattas",
+    label: "Regattas",
+    icon: Trophy,
+    subs: [
+      { id: "search", label: "Search", description: "Find regattas and view results", icon: Search },
+      { id: "upcoming", label: "Upcoming", description: "Upcoming regattas in the next 90 days", icon: Calendar },
+      { id: "my", label: "My Regattas", description: "Your claimed results and racing history", icon: Trophy },
+      { id: "clubs", label: "Clubs", description: "Find rowing clubs", icon: Users },
+      { id: "team", label: "Team Regattas", description: "Your team's regatta results", icon: Users2, coachOnly: true },
+    ],
+  },
+  {
     id: "competition",
     label: "Competition",
-    icon: Trophy,
+    icon: Medal,
     subs: [
       { id: "leaderboard", label: "Leaderboard", description: "Global erg rankings", icon: Medal },
       { id: "h2h", label: "Head-to-Head", description: "Race against other athletes", icon: Swords },
@@ -441,6 +454,11 @@ const Dashboard = () => {
     if (activeSection === "coaches-hub") {
       if (!isCoach) return null;
       return <CoachesHub initialTab={activeSub ?? undefined} />;
+    }
+
+    // Regattas — manages its own internal tabs
+    if (activeSection === "regattas") {
+      return <RegattasSection profile={profile} isCoach={isCoach} initialTab={activeSub ?? undefined} />;
     }
 
     // Section with no sub selected → landing grid
