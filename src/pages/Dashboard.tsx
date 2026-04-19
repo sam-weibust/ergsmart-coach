@@ -54,6 +54,10 @@ import {
   Share2,
   Calculator,
   Swords,
+  Kanban,
+  Heart,
+  Search,
+  Mail,
 } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
@@ -97,6 +101,7 @@ import { StreakWidget } from "@/components/dashboard/StreakWidget";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
+import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -113,6 +118,7 @@ interface NavSection {
   label: string;
   icon: React.ElementType;
   subs: SubSection[];
+  coachOnly?: boolean;
 }
 
 const NAV_CONFIG: NavSection[] = [
@@ -164,6 +170,20 @@ const NAV_CONFIG: NavSection[] = [
       { id: "plan-gen", label: "Plan Generator", description: "Generate team training plans", icon: Calendar, coachOnly: true },
       { id: "load-mgmt", label: "Load Management", description: "Manage athlete training loads", icon: Activity, coachOnly: true },
       { id: "recruiting-gaps", label: "Recruiting Gaps", description: "Identify recruiting needs", icon: GraduationCap, coachOnly: true },
+    ],
+  },
+  {
+    id: "coaches-hub",
+    label: "Coaches Hub",
+    icon: Kanban,
+    coachOnly: true,
+    subs: [
+      { id: "discover", label: "Discover", description: "Find and score recruiting prospects", icon: Search },
+      { id: "board", label: "Recruiting Board", description: "Kanban board to track recruits", icon: Kanban },
+      { id: "following", label: "Following", description: "Athletes you are following", icon: Heart },
+      { id: "recommended", label: "Recommended", description: "AI-powered roster gap recommendations", icon: Sparkles },
+      { id: "contacts", label: "Contact History", description: "Log of outreach to recruits", icon: Mail },
+      { id: "program", label: "My Program", description: "Your program profile and recruiting targets", icon: School },
     ],
   },
   {
@@ -364,7 +384,19 @@ const Dashboard = () => {
     navigate("/auth");
   };
 
-  const isCoach = (profile as any)?.user_type === "coach";
+  const { data: coachTeams } = useQuery({
+    queryKey: ["coach-teams"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data } = await supabase.from("teams").select("id").eq("coach_id", user.id);
+      return data || [];
+    },
+    enabled: !loading,
+  });
+
+  // Coach = user_type is "coach" OR they have created a team
+  const isCoach = (profile as any)?.user_type === "coach" || (coachTeams && coachTeams.length > 0);
 
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
@@ -400,6 +432,12 @@ const Dashboard = () => {
     // Dashboard always shows overview
     if (activeSection === "dashboard") {
       return <DashboardOverview navTo={navTo} />;
+    }
+
+    // Coaches Hub — manages its own internal tabs
+    if (activeSection === "coaches-hub") {
+      if (!isCoach) return null;
+      return <CoachesHub initialTab={activeSub ?? undefined} />;
     }
 
     // Section with no sub selected → landing grid
@@ -590,7 +628,7 @@ const Dashboard = () => {
   ];
 
   const moreNavSections = NAV_CONFIG.filter(
-    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id)
+    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && (!s.coachOnly || isCoach)
   );
 
   return (
@@ -628,7 +666,7 @@ const Dashboard = () => {
         {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
         <aside className="hidden md:flex flex-col w-60 shrink-0 bg-[#0a1628] border-r border-white/10 overflow-y-auto">
           <nav className="flex-1 px-3 py-4 space-y-0.5">
-            {NAV_CONFIG.map((section) => (
+            {NAV_CONFIG.filter((s) => !s.coachOnly || isCoach).map((section) => (
               <div key={section.id}>
                 <button
                   onClick={() => navTo(section.id)}
