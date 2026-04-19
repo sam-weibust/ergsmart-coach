@@ -62,7 +62,6 @@ import {
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
-import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import FriendsSection from "@/components/dashboard/FriendsSection";
 import DeviceSection from "@/components/dashboard/DeviceSection";
 import HistorySection from "@/components/dashboard/HistorySection";
@@ -73,11 +72,14 @@ import PerformanceSection from "@/components/dashboard/PerformanceSection";
 import ComparisonSection from "@/components/dashboard/ComparisonSection";
 import AwardsSection from "@/components/dashboard/AwardsSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { NotificationSettings } from "@/components/dashboard/NotificationSettings";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import AskSection from "@/components/dashboard/AskSection";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
+import { DashboardHome } from "@/components/dashboard/DashboardHome";
+import { AccountSection } from "@/components/dashboard/AccountSection";
 import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
 import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
 import ForumSection from "@/components/dashboard/forum/ForumSection";
@@ -96,8 +98,6 @@ import CombineSection from "@/components/dashboard/CombineSection";
 import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
 import AthleteComparisonSection from "@/components/dashboard/AthleteComparisonSection";
 import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
-import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget";
-import { StreakWidget } from "@/components/dashboard/StreakWidget";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
@@ -269,50 +269,14 @@ const NAV_CONFIG: NavSection[] = [
     label: "Settings",
     icon: Settings,
     subs: [
-      { id: "profile", label: "Profile", description: "Edit your account and profile", icon: User },
+      { id: "account", label: "Account", description: "Email, password, and account management", icon: User },
       { id: "notifications", label: "Notifications", description: "Manage notification preferences", icon: Bell },
-      { id: "ask-ai", label: "Ask AI Coach", description: "Chat with your AI coach", icon: MessageSquare },
-      { id: "concept2", label: "Concept2", description: "Concept2 logbook integration", icon: Link2 },
+      { id: "connected-apps", label: "Connected Apps", description: "Concept2, Garmin, and integrations", icon: Link2 },
+      { id: "billing", label: "Billing", description: "Plan and usage", icon: Star },
     ],
   },
 ];
 
-// ─── DASHBOARD OVERVIEW ───────────────────────────────────────────────────────
-
-function DashboardOverview({ navTo }: { navTo: (s: string, sub?: string) => void }) {
-  const quickActions = [
-    { label: "Log Erg", section: "training", sub: "erg", icon: Activity },
-    { label: "View Plan", section: "training", sub: "plan", icon: Calendar },
-    { label: "Analytics", section: "performance", sub: "analytics", icon: BarChart3 },
-    { label: "Live Erg", section: "live", sub: "erg", icon: Gauge },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <StreakWidget />
-        <WeeklyChallengeWidget onNavigate={(tab) => {
-          if (tab === "challenges") navTo("competition", "challenges");
-        }} />
-      </div>
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {quickActions.map((action) => (
-            <button
-              key={action.sub}
-              onClick={() => navTo(action.section, action.sub)}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
-            >
-              <action.icon className="h-5 w-5 text-primary" />
-              {action.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── SECTION LANDING PAGE ─────────────────────────────────────────────────────
 
@@ -463,9 +427,9 @@ const Dashboard = () => {
   const renderContent = () => {
     const section = NAV_CONFIG.find((s) => s.id === activeSection);
 
-    // Dashboard always shows overview
+    // Dashboard always shows home
     if (activeSection === "dashboard") {
-      return <DashboardOverview navTo={navTo} />;
+      return <DashboardHome profile={profile} navTo={navTo} />;
     }
 
     // Calculators — manages its own internal tabs
@@ -647,14 +611,28 @@ const Dashboard = () => {
     // ── Settings ──────────────────────────────────────────────────────────────
     if (activeSection === "settings") {
       switch (activeSub) {
-        case "profile":
-          return <ProfileSection />;
+        case "account":
+          return <AccountSection />;
         case "notifications":
-          return <ProfileSection />;
-        case "ask-ai":
-          return <AskSection />;
-        case "concept2":
+          return <NotificationSettings />;
+        case "connected-apps":
           return <Concept2Section />;
+        case "billing":
+          return (
+            <div className="max-w-2xl space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold">Billing & Plan</h2>
+                <p className="text-sm text-muted-foreground mt-1">Manage your subscription and usage.</p>
+              </div>
+              <div className="p-6 rounded-xl border border-border bg-card space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">Current Plan</p>
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">Free</span>
+                </div>
+                <p className="text-sm text-muted-foreground">Unlimited erg logging, AI chat, training plans, and more.</p>
+              </div>
+            </div>
+          );
         default:
           return null;
       }
