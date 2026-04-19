@@ -90,6 +90,7 @@ YOUR OUTPUT: Respond with ONLY valid JSON, no markdown, no extra text:
 Note: "is_realistic" should be false if the goal is physiologically unlikely or would require more than 2-3 years. Keep milestones to 2-4 checkpoints. Be specific and actionable.`;
 
 serve(async (req) => {
+  console.log("predict-2k received request", req.method, new Date().toISOString());
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -150,7 +151,7 @@ Using all available data, provide a conservative, realistic 2K prediction.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1500,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],

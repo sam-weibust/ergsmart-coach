@@ -86,3 +86,21 @@ verify_jwt = false
 
 [functions.analyze-recruiting-gaps]
 verify_jwt = false
+
+[functions.predict-2k]
+verify_jwt = false
+
+[functions.fetch-regattacentral]
+verify_jwt = false
+
+[functions.score-recruits]
+verify_jwt = false
+
+[functions.recommend-recruits]
+verify_jwt = false
+
+[functions.c2-logbook-auth]
+verify_jwt = false
+
+[functions.c2-logbook-sync]
+verify_jwt = false

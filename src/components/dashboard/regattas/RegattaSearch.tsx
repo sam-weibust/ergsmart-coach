@@ -142,11 +142,23 @@ export default function RegattaSearch({ profile }: { profile: any }) {
         <div className="text-center py-16 text-muted-foreground">
           <Trophy className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No regattas found</p>
-          <p className="text-sm mt-1">
+          <p className="text-sm mt-1 mb-4">
             {query || (state && state !== "all") || (eventType && eventType !== "all")
               ? "Try adjusting your filters"
-              : "Data is loading in the background — check back shortly"}
+              : "Click Refresh Data to load regattas"}
           </p>
+          {!query && state === "all" && eventType === "all" && (
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => fetchFromRC.mutate()}
+              disabled={fetchFromRC.isPending}
+            >
+              {fetchFromRC.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Refresh Data
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
