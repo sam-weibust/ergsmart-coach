@@ -77,6 +77,14 @@ export function AthleteProfilePanel({ athlete, coachId, coachProfile, onClose, o
           related_coach_id: coachId,
           related_program_name: coachProfile?.school_name ?? null,
         }).select();
+        // Non-blocking email notification
+        supabase.functions.invoke("send-notification-email", {
+          body: {
+            type: "coach_viewed_profile",
+            recipientUserId: athlete!.user_id,
+            coachSchool: coachProfile?.school_name ?? undefined,
+          },
+        }).catch((e) => console.error("Email notification error:", e));
       }
     },
     onSuccess: () => {

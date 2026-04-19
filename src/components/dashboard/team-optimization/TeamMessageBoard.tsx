@@ -35,7 +35,7 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-const TeamMessageBoard = ({ teamId, isCoach, profile }: Props) => {
+const TeamMessageBoard = ({ teamId, teamName, isCoach, profile }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newContent, setNewContent] = useState("");
@@ -99,6 +99,18 @@ const TeamMessageBoard = ({ teamId, isCoach, profile }: Props) => {
         parent_id: parentId || null,
       });
       if (error) throw error;
+      // Non-blocking: email team members for top-level posts only
+      if (!parentId) {
+        supabase.functions.invoke("send-notification-email", {
+          body: {
+            type: "team_board_post",
+            teamId,
+            teamName,
+            senderName: profile.full_name || profile.username || "A teammate",
+            postContent: content,
+          },
+        }).catch((e) => console.error("Email notification error:", e));
+      }
     },
     onSuccess: (_, vars) => {
       if (vars.parentId) {

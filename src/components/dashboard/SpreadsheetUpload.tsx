@@ -209,11 +209,22 @@ export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps 
             shared_by: user.id,
             shared_with_team: teamId,
           });
+          // Non-blocking email to team members
+          const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
+          supabase.functions.invoke("send-notification-email", {
+            body: {
+              type: "training_plan_updated",
+              teamId,
+              teamName: team?.name ?? undefined,
+              senderName: user.email ?? "Your coach",
+              planName: newPlan.title,
+            },
+          }).catch(() => {});
         }
-        
+
         return workoutData;
       }
-      
+
       // For PDF/PNG files, use AI to parse the workout structure
       const arrayBuffer = await file.arrayBuffer();
       const base64 = btoa(
@@ -252,8 +263,19 @@ export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps 
           shared_by: user.id,
           shared_with_team: teamId,
         });
+        // Non-blocking email to team members
+        const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
+        supabase.functions.invoke("send-notification-email", {
+          body: {
+            type: "training_plan_updated",
+            teamId,
+            teamName: team?.name ?? undefined,
+            senderName: user.email ?? "Your coach",
+            planName: newPlan.title,
+          },
+        }).catch(() => {});
       }
-      
+
       return workoutData;
     },
     onSuccess: (data) => {

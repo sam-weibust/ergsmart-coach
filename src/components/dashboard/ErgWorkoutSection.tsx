@@ -111,6 +111,14 @@ async function checkAndUpdatePR(userId: string, distanceM: number | null, splitS
     } else {
       toast.success(`🏆 First ${distanceLabel} recorded!`);
     }
+    // Non-blocking email notification
+    supabase.functions.invoke("send-notification-email", {
+      body: {
+        type: "new_pr",
+        recipientUserId: userId,
+        distanceLabel,
+      },
+    }).catch(() => {});
   } catch {
     // PR tracking should not block workout save
   }

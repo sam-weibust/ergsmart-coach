@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, BellOff, Loader2 } from "lucide-react";
+import { EmailNotificationSettings } from "./EmailNotificationSettings";
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -119,6 +120,7 @@ export const NotificationSettings = () => {
   const isEnabled = !!subscription;
 
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -175,5 +177,7 @@ export const NotificationSettings = () => {
         </div>
       </CardContent>
     </Card>
+    <EmailNotificationSettings />
+    </div>
   );
 };
