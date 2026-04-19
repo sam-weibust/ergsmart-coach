@@ -7,7 +7,9 @@ const corsHeaders = {
 };
 
 const RC_BASE = "https://www.regattacentral.com";
-const RC_INDEX = `${RC_BASE}/regatta/index.jsp`;
+const RC_UPCOMING = `${RC_BASE}/regatta/index.jsp?num_days=365`;
+const RC_PAST = `${RC_BASE}/regatta/index.jsp?past=1&num_days=180`;
+const RC_INDEX = RC_UPCOMING;
 
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -19,23 +21,40 @@ const BROWSER_HEADERS = {
 const CACHE_24H_MS = 24 * 60 * 60 * 1000;
 const CACHE_7D_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Hardcoded sample regattas used as fallback when RC is unreachable
+// Hardcoded regattas — past 2025 events (with results) + upcoming 2026 events
 const SAMPLE_REGATTAS = [
-  { external_id: "sample_hotc_2026", name: "Head of the Charles Regatta", event_date: "2026-10-17", end_date: "2026-10-18", location: "Boston, MA", state: "MA", event_type: "head_race", host_club: "Charles River Watershed Association", rc_url: "https://www.regattacentral.com/regatta/?job_id=10001" },
-  { external_id: "sample_dad_vail_2026", name: "Dad Vail Regatta", event_date: "2026-05-08", end_date: "2026-05-09", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Dad Vail Regatta Association", rc_url: "https://www.regattacentral.com/regatta/?job_id=10002" },
-  { external_id: "sample_sdcc_2026", name: "San Diego Crew Classic", event_date: "2026-04-04", end_date: "2026-04-05", location: "San Diego, CA", state: "CA", event_type: "sprint", host_club: "San Diego Crew Classic", rc_url: "https://www.regattacentral.com/regatta/?job_id=10003" },
-  { external_id: "sample_crash_b_2026", name: "CRASH-B Sprints", event_date: "2026-02-22", location: "Boston, MA", state: "MA", event_type: "sprint", host_club: "Charles River All-Star Has-Beens", rc_url: "https://www.regattacentral.com/regatta/?job_id=10004" },
-  { external_id: "sample_hosch_2026", name: "Head of the Schuylkill Regatta", event_date: "2026-10-24", end_date: "2026-10-25", location: "Philadelphia, PA", state: "PA", event_type: "head_race", host_club: "Schuylkill Navy", rc_url: "https://www.regattacentral.com/regatta/?job_id=10005" },
-  { external_id: "sample_princeton_chase_2026", name: "Princeton Chase", event_date: "2026-10-10", location: "Princeton, NJ", state: "NJ", event_type: "head_race", host_club: "Princeton University Rowing", rc_url: "https://www.regattacentral.com/regatta/?job_id=10006" },
-  { external_id: "sample_hot_fish_2026", name: "Head of the Fish", event_date: "2026-10-03", location: "Saratoga Springs, NY", state: "NY", event_type: "head_race", host_club: "Saratoga Rowing Association", rc_url: "https://www.regattacentral.com/regatta/?job_id=10007" },
-  { external_id: "sample_textile_2026", name: "Textile River Regatta", event_date: "2026-09-13", location: "Lowell, MA", state: "MA", event_type: "sprint", host_club: "Lowell Boat Club", rc_url: "https://www.regattacentral.com/regatta/?job_id=10008" },
-  { external_id: "sample_hooch_2026", name: "Hooch Sprints", event_date: "2026-04-18", end_date: "2026-04-19", location: "Atlanta, GA", state: "GA", event_type: "sprint", host_club: "Atlanta Rowing Club", rc_url: "https://www.regattacentral.com/regatta/?job_id=10009" },
-  { external_id: "sample_tail_fox_2026", name: "Tail of the Fox Regatta", event_date: "2026-09-27", location: "Auburn, AL", state: "AL", event_type: "head_race", host_club: "Auburn University Rowing", rc_url: "https://www.regattacentral.com/regatta/?job_id=10010" },
-  { external_id: "sample_hot_rockaway_2026", name: "Head of the Rockaway", event_date: "2026-10-18", location: "Far Rockaway, NY", state: "NY", event_type: "head_race", host_club: "Rockaway Rowing Club", rc_url: "https://www.regattacentral.com/regatta/?job_id=10011" },
-  { external_id: "sample_stotesbury_2026", name: "Stotesbury Cup Regatta", event_date: "2026-05-15", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Schuylkill Navy", rc_url: "https://www.regattacentral.com/regatta/?job_id=10012" },
-  { external_id: "sample_midwest_scholastic_2026", name: "Midwest Scholastic Rowing Championships", event_date: "2026-05-02", location: "Indianapolis, IN", state: "IN", event_type: "sprint", host_club: "Midwest Scholastic Rowing Association", rc_url: "https://www.regattacentral.com/regatta/?job_id=10013" },
-  { external_id: "sample_knecht_2026", name: "Knecht Cup Regatta", event_date: "2026-03-28", end_date: "2026-03-29", location: "Cherry Hill, NJ", state: "NJ", event_type: "sprint", host_club: "Cooper River Rowing", rc_url: "https://www.regattacentral.com/regatta/?job_id=10014" },
-  { external_id: "sample_detroit_sprints_2026", name: "Detroit Sprints", event_date: "2026-06-06", end_date: "2026-06-07", location: "Detroit, MI", state: "MI", event_type: "sprint", host_club: "Detroit Boat Club", rc_url: "https://www.regattacentral.com/regatta/?job_id=10015" },
+  // ── Past 2025 (results available) ──
+  { external_id: "sample_hotc_2025", name: "Head of the Charles Regatta", event_date: "2025-10-18", end_date: "2025-10-19", location: "Boston, MA", state: "MA", event_type: "head_race", host_club: "Charles River Watershed Association", rc_url: null },
+  { external_id: "sample_crash_b_2025", name: "CRASH-B Sprints", event_date: "2025-02-16", location: "Boston, MA", state: "MA", event_type: "sprint", host_club: "Charles River All-Star Has-Beens", rc_url: null },
+  { external_id: "sample_sdcc_2025", name: "San Diego Crew Classic", event_date: "2025-04-05", end_date: "2025-04-06", location: "San Diego, CA", state: "CA", event_type: "sprint", host_club: "San Diego Crew Classic", rc_url: null },
+  { external_id: "sample_hooch_2025", name: "Hooch Sprints", event_date: "2025-04-12", end_date: "2025-04-13", location: "Atlanta, GA", state: "GA", event_type: "sprint", host_club: "Atlanta Rowing Club", rc_url: null },
+  { external_id: "sample_knecht_2025", name: "Knecht Cup Regatta", event_date: "2025-03-29", end_date: "2025-03-30", location: "Cherry Hill, NJ", state: "NJ", event_type: "sprint", host_club: "Cooper River Rowing", rc_url: null },
+  { external_id: "sample_stotesbury_2025", name: "Stotesbury Cup Regatta", event_date: "2025-05-16", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Schuylkill Navy", rc_url: null },
+  { external_id: "sample_dad_vail_2025", name: "Dad Vail Regatta", event_date: "2025-05-09", end_date: "2025-05-10", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Dad Vail Regatta Association", rc_url: null },
+  { external_id: "sample_midwest_sch_2025", name: "Midwest Scholastic Rowing Championships", event_date: "2025-05-03", location: "Indianapolis, IN", state: "IN", event_type: "sprint", host_club: "Midwest Scholastic Rowing Association", rc_url: null },
+  { external_id: "sample_textile_2025", name: "Textile River Regatta", event_date: "2025-09-14", location: "Lowell, MA", state: "MA", event_type: "sprint", host_club: "Lowell Boat Club", rc_url: null },
+  { external_id: "sample_hot_fish_2025", name: "Head of the Fish", event_date: "2025-10-04", location: "Saratoga Springs, NY", state: "NY", event_type: "head_race", host_club: "Saratoga Rowing Association", rc_url: null },
+  { external_id: "sample_hosch_2025", name: "Head of the Schuylkill Regatta", event_date: "2025-10-25", end_date: "2025-10-26", location: "Philadelphia, PA", state: "PA", event_type: "head_race", host_club: "Schuylkill Navy", rc_url: null },
+  { external_id: "sample_princeton_chase_2025", name: "Princeton Chase", event_date: "2025-10-11", location: "Princeton, NJ", state: "NJ", event_type: "head_race", host_club: "Princeton University Rowing", rc_url: null },
+  { external_id: "sample_tail_fox_2025", name: "Tail of the Fox Regatta", event_date: "2025-09-28", location: "Auburn, AL", state: "AL", event_type: "head_race", host_club: "Auburn University Rowing", rc_url: null },
+  { external_id: "sample_hot_rockaway_2025", name: "Head of the Rockaway", event_date: "2025-10-19", location: "Far Rockaway, NY", state: "NY", event_type: "head_race", host_club: "Rockaway Rowing Club", rc_url: null },
+  { external_id: "sample_detroit_sprints_2025", name: "Detroit Sprints", event_date: "2025-06-07", end_date: "2025-06-08", location: "Detroit, MI", state: "MI", event_type: "sprint", host_club: "Detroit Boat Club", rc_url: null },
+  // ── Upcoming 2026 ──
+  { external_id: "sample_crash_b_2026", name: "CRASH-B Sprints", event_date: "2026-02-22", location: "Boston, MA", state: "MA", event_type: "sprint", host_club: "Charles River All-Star Has-Beens", rc_url: null },
+  { external_id: "sample_knecht_2026", name: "Knecht Cup Regatta", event_date: "2026-03-28", end_date: "2026-03-29", location: "Cherry Hill, NJ", state: "NJ", event_type: "sprint", host_club: "Cooper River Rowing", rc_url: null },
+  { external_id: "sample_sdcc_2026", name: "San Diego Crew Classic", event_date: "2026-04-04", end_date: "2026-04-05", location: "San Diego, CA", state: "CA", event_type: "sprint", host_club: "San Diego Crew Classic", rc_url: null },
+  { external_id: "sample_hooch_2026", name: "Hooch Sprints", event_date: "2026-04-18", end_date: "2026-04-19", location: "Atlanta, GA", state: "GA", event_type: "sprint", host_club: "Atlanta Rowing Club", rc_url: null },
+  { external_id: "sample_dad_vail_2026", name: "Dad Vail Regatta", event_date: "2026-05-08", end_date: "2026-05-09", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Dad Vail Regatta Association", rc_url: null },
+  { external_id: "sample_midwest_scholastic_2026", name: "Midwest Scholastic Rowing Championships", event_date: "2026-05-02", location: "Indianapolis, IN", state: "IN", event_type: "sprint", host_club: "Midwest Scholastic Rowing Association", rc_url: null },
+  { external_id: "sample_stotesbury_2026", name: "Stotesbury Cup Regatta", event_date: "2026-05-15", location: "Philadelphia, PA", state: "PA", event_type: "sprint", host_club: "Schuylkill Navy", rc_url: null },
+  { external_id: "sample_detroit_sprints_2026", name: "Detroit Sprints", event_date: "2026-06-06", end_date: "2026-06-07", location: "Detroit, MI", state: "MI", event_type: "sprint", host_club: "Detroit Boat Club", rc_url: null },
+  { external_id: "sample_textile_2026", name: "Textile River Regatta", event_date: "2026-09-13", location: "Lowell, MA", state: "MA", event_type: "sprint", host_club: "Lowell Boat Club", rc_url: null },
+  { external_id: "sample_tail_fox_2026", name: "Tail of the Fox Regatta", event_date: "2026-09-27", location: "Auburn, AL", state: "AL", event_type: "head_race", host_club: "Auburn University Rowing", rc_url: null },
+  { external_id: "sample_hot_fish_2026", name: "Head of the Fish", event_date: "2026-10-03", location: "Saratoga Springs, NY", state: "NY", event_type: "head_race", host_club: "Saratoga Rowing Association", rc_url: null },
+  { external_id: "sample_princeton_chase_2026", name: "Princeton Chase", event_date: "2026-10-10", location: "Princeton, NJ", state: "NJ", event_type: "head_race", host_club: "Princeton University Rowing", rc_url: null },
+  { external_id: "sample_hotc_2026", name: "Head of the Charles Regatta", event_date: "2026-10-17", end_date: "2026-10-18", location: "Boston, MA", state: "MA", event_type: "head_race", host_club: "Charles River Watershed Association", rc_url: null },
+  { external_id: "sample_hot_rockaway_2026", name: "Head of the Rockaway", event_date: "2026-10-18", location: "Far Rockaway, NY", state: "NY", event_type: "head_race", host_club: "Rockaway Rowing Club", rc_url: null },
+  { external_id: "sample_hosch_2026", name: "Head of the Schuylkill Regatta", event_date: "2026-10-24", end_date: "2026-10-25", location: "Philadelphia, PA", state: "PA", event_type: "head_race", host_club: "Schuylkill Navy", rc_url: null },
 ];
 
 function jsonOk(data: unknown) {
@@ -271,72 +290,46 @@ serve(async (req) => {
         return jsonOk({ refreshed: false, reason: "cache_fresh" });
       }
 
-      console.log("fetch-regattacentral: cache stale, fetching from RC...");
-      const { html, error: fetchError } = await safeFetch(RC_INDEX);
-
-      if (!html) {
-        console.error("auto_load: fetch failed:", fetchError);
-
-        // Check if DB is empty — if so, seed with sample regattas
-        const { count } = await supabase
-          .from("regattas")
-          .select("*", { count: "exact", head: true });
-
-        if (!count || count === 0) {
-          console.log("auto_load: DB empty, seeding with sample regattas");
-          const now = new Date().toISOString();
-          for (const r of SAMPLE_REGATTAS) {
-            try {
-              await supabase.from("regattas").upsert(
-                { ...r, cached_at: now },
-                { onConflict: "external_id" },
-              );
-            } catch (e) {
-              console.error("sample upsert error:", e);
-            }
-          }
-          return jsonOk({ refreshed: true, count: SAMPLE_REGATTAS.length, fallback: true, timestamp: now });
-        }
-
-        return jsonOk({ refreshed: false, reason: "fetch_failed", error: fetchError });
-      }
-
-      const parsed = parseRegattas(html);
-      let count = 0;
+      console.log("fetch-regattacentral: fetching from RC (upcoming + past)...");
       const now = new Date().toISOString();
+      let rcCount = 0;
 
-      for (const r of parsed) {
+      // Try upcoming events
+      const { html: upcomingHtml } = await safeFetch(RC_UPCOMING);
+      if (upcomingHtml) {
+        const parsed = parseRegattas(upcomingHtml);
+        console.log(`auto_load: RC upcoming returned ${parsed.length} regattas`);
+        for (const r of parsed) {
+          try {
+            await supabase.from("regattas").upsert({ ...r, cached_at: now }, { onConflict: "external_id" });
+            rcCount++;
+          } catch (e) { console.error("upsert error:", e); }
+        }
+      }
+
+      // Try past events
+      const { html: pastHtml } = await safeFetch(RC_PAST);
+      if (pastHtml) {
+        const parsed = parseRegattas(pastHtml);
+        console.log(`auto_load: RC past returned ${parsed.length} regattas`);
+        for (const r of parsed) {
+          try {
+            await supabase.from("regattas").upsert({ ...r, cached_at: now }, { onConflict: "external_id" });
+            rcCount++;
+          } catch (e) { console.error("upsert error:", e); }
+        }
+      }
+
+      // Always upsert seeds so past-event results stay queryable
+      for (const r of SAMPLE_REGATTAS) {
         try {
-          await supabase.from("regattas").upsert(
-            { ...r, cached_at: now },
-            { onConflict: "external_id" },
-          );
-          count++;
-        } catch (e) {
-          console.error("auto_load upsert error:", e);
-        }
+          await supabase.from("regattas").upsert({ ...r, cached_at: now }, { onConflict: "external_id" });
+        } catch {}
       }
 
-      // If RC returned zero results, seed fallback anyway
-      if (count === 0) {
-        const { count: existing } = await supabase
-          .from("regattas")
-          .select("*", { count: "exact", head: true });
-        if (!existing || existing === 0) {
-          for (const r of SAMPLE_REGATTAS) {
-            try {
-              await supabase.from("regattas").upsert(
-                { ...r, cached_at: now },
-                { onConflict: "external_id" },
-              );
-              count++;
-            } catch {}
-          }
-        }
-      }
-
-      console.log(`auto_load: upserted ${count} regattas`);
-      return jsonOk({ refreshed: count > 0, count, timestamp: now });
+      const totalCount = rcCount + SAMPLE_REGATTAS.length;
+      console.log(`auto_load: done — rc=${rcCount} seeds=${SAMPLE_REGATTAS.length}`);
+      return jsonOk({ refreshed: true, count: totalCount, rc_count: rcCount, timestamp: now });
     } catch (e: any) {
       console.error("auto_load error:", e?.message);
       return jsonOk({ refreshed: false, reason: "error" });
@@ -518,6 +511,46 @@ serve(async (req) => {
     } catch (e: any) {
       console.error("refresh_upcoming error:", e?.message);
       return jsonOk({ refreshed: 0, error: "Internal error" });
+    }
+  }
+
+  // ── Recent Results ──────────────────────────────────────────────────────────
+  if (action === "recent_results") {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Find the most recently completed regatta that has results
+      const { data: recentWithResults } = await supabase
+        .from("regattas")
+        .select("id, name, event_date, location, state, event_type")
+        .lte("event_date", today)
+        .order("event_date", { ascending: false })
+        .limit(10);
+
+      if (!recentWithResults?.length) {
+        return jsonOk({ regatta: null, results: [] });
+      }
+
+      // Find the first one with results
+      for (const regatta of recentWithResults) {
+        const { data: results, count } = await supabase
+          .from("regatta_results")
+          .select("*", { count: "exact" })
+          .eq("regatta_id", regatta.id)
+          .order("event_name")
+          .order("placement")
+          .limit(100);
+
+        if (count && count > 0) {
+          return jsonOk({ regatta, results: results || [] });
+        }
+      }
+
+      // No results found — return most recent regatta with empty results
+      return jsonOk({ regatta: recentWithResults[0], results: [] });
+    } catch (e: any) {
+      console.error("recent_results error:", e?.message);
+      return jsonOk({ regatta: null, results: [] });
     }
   }
 

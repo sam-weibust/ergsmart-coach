@@ -7,6 +7,10 @@ import MyRegattas from "./MyRegattas";
 import UpcomingRegattas from "./UpcomingRegattas";
 import ClubSearch from "./ClubSearch";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Clock, ChevronRight } from "lucide-react";
 
 interface RegattasSectionProps {
   profile: any;
@@ -18,7 +22,7 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
   const [activeTab, setActiveTab] = useState(initialTab ?? "search");
   const queryClient = useQueryClient();
 
-  // Silently auto-refresh cache on mount if data is stale (> 24h)
+  // Auto-refresh cache on mount
   const { data: autoRefresh } = useQuery({
     queryKey: ["regattas-auto-refresh"],
     queryFn: async () => {
@@ -27,7 +31,7 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
       });
       return data ?? null;
     },
-    staleTime: 60 * 60 * 1000, // Re-check at most once per hour per session
+    staleTime: 60 * 60 * 1000,
     retry: false,
     gcTime: 0,
   });
@@ -36,8 +40,22 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
     if (autoRefresh?.refreshed) {
       queryClient.invalidateQueries({ queryKey: ["regattas-search"] });
       queryClient.invalidateQueries({ queryKey: ["upcoming-regattas"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-results"] });
     }
   }, [autoRefresh, queryClient]);
+
+  // Load most recent completed event's results
+  const { data: recentData } = useQuery({
+    queryKey: ["recent-results"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("fetch-regattacentral", {
+        body: { action: "recent_results" },
+      });
+      return data ?? null;
+    },
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
 
   return (
     <div className="space-y-4">
@@ -77,7 +95,10 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
           )}
         </TabsList>
 
-        <TabsContent value="search" className="mt-4">
+        <TabsContent value="search" className="mt-4 space-y-4">
+          {recentData?.regatta && recentData.results?.length > 0 && (
+            <RecentResultsBanner regatta={recentData.regatta} results={recentData.results} />
+          )}
           <RegattaSearch profile={profile} />
         </TabsContent>
 
@@ -100,6 +121,70 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
         )}
       </Tabs>
     </div>
+  );
+}
+
+// ── Recent Results Banner ────────────────────────────────────────────────────
+function RecentResultsBanner({ regatta, results }: { regatta: any; results: any[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const grouped: Record<string, any[]> = {};
+  for (const r of results) {
+    const key = r.event_name || "Unknown Event";
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(r);
+  }
+  const eventNames = Object.keys(grouped);
+  const shownEvents = expanded ? eventNames : eventNames.slice(0, 3);
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" />
+              Latest Results
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {regatta.name}
+              {regatta.event_date && ` · ${new Date(regatta.event_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
+              {regatta.location && ` · ${regatta.location}`}
+            </p>
+          </div>
+          <Badge variant="secondary" className="text-xs shrink-0">{results.length} results</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        {shownEvents.map((eventName) => (
+          <div key={eventName}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{eventName}</p>
+            <div className="space-y-0.5">
+              {grouped[eventName].slice(0, 5).map((r: any) => (
+                <div key={r.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono w-6 shrink-0 text-muted-foreground">#{r.placement}</span>
+                    <span className="font-medium truncate">{r.club || "—"}</span>
+                  </div>
+                  {r.finish_time && (
+                    <span className="font-mono text-muted-foreground flex items-center gap-1 shrink-0">
+                      <Clock className="h-2.5 w-2.5" />
+                      {r.finish_time}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {eventNames.length > 3 && (
+          <Button variant="ghost" size="sm" className="w-full h-7 text-xs gap-1" onClick={() => setExpanded(!expanded)}>
+            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+            {expanded ? "Show less" : `Show ${eventNames.length - 3} more events`}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
