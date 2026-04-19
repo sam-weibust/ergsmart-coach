@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Search, Calendar, MapPin, Users } from "lucide-react";
 import RegattaSearch from "./RegattaSearch";
 import MyRegattas from "./MyRegattas";
 import UpcomingRegattas from "./UpcomingRegattas";
 import ClubSearch from "./ClubSearch";
+import { supabase } from "@/integrations/supabase/client";
 
 interface RegattasSectionProps {
   profile: any;
@@ -14,6 +16,28 @@ interface RegattasSectionProps {
 
 export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectionProps) {
   const [activeTab, setActiveTab] = useState(initialTab ?? "search");
+  const queryClient = useQueryClient();
+
+  // Silently auto-refresh cache on mount if data is stale (> 24h)
+  const { data: autoRefresh } = useQuery({
+    queryKey: ["regattas-auto-refresh"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("fetch-regattacentral", {
+        body: { action: "auto_load" },
+      });
+      return data ?? null;
+    },
+    staleTime: 60 * 60 * 1000, // Re-check at most once per hour per session
+    retry: false,
+    gcTime: 0,
+  });
+
+  useEffect(() => {
+    if (autoRefresh?.refreshed) {
+      queryClient.invalidateQueries({ queryKey: ["regattas-search"] });
+      queryClient.invalidateQueries({ queryKey: ["upcoming-regattas"] });
+    }
+  }, [autoRefresh, queryClient]);
 
   return (
     <div className="space-y-4">

@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 const RC_BASE = "https://www.regattacentral.com";
+const RC_INDEX = `${RC_BASE}/regatta/index.jsp`;
+
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -14,30 +16,24 @@ const BROWSER_HEADERS = {
   "Cache-Control": "no-cache",
 };
 
-// Cache TTL: 7 days in milliseconds
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_24H_MS = 24 * 60 * 60 * 1000;
+const CACHE_7D_MS = 7 * 24 * 60 * 60 * 1000;
 
-function isCacheStale(cachedAt: string | null): boolean {
-  if (!cachedAt) return true;
-  return Date.now() - new Date(cachedAt).getTime() > CACHE_TTL_MS;
+function jsonOk(data: unknown) {
+  return new Response(JSON.stringify(data), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
-// Extract text between two markers in HTML
-function extractBetween(html: string, open: string, close: string): string | null {
-  const start = html.indexOf(open);
-  if (start === -1) return null;
-  const end = html.indexOf(close, start + open.length);
-  if (end === -1) return null;
-  return html.slice(start + open.length, end).trim();
-}
-
-// Strip HTML tags from a string
+// Strip HTML tags
 function stripTags(s: string): string {
+  if (!s) return "";
   return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // Decode common HTML entities
 function decodeHtml(s: string): string {
+  if (!s) return "";
   return s
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -48,39 +44,67 @@ function decodeHtml(s: string): string {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
 }
 
-// Parse regattas from RegattaCentral HTML
-function parseRegattas(html: string): any[] {
-  const regattas: any[] = [];
+// Parse a date string into YYYY-MM-DD
+function parseDateStr(s: string): string | null {
+  if (!s) return null;
+  try {
+    // Handle 2-digit year MM/DD/YY → MM/DD/20YY
+    const short = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+    if (short) s = `${short[1]}/${short[2]}/20${short[3]}`;
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
-  // Look for common patterns: <a href="/regatta/?job_id=XXXX">Name</a>
-  const jobPattern = /href="[^"]*job_id=(\d+)[^"]*"[^>]*>([^<]+)<\/a>/gi;
+// Parse regattas from HTML — works for index.jsp and calendar pages
+function parseRegattas(html: string): any[] {
+  if (!html) return [];
+  const regattas: any[] = [];
   const seen = new Set<string>();
+
+  // Match <a href="...job_id=1234...">Name</a>
+  const jobPattern = /href="([^"]*[?&]job_id=(\d+)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
   let m: RegExpExecArray | null;
 
   while ((m = jobPattern.exec(html)) !== null) {
-    const jobId = m[1];
-    if (seen.has(jobId)) continue;
+    const jobId = m[2];
+    if (!jobId || seen.has(jobId)) continue;
     seen.add(jobId);
 
-    const name = decodeHtml(stripTags(m[2])).trim();
+    const name = decodeHtml(stripTags(m[3])).trim();
     if (!name || name.length < 3) continue;
+    // Skip navigation links that happen to have job_id
+    if (/^(register|results|more info|details|view|click)$/i.test(name)) continue;
 
-    // Try to find date near this match (within 500 chars)
-    const context = html.slice(Math.max(0, m.index - 200), m.index + 500);
-    const dateMatch = context.match(/(\d{1,2}\/\d{1,2}\/\d{4}|\w+ \d{1,2}(?:[-–]\d{1,2})?,?\s*\d{4})/);
-    const locationMatch = context.match(/(?:Location|location|City|city)[:\s]+([A-Z][^<\n,]{2,40})/);
-    const stateMatch = context.match(/\b([A-Z]{2})\b/);
-    const typeMatch = context.match(/head race|sprint|regatta/i);
+    const ctxStart = Math.max(0, m.index - 400);
+    const ctxEnd = Math.min(html.length, m.index + m[0].length + 600);
+    const context = html.slice(ctxStart, ctxEnd);
+
+    // Date: MM/DD/YYYY or Month DD, YYYY
+    const dateRaw = context.match(/(\d{1,2}\/\d{1,2}\/\d{2,4}|\w+\.?\s+\d{1,2},?\s*\d{4})/)?.[1] ?? null;
+    // End date if range: "May 3 - 5" or "05/03 - 05/05"
+    const endDateRaw = context.match(/[-–]\s*(\d{1,2}\/\d{1,2}\/\d{2,4}|\w+\.?\s+\d{1,2},?\s*\d{4})/)?.[1] ?? null;
+    // Location: "City, ST" pattern
+    const locMatch = context.match(/([A-Z][a-z]+(?:[\s-][A-Z][a-z]+)*),\s*([A-Z]{2})\b/);
+    // Host club
+    const hostMatch = context.match(/(?:host(?:ed by)?|club)[:\s]+([A-Z][^\n<,]{3,60})/i);
+    // Event type
+    const typeMatch = context.match(/\b(head race|head of the|head-of|sprint regatta|sprint)\b/i);
 
     regattas.push({
       external_id: `rc_${jobId}`,
       name,
       rc_url: `${RC_BASE}/regatta/?job_id=${jobId}`,
-      event_date: dateMatch ? parseDateStr(dateMatch[1]) : null,
-      location: locationMatch ? locationMatch[1].trim() : null,
-      state: stateMatch ? stateMatch[1] : null,
+      event_date: dateRaw ? parseDateStr(dateRaw) : null,
+      end_date: endDateRaw ? parseDateStr(endDateRaw) : null,
+      location: locMatch ? `${locMatch[1]}, ${locMatch[2]}` : null,
+      state: locMatch ? locMatch[2] : null,
+      host_club: hostMatch ? hostMatch[1].trim().replace(/<[^>]+>/g, "").trim() : null,
       event_type: typeMatch
-        ? typeMatch[0].toLowerCase().includes("head") ? "head_race" : "sprint"
+        ? (typeMatch[1].toLowerCase().includes("head") ? "head_race" : "sprint")
         : "other",
     });
   }
@@ -88,34 +112,94 @@ function parseRegattas(html: string): any[] {
   return regattas;
 }
 
+// Parse results from a regatta detail page
+function parseResults(html: string, regattaId: string): any[] {
+  if (!html) return [];
+  const results: any[] = [];
+
+  // Try to find the current event heading as rows are parsed
+  let currentEvent = "Unknown Event";
+
+  // Scan line by line for headings and table rows
+  const lines = html.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Detect event headings: <h2>, <h3>, or <td class="event..."> containing event name
+    const headingMatch = line.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i) ||
+      line.match(/class="[^"]*event[^"]*"[^>]*>([\s\S]*?)<\/t[dh]>/i);
+    if (headingMatch) {
+      const heading = decodeHtml(stripTags(headingMatch[1])).trim();
+      if (heading && heading.length > 2 && heading.length < 100) {
+        currentEvent = heading;
+      }
+      continue;
+    }
+
+    // Detect table rows
+    const rowMatch = line.match(/<tr[^>]*>([\s\S]*?)<\/tr>/i);
+    if (!rowMatch) continue;
+
+    const row = rowMatch[1];
+    const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+    if (cells.length < 3) continue;
+
+    const cellTexts = cells.map((c) => decodeHtml(stripTags(c)).trim());
+
+    const placementNum = parseInt(cellTexts[0], 10);
+    if (isNaN(placementNum) || placementNum < 1 || placementNum > 500) continue;
+
+    const allText = cellTexts.join(" ");
+    const timeMatch = allText.match(/(\d+:\d{2}[.:]\d{1,2}|\d+:\d{2}:\d{2})/);
+
+    results.push({
+      regatta_id: regattaId,
+      event_name: currentEvent,
+      placement: placementNum,
+      finish_time: timeMatch ? timeMatch[1] : null,
+      club: cellTexts[2] || null,
+      crew: cellTexts
+        .slice(1, 6)
+        .filter((t) => t && t.length > 1 && !/^\d+[:.]\d+/.test(t))
+        .map((n) => ({ name: n })),
+      raw_data: { cells: cellTexts },
+    });
+  }
+
+  return results.slice(0, 500);
+}
+
 // Parse clubs from HTML
 function parseClubs(html: string): any[] {
+  if (!html) return [];
   const clubs: any[] = [];
-
-  // Pattern for club links
-  const clubPattern = /href="([^"]*club[^"]*)"[^>]*>([^<]+)<\/a>/gi;
   const seen = new Set<string>();
+
+  const clubPattern = /href="([^"]*\/club[^"]*)"[^>]*>([^<]{3,80})<\/a>/gi;
   let m: RegExpExecArray | null;
 
   while ((m = clubPattern.exec(html)) !== null) {
-    const url = m[1];
+    const url = m[1] || "";
     const name = decodeHtml(stripTags(m[2])).trim();
-    if (seen.has(name) || !name || name.length < 3) continue;
+    if (!name || seen.has(name)) continue;
     seen.add(name);
 
-    const context = html.slice(Math.max(0, m.index - 100), m.index + 400);
+    const ctxStart = Math.max(0, m.index - 100);
+    const ctxEnd = Math.min(html.length, m.index + 400);
+    const context = html.slice(ctxStart, ctxEnd);
+
     const stateMatch = context.match(/\b([A-Z]{2})\b/);
-    const typeMatch = context.match(/high school|collegiate|club|masters/i);
+    const typeMatch = context.match(/\b(high school|collegiate|masters|club)\b/i);
 
     clubs.push({
-      external_id: `rc_club_${name.toLowerCase().replace(/\s+/g, "_")}`,
+      external_id: `rc_club_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
       name,
       rc_url: url.startsWith("http") ? url : `${RC_BASE}${url}`,
       state: stateMatch ? stateMatch[1] : null,
       club_type: typeMatch
-        ? typeMatch[0].toLowerCase().includes("high") ? "high_school"
-        : typeMatch[0].toLowerCase().includes("college") ? "collegiate"
-        : typeMatch[0].toLowerCase().includes("master") ? "masters"
+        ? typeMatch[1].toLowerCase().includes("high") ? "high_school"
+        : typeMatch[1].toLowerCase().includes("college") ? "collegiate"
+        : typeMatch[1].toLowerCase().includes("master") ? "masters"
         : "club"
         : "club",
     });
@@ -124,70 +208,24 @@ function parseClubs(html: string): any[] {
   return clubs;
 }
 
-// Parse results from a single regatta page
-function parseResults(html: string, regattaId: string): any[] {
-  const results: any[] = [];
-
-  // Look for table rows with results data
-  const tablePattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let m: RegExpExecArray | null;
-
-  while ((m = tablePattern.exec(html)) !== null) {
-    const row = m[1];
-    const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-    if (cells.length < 3) continue;
-
-    const cellTexts = cells.map((c) => decodeHtml(stripTags(c)).trim());
-
-    // Heuristic: first cell is placement (number), rest is crew/time
-    const placementNum = parseInt(cellTexts[0]);
-    if (isNaN(placementNum) || placementNum < 1 || placementNum > 200) continue;
-
-    const timeMatch = cellTexts.join(" ").match(/(\d+:\d{2}\.\d{1,2}|\d+:\d{2}:\d{2})/);
-
-    results.push({
-      regatta_id: regattaId,
-      placement: placementNum,
-      finish_time: timeMatch ? timeMatch[1] : null,
-      club: cellTexts[2] || null,
-      crew: cellTexts.slice(1, 5).filter(Boolean).map((n) => ({ name: n })),
-      event_name: "Unknown Event",
-      raw_data: { cells: cellTexts },
-    });
-  }
-
-  // Also look for event headings to assign event names
-  const eventPattern = /<h[23][^>]*>(Event[^<]+)<\/h[23]>/gi;
-  // (simplified — real regatta pages vary too much for perfect parsing)
-
-  return results.slice(0, 200);
-}
-
-function parseDateStr(s: string): string | null {
-  try {
-    const d = new Date(s);
-    if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
-  } catch {}
-  return null;
-}
-
-// Fetch a URL with timeout and error handling
+// Fetch with 10s timeout — never throws, always returns { html, error }
 async function safeFetch(url: string, timeoutMs = 10000): Promise<{ html: string | null; error: string | null }> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    const res = await fetch(url, {
-      headers: BROWSER_HEADERS,
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) return { html: null, error: `HTTP ${res.status}` };
-    const html = await res.text();
-    return { html, error: null };
+    try {
+      const res = await fetch(url, { headers: BROWSER_HEADERS, signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) return { html: null, error: `HTTP ${res.status}` };
+      const html = await res.text();
+      return { html: html || null, error: null };
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (e: any) {
-    return { html: null, error: e.message ?? "Fetch failed" };
+    const msg = e?.name === "AbortError" ? "Request timed out" : (e?.message ?? "Fetch failed");
+    console.error(`safeFetch error [${url}]:`, msg);
+    return { html: null, error: msg };
   }
 }
 
@@ -201,165 +239,246 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
+  let body: Record<string, any> = {};
   try {
-    const body = await req.json().catch(() => ({}));
-    const { action, query, state, event_type, regatta_id, force_refresh } = body;
+    body = await req.json();
+  } catch {
+    body = {};
+  }
 
-    // ── Search Regattas ────────────────────────────────────────────────────────
-    if (action === "search_regattas" || !action) {
-      // Check cache first
-      let dbQuery = supabase.from("regattas").select("*").order("event_date", { ascending: false }).limit(50);
-      if (query) dbQuery = dbQuery.ilike("name", `%${query}%`);
-      if (state) dbQuery = dbQuery.eq("state", state);
-      if (event_type) dbQuery = dbQuery.eq("event_type", event_type);
+  const { action, query, state, event_type, regatta_id, force_refresh } = body;
 
-      const { data: cached } = await dbQuery;
-      const lastCached = cached?.[0]?.cached_at ?? null;
-      const stale = isCacheStale(lastCached) || force_refresh;
+  // ── Auto Load (called on page load to populate cache if stale) ────────────
+  if (action === "auto_load") {
+    try {
+      // Check when we last cached data
+      const { data: latest } = await supabase
+        .from("regattas")
+        .select("cached_at")
+        .order("cached_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (stale) {
-        // Try to fetch from RegattaCentral
-        const searchUrl = query
-          ? `${RC_BASE}/regatta/?task=search&q=${encodeURIComponent(query)}`
-          : `${RC_BASE}/calendar/`;
+      const isStale = !latest?.cached_at ||
+        (Date.now() - new Date(latest.cached_at).getTime() > CACHE_24H_MS);
 
-        const { html, error: fetchError } = await safeFetch(searchUrl);
-
-        if (html) {
-          const parsed = parseRegattas(html);
-          if (parsed.length > 0) {
-            // Upsert into DB
-            for (const r of parsed) {
-              await supabase.from("regattas").upsert(
-                { ...r, cached_at: new Date().toISOString() },
-                { onConflict: "external_id" }
-              );
-            }
-          }
-        }
-
-        // Re-query after upsert
-        const { data: fresh } = await dbQuery;
-        return new Response(JSON.stringify({
-          regattas: fresh || [],
-          cached: false,
-          last_updated: new Date().toISOString(),
-          fetch_error: html ? null : fetchError,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (!isStale && !force_refresh) {
+        return jsonOk({ refreshed: false, reason: "cache_fresh" });
       }
 
-      return new Response(JSON.stringify({
-        regattas: cached || [],
+      // Fetch from RegattaCentral index
+      const { html, error: fetchError } = await safeFetch(RC_INDEX);
+      if (!html) {
+        console.error("auto_load: fetch failed:", fetchError);
+        return jsonOk({ refreshed: false, reason: "fetch_failed", error: "Could not reach RegattaCentral" });
+      }
+
+      const parsed = parseRegattas(html);
+      let count = 0;
+      const now = new Date().toISOString();
+
+      for (const r of parsed) {
+        try {
+          await supabase.from("regattas").upsert(
+            { ...r, cached_at: now },
+            { onConflict: "external_id" },
+          );
+          count++;
+        } catch (e) {
+          console.error("auto_load upsert error:", e);
+        }
+      }
+
+      return jsonOk({ refreshed: count > 0, count, timestamp: now });
+    } catch (e: any) {
+      console.error("auto_load error:", e?.message);
+      return jsonOk({ refreshed: false, reason: "error" });
+    }
+  }
+
+  // ── Search Regattas (DB-only — never fetches live from RC) ────────────────
+  if (action === "search_regattas" || !action) {
+    try {
+      let q = supabase.from("regattas").select("*").order("event_date", { ascending: false }).limit(60);
+      if (query) q = q.ilike("name", `%${query}%`);
+      if (state) q = q.eq("state", state);
+      if (event_type) q = q.eq("event_type", event_type);
+
+      const { data, error } = await q;
+      if (error) console.error("search_regattas query error:", error);
+
+      return jsonOk({
+        regattas: data || [],
         cached: true,
-        last_updated: lastCached,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        last_updated: data?.[0]?.cached_at ?? null,
+      });
+    } catch (e: any) {
+      console.error("search_regattas error:", e?.message);
+      return jsonOk({ regattas: [], cached: true, last_updated: null });
+    }
+  }
+
+  // ── Fetch Results for a Regatta ───────────────────────────────────────────
+  if (action === "fetch_results") {
+    if (!regatta_id) {
+      return new Response(JSON.stringify({ error: "regatta_id required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // ── Fetch Results for a Regatta ───────────────────────────────────────────
-    if (action === "fetch_results") {
-      if (!regatta_id) {
-        return new Response(JSON.stringify({ error: "regatta_id required" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    let cachedResults: any[] = [];
+    try {
+      const { data } = await supabase
+        .from("regatta_results")
+        .select("*")
+        .eq("regatta_id", regatta_id)
+        .order("event_name")
+        .order("placement");
+      cachedResults = data || [];
+    } catch (e) {
+      console.error("fetch_results cache read error:", e);
+    }
 
-      // Check cached results
-      const { data: cachedResults } = await supabase
-        .from("regatta_results").select("*").eq("regatta_id", regatta_id);
+    // Return cache immediately if fresh and not forcing
+    if (cachedResults.length > 0 && !force_refresh) {
+      return jsonOk({
+        results: cachedResults,
+        cached: true,
+        last_updated: cachedResults[0]?.cached_at ?? null,
+      });
+    }
 
-      if (cachedResults && cachedResults.length > 0 && !force_refresh) {
-        return new Response(JSON.stringify({ results: cachedResults, cached: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Get the regatta to find its URL
-      const { data: regatta } = await supabase.from("regattas").select("rc_url,external_id").eq("id", regatta_id).maybeSingle();
+    // Try to fetch fresh results from RC
+    let fetchedNewResults = false;
+    try {
+      const { data: regatta } = await supabase
+        .from("regattas")
+        .select("rc_url")
+        .eq("id", regatta_id)
+        .maybeSingle();
 
       if (regatta?.rc_url) {
-        const { html } = await safeFetch(`${regatta.rc_url}&task=results`);
+        const sep = regatta.rc_url.includes("?") ? "&" : "?";
+        const resultsUrl = `${regatta.rc_url}${sep}task=results`;
+        const { html, error: fetchError } = await safeFetch(resultsUrl);
+
         if (html) {
           const parsed = parseResults(html, regatta_id);
           if (parsed.length > 0) {
-            // Delete old and insert new
+            const now = new Date().toISOString();
             await supabase.from("regatta_results").delete().eq("regatta_id", regatta_id);
-            await supabase.from("regatta_results").insert(parsed.map((r) => ({ ...r, cached_at: new Date().toISOString() })));
+            const { error: insertError } = await supabase
+              .from("regatta_results")
+              .insert(parsed.map((r) => ({ ...r, cached_at: now })));
+            if (insertError) {
+              console.error("fetch_results insert error:", insertError);
+            } else {
+              fetchedNewResults = true;
+            }
           }
+        } else {
+          console.error("fetch_results fetch failed:", fetchError);
         }
       }
-
-      const { data: fresh } = await supabase.from("regatta_results").select("*").eq("regatta_id", regatta_id);
-      return new Response(JSON.stringify({ results: fresh || [], cached: false }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    } catch (e: any) {
+      console.error("fetch_results live-fetch error:", e?.message);
     }
 
-    // ── Search Clubs ──────────────────────────────────────────────────────────
-    if (action === "search_clubs") {
-      let dbQuery = supabase.from("clubs").select("*").order("name").limit(100);
-      if (query) dbQuery = dbQuery.ilike("name", `%${query}%`);
-      if (state) dbQuery = dbQuery.eq("state", state);
-      if (body.club_type) dbQuery = dbQuery.eq("club_type", body.club_type);
+    // Re-read from DB (fresh or cached fallback)
+    try {
+      const { data: fresh } = await supabase
+        .from("regatta_results")
+        .select("*")
+        .eq("regatta_id", regatta_id)
+        .order("event_name")
+        .order("placement");
+      const results = fresh || cachedResults;
+      return jsonOk({
+        results,
+        cached: !fetchedNewResults,
+        last_updated: results[0]?.cached_at ?? null,
+      });
+    } catch (e: any) {
+      console.error("fetch_results final read error:", e?.message);
+      return jsonOk({ results: cachedResults, cached: true, last_updated: null });
+    }
+  }
 
-      const { data: cached } = await dbQuery;
+  // ── Search Clubs (DB-only) ────────────────────────────────────────────────
+  if (action === "search_clubs") {
+    try {
+      let q = supabase.from("clubs").select("*").order("name").limit(100);
+      if (query) q = q.ilike("name", `%${query}%`);
+      if (state) q = q.eq("state", state);
+      if (body.club_type) q = q.eq("club_type", body.club_type);
+
+      const { data: cached } = await q;
       const lastCached = cached?.[0]?.cached_at ?? null;
 
-      if (isCacheStale(lastCached) || force_refresh || !cached?.length) {
+      // Fetch from RC if cache is stale or empty
+      if (!cached?.length || !lastCached || (Date.now() - new Date(lastCached).getTime() > CACHE_7D_MS) || force_refresh) {
         const clubUrl = query
           ? `${RC_BASE}/clubs/?q=${encodeURIComponent(query)}`
           : `${RC_BASE}/clubs/`;
-
         const { html } = await safeFetch(clubUrl);
         if (html) {
           const parsed = parseClubs(html);
+          const now = new Date().toISOString();
           for (const c of parsed) {
-            await supabase.from("clubs").upsert(
-              { ...c, cached_at: new Date().toISOString() },
-              { onConflict: "external_id" }
-            );
+            try {
+              await supabase.from("clubs").upsert(
+                { ...c, cached_at: now },
+                { onConflict: "external_id" },
+              );
+            } catch (e) {
+              console.error("clubs upsert error:", e);
+            }
           }
         }
-
-        const { data: fresh } = await dbQuery;
-        return new Response(JSON.stringify({ clubs: fresh || [], cached: false }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const { data: fresh } = await q;
+        return jsonOk({ clubs: fresh || cached || [], cached: false });
       }
 
-      return new Response(JSON.stringify({ clubs: cached || [], cached: true, last_updated: lastCached }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk({ clubs: cached, cached: true, last_updated: lastCached });
+    } catch (e: any) {
+      console.error("search_clubs error:", e?.message);
+      return jsonOk({ clubs: [], cached: true });
     }
-
-    // ── Refresh Upcoming (cron) ───────────────────────────────────────────────
-    if (action === "refresh_upcoming") {
-      const today = new Date().toISOString().split("T")[0];
-      const future = new Date(Date.now() + 90 * 86400000).toISOString().split("T")[0];
-
-      const { html } = await safeFetch(`${RC_BASE}/calendar/?start=${today}&end=${future}`);
-      let count = 0;
-      if (html) {
-        const parsed = parseRegattas(html);
-        for (const r of parsed) {
-          await supabase.from("regattas").upsert(
-            { ...r, cached_at: new Date().toISOString() },
-            { onConflict: "external_id" }
-          );
-        }
-        count = parsed.length;
-      }
-
-      return new Response(JSON.stringify({ refreshed: count, timestamp: new Date().toISOString() }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: "Unknown action" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   }
+
+  // ── Refresh Upcoming (scheduled cron — hits RC index.jsp) ─────────────────
+  if (action === "refresh_upcoming") {
+    try {
+      const { html, error: fetchError } = await safeFetch(RC_INDEX);
+      if (!html) {
+        console.error("refresh_upcoming fetch failed:", fetchError);
+        return jsonOk({ refreshed: 0, error: "Fetch failed — cached data unchanged" });
+      }
+
+      const parsed = parseRegattas(html);
+      const now = new Date().toISOString();
+      let count = 0;
+
+      for (const r of parsed) {
+        try {
+          await supabase.from("regattas").upsert(
+            { ...r, cached_at: now },
+            { onConflict: "external_id" },
+          );
+          count++;
+        } catch (e) {
+          console.error("refresh_upcoming upsert error:", e);
+        }
+      }
+
+      return jsonOk({ refreshed: count, timestamp: now });
+    } catch (e: any) {
+      console.error("refresh_upcoming error:", e?.message);
+      return jsonOk({ refreshed: 0, error: "Internal error" });
+    }
+  }
+
+  return new Response(JSON.stringify({ error: "Unknown action" }), {
+    status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });

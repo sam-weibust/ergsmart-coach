@@ -51,6 +51,8 @@ export default function RegattaResultsView({ regatta, profile, onClose }: Props)
   const [manualTime, setManualTime] = useState("");
   const [showManual, setShowManual] = useState(false);
 
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
   const { data: results = [], isLoading: resultsLoading, refetch } = useQuery<RegattaResult[]>({
     queryKey: ["regatta-results", regatta.id],
     queryFn: async () => {
@@ -86,11 +88,20 @@ export default function RegattaResultsView({ regatta, profile, onClose }: Props)
       if (error) throw new Error(error.message);
       return data;
     },
-    onSuccess: () => {
-      toast({ title: "Results loaded" });
+    onSuccess: (data) => {
+      if (data?.cached && data?.last_updated) {
+        setLastUpdated(data.last_updated);
+        toast({ title: "Showing cached results", description: `Last updated ${new Date(data.last_updated).toLocaleDateString()}` });
+      } else {
+        toast({ title: "Results loaded" });
+        setLastUpdated(null);
+      }
       refetch();
     },
-    onError: (e: Error) => toast({ title: "Failed to load results", description: e.message, variant: "destructive" }),
+    onError: () => {
+      toast({ title: "Could not load results", description: "Showing cached data if available.", variant: "destructive" });
+      refetch();
+    },
   });
 
   const claimResult = useMutation({
@@ -225,7 +236,10 @@ export default function RegattaResultsView({ regatta, profile, onClose }: Props)
           ) : (
             <>
               <div className="flex justify-between items-center">
-                <p className="text-xs text-muted-foreground">{results.length} results across {Object.keys(grouped).length} events</p>
+                <p className="text-xs text-muted-foreground">
+                  {results.length} results across {Object.keys(grouped).length} events
+                  {lastUpdated && <span className="ml-2 text-amber-600">(cached {new Date(lastUpdated).toLocaleDateString()})</span>}
+                </p>
                 <Button size="sm" variant="ghost" className="h-6 text-xs gap-1" onClick={() => fetchResults.mutate()} disabled={fetchResults.isPending}>
                   {fetchResults.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   Refresh

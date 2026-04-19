@@ -59,23 +59,17 @@ export default function RegattaSearch({ profile }: { profile: any }) {
   const fetchFromRC = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("fetch-regattacentral", {
-        body: {
-          action: "search_regattas",
-          query: inputValue || null,
-          state: state !== "all" ? state : null,
-          event_type: eventType !== "all" ? eventType : null,
-          force_refresh: true,
-        },
+        body: { action: "auto_load", force_refresh: true },
       });
       if (error) throw new Error(error.message);
       return data;
     },
     onSuccess: (data) => {
-      const count = data?.regattas?.length ?? 0;
-      toast({ title: "RegattaCentral updated", description: `Found ${count} regattas.` });
+      const count = data?.count ?? 0;
+      toast({ title: "Data refreshed", description: count > 0 ? `Loaded ${count} regattas.` : "Already up to date." });
       queryClient.invalidateQueries({ queryKey: ["regattas-search"] });
     },
-    onError: (e: Error) => toast({ title: "Fetch failed", description: e.message, variant: "destructive" }),
+    onError: () => toast({ title: "Refresh failed", description: "Using cached data.", variant: "destructive" }),
   });
 
   const handleSearch = () => {
@@ -135,7 +129,7 @@ export default function RegattaSearch({ profile }: { profile: any }) {
               disabled={fetchFromRC.isPending}
             >
               {fetchFromRC.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Search RegattaCentral
+              Refresh Data
             </Button>
           </div>
         </CardContent>
@@ -148,16 +142,11 @@ export default function RegattaSearch({ profile }: { profile: any }) {
         <div className="text-center py-16 text-muted-foreground">
           <Trophy className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No regattas found</p>
-          <p className="text-sm mt-1">Try searching RegattaCentral to load data</p>
-          <Button
-            variant="outline"
-            className="mt-4 gap-2"
-            onClick={() => fetchFromRC.mutate()}
-            disabled={fetchFromRC.isPending}
-          >
-            {fetchFromRC.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Load from RegattaCentral
-          </Button>
+          <p className="text-sm mt-1">
+            {query || (state && state !== "all") || (eventType && eventType !== "all")
+              ? "Try adjusting your filters"
+              : "Data is loading in the background — check back shortly"}
+          </p>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
