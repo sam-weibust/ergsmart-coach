@@ -99,6 +99,7 @@ import WeeklyChallengeWidget from "@/components/dashboard/WeeklyChallengeWidget"
 import { StreakWidget } from "@/components/dashboard/StreakWidget";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
+import Concept2Section from "@/components/dashboard/Concept2Section";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -617,7 +618,7 @@ const Dashboard = () => {
         case "ask-ai":
           return <AskSection />;
         case "concept2":
-          return <PlaceholderSection title="Concept2 Integration" description="Connect your Concept2 logbook to sync workouts automatically." />;
+          return <Concept2Section />;
         case "integrations":
           return <PlaceholderSection title="Integrations" description="Third-party integrations coming soon." />;
         default:
