@@ -103,6 +103,7 @@ import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
 import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
+import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -154,6 +155,23 @@ const NAV_CONFIG: NavSection[] = [
       { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
       { id: "pacing", label: "Pacing", description: "Calculate and plan splits", icon: Calculator },
       { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
+    ],
+  },
+  {
+    id: "calculators",
+    label: "Calculators",
+    icon: Calculator,
+    subs: [
+      { id: "split", label: "Split Calculator", description: "Two-way split ↔ total time for any distance", icon: Calculator },
+      { id: "predictor-2k", label: "2K Predictor", description: "AI-powered conservative 2K prediction", icon: Zap },
+      { id: "weight-adj", label: "Weight Adjustment", description: "Predict 2K time at target body weight", icon: Weight },
+      { id: "pace-watts", label: "Pace & Watts", description: "Convert split to watts and back", icon: Gauge },
+      { id: "zones", label: "Training Zones", description: "UT2, UT1, AT, TR, AN, SP zones from 2K", icon: Target },
+      { id: "stroke-rate", label: "Stroke Rate", description: "Analyze efficiency at your rate and pace", icon: Activity },
+      { id: "race-plan", label: "Race Splits Planner", description: "Plan your 2K race 500m by 500m", icon: Trophy },
+      { id: "equivalency", label: "Erg Equivalency", description: "Compare RowErg, SkiErg, BikeErg efforts", icon: ArrowLeftRight },
+      { id: "wkg", label: "W/kg Ratio", description: "Power-to-weight and performance benchmarks", icon: BarChart3 },
+      { id: "timeline", label: "Improvement Timeline", description: "AI roadmap to your goal 2K time", icon: TrendingUp },
     ],
   },
   {
@@ -448,6 +466,11 @@ const Dashboard = () => {
     // Dashboard always shows overview
     if (activeSection === "dashboard") {
       return <DashboardOverview navTo={navTo} />;
+    }
+
+    // Calculators — manages its own internal tabs
+    if (activeSection === "calculators") {
+      return <CalculatorsSection initialTab={activeSub ?? undefined} profile={profile} />;
     }
 
     // Coaches Hub — manages its own internal tabs
