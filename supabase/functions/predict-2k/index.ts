@@ -150,24 +150,26 @@ Using all available data, provide a conservative, realistic 2K prediction.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 1500,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
     });
 
-    const result = await resp.json();
-
-    if (result.error) {
-      throw new Error(result.error.message || "Anthropic API error");
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      const msg = errBody?.error?.message ?? errBody?.error ?? `Anthropic API error ${resp.status}`;
+      throw new Error(msg);
     }
+
+    const result = await resp.json();
 
     const text = result.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      throw new Error("Failed to parse AI response");
+      throw new Error("AI returned an unexpected response format. Please try again.");
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -176,7 +178,8 @@ Using all available data, provide a conservative, realistic 2K prediction.`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), {
+    const msg = e?.message ?? "Prediction failed";
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

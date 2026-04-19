@@ -422,10 +422,19 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
           test_recency: form.test_recency || undefined,
         },
       });
-      if (fnErr || data?.error) throw new Error(fnErr?.message ?? data?.error ?? "Prediction failed");
+      if (fnErr) {
+        // Extract the real error body from the response
+        let msg = "Prediction failed — please try again";
+        try {
+          const body = await (fnErr as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
       setResult(data as PredictResult);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message ?? "Prediction failed — please try again");
     } finally {
       setLoading(false);
     }
@@ -1972,7 +1981,15 @@ function ImprovementTimeline({ prefill }: { prefill: PrefillData }) {
           training_phase: form.training_phase || undefined,
         },
       });
-      if (fnErr || data?.error) throw new Error(fnErr?.message ?? data?.error ?? "Failed");
+      if (fnErr) {
+        let msg = "Timeline generation failed — please try again";
+        try {
+          const body = await (fnErr as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
       setResult(data as TimelineResult);
     } catch (e: any) {
       setError(e.message);
