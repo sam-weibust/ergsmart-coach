@@ -389,31 +389,74 @@ function fmtSec(s: number | null | undefined): string | undefined {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// Format deciseconds split → "M:SS"
-function fmtSplitDeciSec(ds: number | null | undefined): string | undefined {
-  if (!ds) return undefined;
-  const s = ds / 10;
+// Format split seconds per 500m → "M:SS"
+function fmtSplitSec(s: number | null | undefined): string | undefined {
+  if (!s || s <= 0) return undefined;
   const m = Math.floor(s / 60);
   const sec = Math.round(s % 60);
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// Watts from split deciseconds
+// Parse text split "M:SS" or "M:SS.t" → seconds per 500m
+function parseSplitText(v: string | null | undefined): number | null {
+  if (!v) return null;
+  const str = String(v).trim();
+  const parts = str.split(":");
+  if (parts.length === 2) {
+    const m = parseFloat(parts[0]);
+    const s = parseFloat(parts[1]);
+    if (!isNaN(m) && !isNaN(s)) return m * 60 + s;
+  }
+  return null;
+}
+
+// Resolve split to seconds per 500m from any representation:
+// - split_for_pace (deciseconds from C2)
+// - avg_split (text "M:SS.t" from manual entry)
+// - fallback: calculate from distance + total time
+function resolveSplitSec(workout: any, totalTimeSec: number | null): number | null {
+  if (workout.split_for_pace != null && Number(workout.split_for_pace) > 0) {
+    return Number(workout.split_for_pace) / 10;
+  }
+  if (workout.avg_split) {
+    const parsed = parseSplitText(workout.avg_split);
+    if (parsed && parsed > 0) return parsed;
+  }
+  // Calculate from distance + total time (works for multi-piece summary too)
+  if (workout.distance && totalTimeSec && totalTimeSec > 0 && workout.distance > 0) {
+    return (totalTimeSec / workout.distance) * 500;
+  }
+  return null;
+}
+
+// Watts from split seconds per 500m
+function wattFromSplitSec(s: number | null | undefined): number | undefined {
+  if (!s || s <= 0) return undefined;
+  return Math.round(2.80 / Math.pow(s / 500, 3));
+}
+
+// Format deciseconds split → "M:SS" (kept for legacy callers)
+function fmtSplitDeciSec(ds: number | null | undefined): string | undefined {
+  if (!ds) return undefined;
+  return fmtSplitSec(ds / 10);
+}
+
+// Watts from split deciseconds (kept for legacy callers)
 function wattFromDeciSec(ds: number | null | undefined): number | undefined {
   if (!ds) return undefined;
-  const s = ds / 10;
-  return Math.round(2.80 / Math.pow(s / 500, 3));
+  return wattFromSplitSec(ds / 10);
 }
 
 export function ShareWorkoutButton({ workout, athleteName, workoutType = "Erg", previousBest }: ShareWorkoutButtonProps) {
   const [open, setOpen] = useState(false);
 
-  const splitDS = workout.split_for_pace ?? workout.avg_split;
-
   // Time: prefer total_time_seconds (deciseconds from C2), else parse interval duration
   const totalTimeSec = workout.total_time_seconds
     ? workout.total_time_seconds / 10
     : parseInterval(workout.duration);
+
+  // Resolve split seconds per 500m — handles C2 deciseconds, text format, and calculated
+  const splitSec = resolveSplitSec(workout, totalTimeSec);
 
   const improvement = (() => {
     if (!previousBest || !totalTimeSec) return undefined;
@@ -445,11 +488,11 @@ export function ShareWorkoutButton({ workout, athleteName, workoutType = "Erg", 
     date: workout.workout_date
       ? new Date(workout.workout_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
       : new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-    // Primary
+    // Primary — avg split per 500m shown prominently
     distance: fmtDist(workout.distance),
     time: workout.total_time_seconds ? fmtDeciSec(workout.total_time_seconds) : fmtSec(totalTimeSec ?? undefined),
-    avgSplit: fmtSplitDeciSec(splitDS),
-    watts: wattFromDeciSec(splitDS),
+    avgSplit: fmtSplitSec(splitSec),
+    watts: wattFromSplitSec(splitSec),
     strokeRate: strokeRate || undefined,
     // Secondary
     avgHR: workout.avg_heart_rate || undefined,
