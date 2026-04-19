@@ -35,7 +35,10 @@ function parseAddStatus(dv: DataView) {
   if (dv.byteLength < 4) return {};
   const splitPace = dv.getUint16(0, true);
   const power     = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
-  return { splitPace, power };
+  console.log('[PM5 raw RaceSection] splitPace (centiseconds/500m):', splitPace, '| power (watts):', power, '| byteLength:', dv.byteLength);
+  const paceSec = splitPace > 0 ? splitPace / 100 : 0;
+  const derivedPower = paceSec > 0 ? Math.round(2.80 / Math.pow(paceSec / 500, 3)) : power;
+  return { splitPace, power: derivedPower };
 }
 function parseStrokeDataBle(dv: DataView) {
   if (dv.byteLength < 4) return {};
@@ -48,10 +51,10 @@ function parseStrokeDataBle(dv: DataView) {
 // ── Formatters ──────────────────────────────────────────────────
 function fmtPace(cs: number | null | undefined): string {
   if (!cs || cs <= 0 || cs > 100000) return "--:--";
-  const s = cs / 100;
+  const s = Math.floor(cs / 100);
   const m = Math.floor(s / 60);
-  const sec = (s % 60).toFixed(1).padStart(4, "0");
-  return `${m}:${sec}`;
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 function fmtTime(cs: number | null | undefined): string {
   if (!cs) return "--:--";

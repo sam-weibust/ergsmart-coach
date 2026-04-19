@@ -59,9 +59,12 @@ export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
 export function parseAdditionalStatus1(dv: DataView): Partial<PM5StreamData> {
   if (dv.byteLength < 5) return {};
   try {
+    const rawSplit = dv.getUint16(0, true);
+    const rawPower = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
+    console.log('[PM5 raw] splitPace (centiseconds/500m):', rawSplit, '| power (watts):', rawPower, '| byteLength:', dv.byteLength);
     return {
-      splitPace: dv.getUint16(0, true),
-      power:     dv.getUint16(3, true),
+      splitPace: rawSplit,
+      power:     rawPower,
     };
   } catch { return {}; }
 }

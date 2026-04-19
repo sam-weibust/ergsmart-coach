@@ -57,7 +57,10 @@ function parseAddStatus(dv: DataView): Partial<LiveData> {
   if (dv.byteLength < 4) return {};
   const splitPace = dv.getUint16(0, true); // centiseconds / 500 m
   const power     = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
-  return { splitPace, power };
+  console.log('[PM5 raw LiveErgView] splitPace (centiseconds/500m):', splitPace, '| power (watts):', power, '| byteLength:', dv.byteLength);
+  const paceSec = splitPace > 0 ? splitPace / 100 : 0;
+  const derivedPower = paceSec > 0 ? Math.round(2.80 / Math.pow(paceSec / 500, 3)) : power;
+  return { splitPace, power: derivedPower };
 }
 
 function parseStrokeData(dv: DataView): Partial<LiveData> {
@@ -80,10 +83,10 @@ function fmtTime(cs: number): string {
 
 function fmtPace(cs: number): string {
   if (!cs || cs <= 0 || cs > 100000) return "--:--";
-  const s = cs / 100;
+  const s = Math.floor(cs / 100);
   const m = Math.floor(s / 60);
-  const sec = (s % 60).toFixed(1).padStart(4, "0");
-  return `${m}:${sec}`;
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 function fmtDriveTime(cs: number): string {

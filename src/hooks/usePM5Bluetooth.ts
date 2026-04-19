@@ -27,11 +27,11 @@ function formatTime(centiseconds: number): string {
 }
 
 function formatSplit(centiseconds: number): string {
-  if (!centiseconds || centiseconds <= 0 || centiseconds > 60000) return "--:--";
-  const s = centiseconds / 100;
+  if (!centiseconds || centiseconds <= 0 || centiseconds > 100000) return "--:--";
+  const s = Math.floor(centiseconds / 100);
   const m = Math.floor(s / 60);
-  const sec = (s % 60).toFixed(1).padStart(4, "0");
-  return `${m}:${sec}`;
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 export function usePM5Bluetooth() {
@@ -74,20 +74,30 @@ export function usePM5Bluetooth() {
       });
 
       await startStreaming(deviceId, (update: Partial<PM5StreamData>) => {
-        setPm5Data(prev => ({
-          ...prev,
-          strokeRate:   update.strokeRate   ?? prev.strokeRate,
-          distance:     update.distance     != null ? Math.round(update.distance) : prev.distance,
-          watts:        update.power        ?? prev.watts,
-          heartRate:    update.heartRate    ?? prev.heartRate,
-          calories:     update.calories     ?? prev.calories,
-          driveLength:  update.driveLength  ?? prev.driveLength,
-          driveTime:    update.driveTime    ?? prev.driveTime,
-          recoveryTime: update.recoveryTime ?? prev.recoveryTime,
-          workoutState: update.workoutState ?? prev.workoutState,
-          elapsedTime:  update.elapsedTime  != null ? formatTime(update.elapsedTime) : prev.elapsedTime,
-          splitTime:    update.splitPace    != null ? formatSplit(update.splitPace)  : prev.splitTime,
-        }));
+        setPm5Data(prev => {
+          // Derive watts from split pace using Concept2 formula: 2.80 / (pace_sec/500)^3
+          let watts = prev.watts;
+          if (update.splitPace != null && update.splitPace > 0) {
+            const paceSec = update.splitPace / 100;
+            watts = Math.round(2.80 / Math.pow(paceSec / 500, 3));
+          } else if (update.power != null) {
+            watts = update.power;
+          }
+          return {
+            ...prev,
+            strokeRate:   update.strokeRate   ?? prev.strokeRate,
+            distance:     update.distance     != null ? Math.round(update.distance) : prev.distance,
+            watts,
+            heartRate:    update.heartRate    ?? prev.heartRate,
+            calories:     update.calories     ?? prev.calories,
+            driveLength:  update.driveLength  ?? prev.driveLength,
+            driveTime:    update.driveTime    ?? prev.driveTime,
+            recoveryTime: update.recoveryTime ?? prev.recoveryTime,
+            workoutState: update.workoutState ?? prev.workoutState,
+            elapsedTime:  update.elapsedTime  != null ? formatTime(update.elapsedTime) : prev.elapsedTime,
+            splitTime:    update.splitPace    != null ? formatSplit(update.splitPace)  : prev.splitTime,
+          };
+        });
       });
 
       setConnectedDeviceId(deviceId);
