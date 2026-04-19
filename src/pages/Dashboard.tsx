@@ -11,7 +11,6 @@ import {
   MoreHorizontal,
   ChevronDown,
   ChevronRight,
-  Construction,
   LayoutDashboard,
   Dumbbell,
   BarChart3,
@@ -36,7 +35,6 @@ import {
   Ship,
   ArrowLeftRight,
   MessageCircle,
-  CheckSquare,
   Medal,
   GitCompare,
   Link2,
@@ -44,7 +42,6 @@ import {
   Bell,
   MessageSquare,
   Bluetooth,
-  Plug,
   Globe,
   School,
   Award,
@@ -135,7 +132,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "erg", label: "Erg Workout", description: "Log an erg session", icon: Activity },
       { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
       { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
-      { id: "load", label: "Load Management", description: "Monitor training load", icon: TrendingUp },
       { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
       { id: "schedule", label: "Schedule", description: "Today's scheduled workouts", icon: Calendar },
       { id: "library", label: "Library", description: "Browse workout templates", icon: BookOpen },
@@ -148,7 +144,6 @@ const NAV_CONFIG: NavSection[] = [
     subs: [
       { id: "analytics", label: "Analytics", description: "Deep-dive performance analytics", icon: BarChart3 },
       { id: "trends", label: "Trends", description: "Compare and track trends over time", icon: TrendingUp },
-      { id: "records", label: "Personal Records", description: "Your all-time best performances", icon: Star },
       { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
       { id: "pacing", label: "Pacing", description: "Calculate and plan splits", icon: Calculator },
       { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
@@ -164,11 +159,8 @@ const NAV_CONFIG: NavSection[] = [
       { id: "seat-racing", label: "Seat Racing", description: "Analyze seat racing results", icon: ArrowLeftRight },
       { id: "race-optimizer", label: "Race Optimizer", description: "Optimize race lineups", icon: Target },
       { id: "messages", label: "Messages", description: "Team message board", icon: MessageCircle },
-      { id: "attendance", label: "Attendance", description: "Track team attendance", icon: CheckSquare },
-      { id: "checkins", label: "Check-ins", description: "Daily athlete check-ins", icon: Activity },
       { id: "leaderboard", label: "Leaderboard", description: "Team erg leaderboard", icon: Medal },
       { id: "comparison", label: "Athlete Compare", description: "Compare athletes side by side", icon: GitCompare },
-      { id: "teamsnap", label: "TeamSnap", description: "TeamSnap integration", icon: Link2 },
       { id: "plan-gen", label: "Plan Generator", description: "Generate team training plans", icon: Calendar, coachOnly: true },
       { id: "load-mgmt", label: "Load Management", description: "Manage athlete training loads", icon: Activity, coachOnly: true },
       { id: "recruiting-gaps", label: "Recruiting Gaps", description: "Identify recruiting needs", icon: GraduationCap, coachOnly: true },
@@ -186,7 +178,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "coach-directory", label: "Coach Directory", description: "Find and contact college coaches", icon: Users2 },
       { id: "combine", label: "Virtual Combine", description: "Participate in virtual combines", icon: Award },
       { id: "alumni", label: "Alumni Network", description: "Connect with alumni athletes", icon: GraduationCap },
-      { id: "commitments", label: "Commitments", description: "Track athlete commitments", icon: CheckSquare },
     ],
   },
   {
@@ -220,7 +211,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "directory", label: "Directory", description: "Find clubs and programs", icon: Globe },
       { id: "friends", label: "Friends", description: "Connect with other athletes", icon: UserPlus },
       { id: "referrals", label: "Referrals", description: "Invite friends to CrewSync", icon: Share2 },
-      { id: "shareable", label: "Share", description: "Share your profile and workouts", icon: Share2 },
     ],
   },
   {
@@ -232,24 +222,9 @@ const NAV_CONFIG: NavSection[] = [
       { id: "notifications", label: "Notifications", description: "Manage notification preferences", icon: Bell },
       { id: "ask-ai", label: "Ask AI Coach", description: "Chat with your AI coach", icon: MessageSquare },
       { id: "concept2", label: "Concept2", description: "Concept2 logbook integration", icon: Link2 },
-      { id: "integrations", label: "Integrations", description: "Connect third-party services", icon: Plug },
     ],
   },
 ];
-
-// ─── PLACEHOLDER COMPONENT ────────────────────────────────────────────────────
-
-function PlaceholderSection({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-        <Construction className="h-8 w-8 text-primary" />
-      </div>
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground max-w-sm">{description}</p>
-    </div>
-  );
-}
 
 // ─── DASHBOARD OVERVIEW ───────────────────────────────────────────────────────
 
@@ -455,8 +430,6 @@ const Dashboard = () => {
           return <MultiSetStrengthForm profile={profile} />;
         case "nutrition":
           return <MealPlanTab profile={profile} />;
-        case "load":
-          return <PlaceholderSection title="Load Management" description="Select a team to manage athlete training loads." />;
         case "recovery":
           return <RecoverySection profile={profile} />;
         case "schedule":
@@ -475,15 +448,6 @@ const Dashboard = () => {
           return <PerformanceSection profile={profile} />;
         case "trends":
           return <ComparisonSection profile={profile} />;
-        case "records":
-          return (
-            <div className="space-y-4">
-              <PlaceholderSection
-                title="Personal Records"
-                description="Your all-time best performances will appear here. Visit your public profile to see all PRs."
-              />
-            </div>
-          );
         case "predictions":
           return (
             <div className="space-y-6">
@@ -513,16 +477,10 @@ const Dashboard = () => {
           return <TeamsSection profile={profile} isCoach={isCoach} />;
         case "messages":
           return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "attendance":
-          return <PlaceholderSection title="Attendance" description="Attendance tracking coming soon." />;
-        case "checkins":
-          return <PlaceholderSection title="Check-ins" description="Daily athlete check-ins coming soon." />;
         case "leaderboard":
           return <TeamsSection profile={profile} isCoach={isCoach} />;
         case "comparison":
           return <AthleteComparisonSection />;
-        case "teamsnap":
-          return <PlaceholderSection title="TeamSnap" description="TeamSnap integration coming soon." />;
         case "plan-gen":
           return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
         case "load-mgmt":
@@ -551,8 +509,6 @@ const Dashboard = () => {
           return <CombineSection />;
         case "alumni":
           return <AlumniNetworkSection />;
-        case "commitments":
-          return <PlaceholderSection title="Commitments" description="Athlete commitment tracking coming soon." />;
         default:
           return null;
       }
@@ -601,8 +557,6 @@ const Dashboard = () => {
           return <FriendsSection profile={profile} />;
         case "referrals":
           return <ReferralSection profile={profile} />;
-        case "shareable":
-          return <PlaceholderSection title="Share" description="Shareable profile and workout cards coming soon." />;
         default:
           return null;
       }
@@ -619,8 +573,6 @@ const Dashboard = () => {
           return <AskSection />;
         case "concept2":
           return <Concept2Section />;
-        case "integrations":
-          return <PlaceholderSection title="Integrations" description="Third-party integrations coming soon." />;
         default:
           return null;
       }
