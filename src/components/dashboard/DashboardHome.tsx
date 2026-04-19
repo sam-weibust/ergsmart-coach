@@ -53,12 +53,16 @@ function formatDuration(seconds: number): string {
 
 function formatInterval(interval: unknown): string {
   if (!interval) return "--";
-  const str = String(interval);
-  const match = str.match(/(\d{2}):(\d{2}):(\d{2})/);
-  if (match) {
-    const [, hours, minutes, seconds] = match;
-    return `${parseInt(hours) * 60 + parseInt(minutes)}:${seconds}`;
+  const str = String(interval).trim();
+  // PostgreSQL interval: "HH:MM:SS.s" or "MM:SS.s"
+  const long = str.match(/^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/);
+  if (long) {
+    const totalMins = parseInt(long[1]) * 60 + parseInt(long[2]);
+    const secs = parseFloat(long[3]);
+    return `${totalMins}:${secs.toFixed(1).padStart(4, "0")}`;
   }
+  const short = str.match(/^(\d+):(\d{2}(?:\.\d+)?)$/);
+  if (short) return str;
   return str;
 }
 
@@ -109,7 +113,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       if (!user) return [];
       const { data } = await supabase
         .from("erg_workouts")
-        .select("id, workout_date, distance, total_time, avg_split_raw, stroke_rate")
+        .select("id, workout_date, distance, duration, avg_split, stroke_rate")
         .eq("user_id", user.id)
         .order("workout_date", { ascending: false })
         .limit(3);
@@ -273,7 +277,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
     let msg = `Hey ${firstName}! `;
     if (lastWorkout) {
       const dist = lastWorkout.distance ? `${(lastWorkout.distance / 1000).toFixed(1)}k` : "";
-      const split = lastWorkout.avg_split_raw ? ` at ${formatSplit(lastWorkout.avg_split_raw)}/500m` : "";
+      const split = lastWorkout.avg_split ? ` at ${formatInterval(lastWorkout.avg_split)}/500m` : "";
       msg += `Nice work on your ${dist} erg${split} recently. `;
     }
     if (current2kDisplay && current2kDisplay !== "--") {
@@ -409,7 +413,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
                   <>
                     <p className="text-xs font-medium text-foreground line-clamp-1">{nextRegatta.name}</p>
                     <p className="text-[10px] text-primary font-semibold">
-                      {daysToRegatta === 0 ? "Today!" : daysToRegatta === 1 ? "Tomorrow" : `${daysToRegatta}d away`}
+                      {daysToRegatta === null ? "" : daysToRegatta === 0 ? "Today!" : daysToRegatta === 1 ? "Tomorrow" : `${daysToRegatta}d away`}
                     </p>
                   </>
                 ) : (
@@ -491,11 +495,11 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
                         </div>
                       </div>
                       <div className="text-right">
-                        {w.avg_split_raw && (
-                          <p className="text-xs font-mono font-semibold text-foreground">{formatSplit(w.avg_split_raw)}</p>
+                        {w.avg_split && (
+                          <p className="text-xs font-mono font-semibold text-foreground">{formatInterval(w.avg_split)}</p>
                         )}
-                        {w.total_time && (
-                          <p className="text-[10px] text-muted-foreground">{formatDuration(w.total_time)}</p>
+                        {w.duration && (
+                          <p className="text-[10px] text-muted-foreground">{formatInterval(w.duration)}</p>
                         )}
                       </div>
                     </div>

@@ -397,11 +397,18 @@ function fmtSplitSec(s: number | null | undefined): string | undefined {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// Parse text split "M:SS" or "M:SS.t" → seconds per 500m
+// Parse text split "M:SS", "M:SS.t", or PostgreSQL interval "HH:MM:SS.t" → seconds per 500m
 function parseSplitText(v: string | null | undefined): number | null {
   if (!v) return null;
   const str = String(v).trim();
   const parts = str.split(":");
+  if (parts.length === 3) {
+    // PostgreSQL interval: HH:MM:SS.t — convert to split = (H*60+M):SS
+    const h = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    const s = parseFloat(parts[2]);
+    if (!isNaN(h) && !isNaN(m) && !isNaN(s)) return h * 3600 + m * 60 + s;
+  }
   if (parts.length === 2) {
     const m = parseFloat(parts[0]);
     const s = parseFloat(parts[1]);

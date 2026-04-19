@@ -290,9 +290,19 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
       : (d?.time_formatted ?? workout.time_formatted ?? null);
 
     const totalDist = workout.distance;
+    const avgPaceFallback = (() => {
+      if (workout.avg_split) {
+        const sec = parseIntervalSec(workout.avg_split);
+        if (sec) return formatSplitTime(sec);
+        // already formatted (e.g. "1:52.3" from manual entry)
+        if (workout.avg_split.includes(":")) return workout.avg_split;
+      }
+      if (d?.pace != null) return formatPace(d.pace);
+      return null;
+    })();
     const avgPaceStr = (totalDist && durationSec)
       ? calcPacePer500(totalDist, durationSec * 10)
-      : (workout.avg_split ?? (d?.pace != null ? formatPace(d.pace) : null));
+      : avgPaceFallback;
 
     // Build the stat items list (only defined values)
     const stats: { label: string; value: string; mono?: boolean }[] = [];

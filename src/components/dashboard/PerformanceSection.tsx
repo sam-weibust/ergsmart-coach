@@ -157,6 +157,7 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
     const recentAvg = recent.reduce((sum, d) => sum + d[key], 0) / recent.length;
     const olderAvg = older.reduce((sum, d) => sum + d[key], 0) / older.length;
     
+    if (olderAvg === 0) return null;
     const change = ((recentAvg - olderAvg) / olderAvg) * 100;
     return change;
   };
