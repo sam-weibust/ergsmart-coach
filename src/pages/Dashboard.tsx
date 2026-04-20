@@ -254,17 +254,6 @@ const NAV_CONFIG: NavSection[] = [
     ],
   },
   {
-    id: "community",
-    label: "Community",
-    icon: MessagesSquare,
-    subs: [
-      { id: "forum", label: "Forum", description: "Community discussion boards", icon: MessageCircleMore },
-      { id: "directory", label: "Directory", description: "Find clubs and programs", icon: Globe },
-      { id: "friends", label: "Friends", description: "Connect with other athletes", icon: UserPlus },
-      { id: "referrals", label: "Referrals", description: "Invite friends to CrewSync", icon: Share2 },
-    ],
-  },
-  {
     id: "settings",
     label: "Settings",
     icon: Settings,

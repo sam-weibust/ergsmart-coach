@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ProfileEditPanel } from "./ProfileEditPanel";
 import EmbeddedAIChat from "./EmbeddedAIChat";
+import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
 import { c2Sync } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
@@ -649,6 +650,9 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
             </CardContent>
           </Card>
         </div>
+
+        {/* Community Feed */}
+        <DashboardCommunityFeed navTo={navTo} />
 
         {/* Mobile: AI Chat at bottom (collapsible) */}
         <div className="xl:hidden">
