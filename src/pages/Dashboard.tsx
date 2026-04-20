@@ -155,6 +155,7 @@ const NAV_CONFIG: NavSection[] = [
       { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
       { id: "pacing", label: "Pacing", description: "Calculate and plan splits", icon: Calculator },
       { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
+      { id: "ask", label: "AI Coach", description: "Chat with your AI rowing coach", icon: Sparkles },
     ],
   },
   {
@@ -172,6 +173,17 @@ const NAV_CONFIG: NavSection[] = [
       { id: "equivalency", label: "Erg Equivalency", description: "Compare RowErg, SkiErg, BikeErg efforts", icon: ArrowLeftRight },
       { id: "wkg", label: "W/kg Ratio", description: "Power-to-weight and performance benchmarks", icon: BarChart3 },
       { id: "timeline", label: "Improvement Timeline", description: "AI roadmap to your goal 2K time", icon: TrendingUp },
+    ],
+  },
+  {
+    id: "friends",
+    label: "Friends",
+    icon: UserPlus,
+    subs: [
+      { id: "feed", label: "Feed", description: "Social activity feed from friends", icon: Activity },
+      { id: "messages", label: "Messages", description: "Direct messages with friends", icon: MessageCircle },
+      { id: "find", label: "Find Friends", description: "Search for and add friends", icon: Search },
+      { id: "requests", label: "Requests", description: "Pending friend requests", icon: UserPlus },
     ],
   },
   {
@@ -476,6 +488,11 @@ const Dashboard = () => {
       }
     }
 
+    // ── Friends ───────────────────────────────────────────────────────────────
+    if (activeSection === "friends") {
+      return <FriendsSection profile={profile} />;
+    }
+
     // ── Performance ───────────────────────────────────────────────────────────
     if (activeSection === "performance") {
       switch (activeSub) {
@@ -494,6 +511,8 @@ const Dashboard = () => {
           return <SplitCalculator />;
         case "technique":
           return <CritiqueSection />;
+        case "ask":
+          return <AskSection />;
         default:
           return null;
       }

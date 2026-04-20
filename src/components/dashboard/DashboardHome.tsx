@@ -11,7 +11,6 @@ import {
   User, Target, BarChart3, ArrowRight, AlertCircle
 } from "lucide-react";
 import { ProfileEditPanel } from "./ProfileEditPanel";
-import EmbeddedAIChat from "./EmbeddedAIChat";
 import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
 import { c2Sync } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -272,22 +271,6 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
     ? differenceInCalendarDays(parseISO(nextRegatta.event_date), new Date())
     : null;
 
-  // Build personalized AI greeting
-  const lastWorkout = recentWorkouts[0];
-  const aiGreeting = (() => {
-    let msg = `Hey ${firstName}! `;
-    if (lastWorkout) {
-      const dist = lastWorkout.distance ? `${(lastWorkout.distance / 1000).toFixed(1)}k` : "";
-      const split = lastWorkout.avg_split ? ` at ${formatInterval(lastWorkout.avg_split)}/500m` : "";
-      msg += `Nice work on your ${dist} erg${split} recently. `;
-    }
-    if (current2kDisplay && current2kDisplay !== "--") {
-      msg += `With a current 2K of ${current2kDisplay}, `;
-    }
-    msg += "I'm here to help you train smarter. What can I help you with today?";
-    return msg;
-  })();
-
   // Today's workout summary from plan
   let todaySessionSummary: string | null = null;
   if (todayPlan?.plan_content) {
@@ -307,9 +290,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   }
 
   return (
-    <div className="flex gap-4 xl:gap-6 min-h-0">
-      {/* ── Main left content ── */}
-      <div className="flex-1 min-w-0 space-y-4">
+    <div className="space-y-4">
 
         {/* Profile Card + Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -391,15 +372,18 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
               </CardContent>
             </Card>
 
-            {/* AI Requests */}
-            <Card className="border border-border">
+            {/* AI Coach */}
+            <Card
+              className="border border-border cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              onClick={() => navTo("performance", "ask")}
+            >
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Zap className="h-3.5 w-3.5 text-yellow-500" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">AI Coach</span>
                 </div>
                 <p className="text-xs font-medium text-foreground">Active</p>
-                <p className="text-[10px] text-muted-foreground">Unlimited chat</p>
+                <p className="text-[10px] text-primary">Ask now →</p>
               </CardContent>
             </Card>
 
@@ -653,17 +637,6 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
 
         {/* Community Feed */}
         <DashboardCommunityFeed navTo={navTo} />
-
-        {/* Mobile: AI Chat at bottom (collapsible) */}
-        <div className="xl:hidden">
-          <EmbeddedAIChat greeting={aiGreeting} collapsible />
-        </div>
-      </div>
-
-      {/* ── Right: AI Chat panel (desktop sticky) ── */}
-      <div className="hidden xl:flex flex-col w-80 shrink-0" style={{ height: "calc(100vh - 120px)", position: "sticky", top: "16px" }}>
-        <EmbeddedAIChat greeting={aiGreeting} />
-      </div>
 
       <ProfileEditPanel open={editPanelOpen} onClose={() => setEditPanelOpen(false)} />
     </div>
