@@ -23,7 +23,11 @@ export default function Concept2Callback() {
 
     const handleCallback = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // Use getSession() first — it reads from localStorage and works reliably on
+        // iOS Safari after a same-tab redirect (getUser() requires a network round-trip
+        // and can fail if the tab was just restored from a redirect).
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user ?? null;
         if (!user) {
           navigate("/auth");
           return;

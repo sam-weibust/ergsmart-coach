@@ -27,7 +27,7 @@ serve(async (req) => {
       });
     }
 
-    const redirectUri = "https://ergsmart-coach.vercel.app/auth/concept2/callback";
+    const redirectUri = "https://crewsync.app/auth/concept2/callback";
     const state = encodeURIComponent(user_id);
 
     const params = new URLSearchParams({
@@ -39,6 +39,8 @@ serve(async (req) => {
     });
 
     const authUrl = `https://log.concept2.com/oauth/authorize?${params.toString()}`;
+    console.log("[c2-connect] client_id prefix:", C2_CLIENT_ID.slice(0, 4));
+    console.log("[c2-connect] authorization URL:", authUrl);
 
     return new Response(JSON.stringify({ url: authUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

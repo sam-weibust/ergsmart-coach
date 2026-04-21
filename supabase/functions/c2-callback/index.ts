@@ -26,6 +26,8 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   try {
+    console.log("[c2-callback] method:", req.method, "url:", req.url);
+    console.log("[c2-callback] headers:", JSON.stringify(Object.fromEntries(req.headers)));
     const { code, user_id } = await req.json();
 
     if (!code || !user_id) {
@@ -44,7 +46,7 @@ serve(async (req) => {
         code,
         client_id: C2_CLIENT_ID,
         client_secret: C2_CLIENT_SECRET,
-        redirect_uri: "https://ergsmart-coach.vercel.app/auth/concept2/callback",
+        redirect_uri: "https://crewsync.app/auth/concept2/callback",
       }),
     });
 
@@ -58,7 +60,7 @@ serve(async (req) => {
           error: "Failed to exchange authorization code",
           concept2_status: tokenRes.status,
           concept2_error: errDetail,
-          redirect_uri_sent: "https://ergsmart-coach.vercel.app/auth/concept2/callback",
+          redirect_uri_sent: "https://crewsync.app/auth/concept2/callback",
           client_id_present: !!C2_CLIENT_ID,
           client_secret_present: !!C2_CLIENT_SECRET,
         }),

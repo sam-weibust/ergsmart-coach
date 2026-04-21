@@ -48,10 +48,28 @@ export default function Concept2Section() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setIsConnectingC2(false); return; }
+
+      // Safari requires window.open() to be called synchronously within a user gesture.
+      // Open a blank popup NOW before any async work, then navigate it once we have the URL.
+      // On mobile Safari, window.open returns null or doesn't support window.opener —
+      // fall back to a same-tab redirect in that case.
+      const isMobileSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      let popup: Window | null = null;
+      if (!isMobileSafari) {
+        popup = window.open("about:blank", "c2_oauth", "width=520,height=620,left=200,top=100");
+      }
+
       const res = await c2Connect({ user_id: user.id });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      window.open(data.url, "c2_oauth", "width=520,height=620,left=200,top=100");
+
+      if (popup && !popup.closed) {
+        // Desktop: navigate the already-open popup to the auth URL
+        popup.location.href = data.url;
+      } else {
+        // Mobile Safari or popup was blocked: full-page redirect, callback returns to same tab
+        window.location.href = data.url;
+      }
     } catch (e: any) {
       setIsConnectingC2(false);
       toast({ title: "Failed to open Concept2 auth", description: e.message, variant: "destructive" });
