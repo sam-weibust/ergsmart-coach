@@ -33,8 +33,12 @@ function parseTimeSec(t: string | null): number | null {
   return null;
 }
 
-function fmtTime(t: string | null) {
-  return t ?? "—";
+function placementBadge(p: number | null) {
+  if (!p) return null;
+  if (p === 1) return <Badge className="text-xs">🥇 1st</Badge>;
+  if (p === 2) return <Badge variant="secondary" className="text-xs">🥈 2nd</Badge>;
+  if (p === 3) return <Badge variant="secondary" className="text-xs">🥉 3rd</Badge>;
+  return <Badge variant="outline" className="text-xs">#{p}</Badge>;
 }
 
 export default function MyRegattas({ profile }: { profile: any }) {
@@ -81,12 +85,9 @@ export default function MyRegattas({ profile }: { profile: any }) {
     );
   }
 
-  // Unique event names for filter
   const eventNames = Array.from(new Set(claimed.map((c) => c.event_name))).sort();
-
   const filtered = selectedEvent === "all" ? claimed : claimed.filter((c) => c.event_name === selectedEvent);
 
-  // Best placement per event
   const bestByEvent: Record<string, { placement: number | null; time: string | null }> = {};
   for (const c of claimed) {
     const existing = bestByEvent[c.event_name];
@@ -95,7 +96,6 @@ export default function MyRegattas({ profile }: { profile: any }) {
     }
   }
 
-  // Chart data: time trend for selected event (sorted by date)
   const chartData = filtered
     .filter((c) => c.regatta?.event_date && parseTimeSec(c.finish_time) !== null)
     .sort((a, b) => (a.regatta!.event_date! > b.regatta!.event_date! ? 1 : -1))
@@ -105,17 +105,9 @@ export default function MyRegattas({ profile }: { profile: any }) {
       label: c.regatta?.name,
     }));
 
-  const placementBadge = (p: number | null) => {
-    if (!p) return null;
-    if (p === 1) return <Badge className="text-xs">🥇 1st</Badge>;
-    if (p === 2) return <Badge variant="secondary" className="text-xs">🥈 2nd</Badge>;
-    if (p === 3) return <Badge variant="secondary" className="text-xs">🥉 3rd</Badge>;
-    return <Badge variant="outline" className="text-xs">#{p}</Badge>;
-  };
-
   return (
     <div className="space-y-4">
-      {/* Best results summary */}
+      {/* Personal Bests */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -191,7 +183,6 @@ export default function MyRegattas({ profile }: { profile: any }) {
                     const s = Math.round(v % 60);
                     return [`${m}:${String(s).padStart(2, "0")}`, "Finish Time"];
                   }}
-                  labelFormatter={(l) => l}
                 />
                 <Line type="monotone" dataKey="timeSec" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
@@ -219,8 +210,7 @@ export default function MyRegattas({ profile }: { profile: any }) {
                 <div className="flex items-center gap-2 shrink-0">
                   {c.finish_time && (
                     <span className="font-mono text-xs flex items-center gap-1 text-muted-foreground">
-                      <Clock className="h-2.5 w-2.5" />
-                      {fmtTime(c.finish_time)}
+                      <Clock className="h-2.5 w-2.5" />{c.finish_time}
                     </span>
                   )}
                   {placementBadge(c.placement)}
@@ -229,6 +219,7 @@ export default function MyRegattas({ profile }: { profile: any }) {
                     variant="ghost"
                     className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                     onClick={() => unclaim.mutate(c.id)}
+                    disabled={unclaim.isPending}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>

@@ -1,16 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Search, Calendar, MapPin, Users } from "lucide-react";
+import { Trophy, Search, Calendar, MapPin, Users, Loader2 } from "lucide-react";
 import RegattaSearch from "./RegattaSearch";
 import MyRegattas from "./MyRegattas";
 import UpcomingRegattas from "./UpcomingRegattas";
-import ClubSearch from "./ClubSearch";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Clock, ChevronRight } from "lucide-react";
 
 interface RegattasSectionProps {
   profile: any;
@@ -22,11 +17,11 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
   const [activeTab, setActiveTab] = useState(initialTab ?? "search");
   const queryClient = useQueryClient();
 
-  // Auto-refresh cache on mount
+  // Auto-refresh CrewTimer cache on mount
   const { data: autoRefresh } = useQuery({
-    queryKey: ["regattas-auto-refresh"],
+    queryKey: ["regattas-auto-refresh-ct"],
     queryFn: async () => {
-      const { data } = await supabase.functions.invoke("fetch-regattacentral", {
+      const { data } = await supabase.functions.invoke("fetch-crewtimer", {
         body: { action: "auto_load" },
       });
       return data ?? null;
@@ -40,22 +35,8 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
     if (autoRefresh?.refreshed) {
       queryClient.invalidateQueries({ queryKey: ["regattas-search"] });
       queryClient.invalidateQueries({ queryKey: ["upcoming-regattas"] });
-      queryClient.invalidateQueries({ queryKey: ["recent-results"] });
     }
   }, [autoRefresh, queryClient]);
-
-  // Load most recent completed event's results
-  const { data: recentData } = useQuery({
-    queryKey: ["recent-results"],
-    queryFn: async () => {
-      const { data } = await supabase.functions.invoke("fetch-regattacentral", {
-        body: { action: "recent_results" },
-      });
-      return data ?? null;
-    },
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-  });
 
   return (
     <div className="space-y-4">
@@ -65,7 +46,7 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
           Regattas
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Find regattas, view results, and track your racing history
+          Find regattas, search athlete results, and track your racing history — powered by CrewTimer
         </p>
       </div>
 
@@ -83,10 +64,6 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
             <Trophy className="h-3.5 w-3.5" />
             My Regattas
           </TabsTrigger>
-          <TabsTrigger value="clubs" className="gap-1.5 text-xs sm:text-sm">
-            <MapPin className="h-3.5 w-3.5" />
-            Clubs
-          </TabsTrigger>
           {isCoach && (
             <TabsTrigger value="team" className="gap-1.5 text-xs sm:text-sm">
               <Users className="h-3.5 w-3.5" />
@@ -95,10 +72,7 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
           )}
         </TabsList>
 
-        <TabsContent value="search" className="mt-4 space-y-4">
-          {recentData?.regatta && recentData.results?.length > 0 && (
-            <RecentResultsBanner regatta={recentData.regatta} results={recentData.results} />
-          )}
+        <TabsContent value="search" className="mt-4">
           <RegattaSearch profile={profile} />
         </TabsContent>
 
@@ -108,10 +82,6 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
 
         <TabsContent value="my" className="mt-4">
           <MyRegattas profile={profile} />
-        </TabsContent>
-
-        <TabsContent value="clubs" className="mt-4">
-          <ClubSearch />
         </TabsContent>
 
         {isCoach && (
@@ -124,75 +94,9 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
   );
 }
 
-// ── Recent Results Banner ────────────────────────────────────────────────────
-function RecentResultsBanner({ regatta, results }: { regatta: any; results: any[] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const grouped: Record<string, any[]> = {};
-  for (const r of results) {
-    const key = r.event_name || "Unknown Event";
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(r);
-  }
-  const eventNames = Object.keys(grouped);
-  const shownEvents = expanded ? eventNames : eventNames.slice(0, 3);
-
-  return (
-    <Card className="border-primary/30 bg-primary/5">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-primary" />
-              Latest Results
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {regatta.name}
-              {regatta.event_date && ` · ${new Date(regatta.event_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
-              {regatta.location && ` · ${regatta.location}`}
-            </p>
-          </div>
-          <Badge variant="secondary" className="text-xs shrink-0">{results.length} results</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0 space-y-3">
-        {shownEvents.map((eventName) => (
-          <div key={eventName}>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{eventName}</p>
-            <div className="space-y-0.5">
-              {grouped[eventName].slice(0, 5).map((r: any) => (
-                <div key={r.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono w-6 shrink-0 text-muted-foreground">#{r.placement}</span>
-                    <span className="font-medium truncate">{r.club || "—"}</span>
-                  </div>
-                  {r.finish_time && (
-                    <span className="font-mono text-muted-foreground flex items-center gap-1 shrink-0">
-                      <Clock className="h-2.5 w-2.5" />
-                      {r.finish_time}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-        {eventNames.length > 3 && (
-          <Button variant="ghost" size="sm" className="w-full h-7 text-xs gap-1" onClick={() => setExpanded(!expanded)}>
-            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
-            {expanded ? "Show less" : `Show ${eventNames.length - 3} more events`}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Team Regattas (coaches only) ─────────────────────────────────────────────
-
 function TeamRegattas({ profile }: { profile: any }) {
   const { data: teamRegattaData, isLoading } = useQuery({
-    queryKey: ["team-regattas", profile?.id],
+    queryKey: ["team-regattas-ct", profile?.id],
     queryFn: async () => {
       const { data: teams } = await supabase
         .from("teams")
@@ -208,7 +112,6 @@ function TeamRegattas({ profile }: { profile: any }) {
           .eq("team_id", team.id);
         members?.forEach((m) => teamMemberIds.push(m.user_id));
       }
-
       if (!teamMemberIds.length) return [];
 
       const { data: claims } = await supabase
@@ -218,7 +121,6 @@ function TeamRegattas({ profile }: { profile: any }) {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      // Group by regatta
       const grouped: Record<string, { regatta: any; athletes: any[] }> = {};
       for (const claim of claims || []) {
         const rid = claim.regatta_id;
@@ -255,36 +157,19 @@ function TeamRegattas({ profile }: { profile: any }) {
   return (
     <div className="space-y-4">
       {teamRegattaData.map((item) => (
-        <Card key={item.regatta?.id}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{item.regatta?.name}</CardTitle>
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mt-1">
-              {item.regatta?.event_date && <span>{new Date(item.regatta.event_date).toLocaleDateString()}</span>}
-              {item.regatta?.location && <span>• {item.regatta.location}</span>}
-              <Badge variant="secondary">{item.athletes.length} athlete{item.athletes.length !== 1 ? "s" : ""}</Badge>
+        <div key={item.regatta?.id} className="border rounded-lg p-4">
+          <p className="font-semibold">{item.regatta?.name}</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            {item.regatta?.event_date && new Date(item.regatta.event_date).toLocaleDateString()}
+            {item.regatta?.location && ` · ${item.regatta.location}`}
+          </p>
+          {item.athletes.map((a, i) => (
+            <div key={i} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
+              <span className="font-medium">{a.name}</span>
+              <span className="text-muted-foreground text-xs">{a.event} {a.placement ? `· #${a.placement}` : ""} {a.finish_time ? `· ${a.finish_time}` : ""}</span>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {item.athletes.map((a, i) => (
-                <div key={i} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
-                  <div>
-                    <span className="font-medium">{a.name}</span>
-                    <span className="text-muted-foreground ml-2">{a.event}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {a.placement && (
-                      <Badge variant={a.placement === 1 ? "default" : "outline"}>
-                        {a.placement === 1 ? "🥇" : a.placement === 2 ? "🥈" : a.placement === 3 ? "🥉" : `#${a.placement}`}
-                      </Badge>
-                    )}
-                    {a.finish_time && <span className="font-mono text-xs">{a.finish_time}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       ))}
     </div>
   );

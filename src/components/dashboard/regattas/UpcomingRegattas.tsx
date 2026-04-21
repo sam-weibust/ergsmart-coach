@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Calendar, MapPin, CheckCircle2, Plus, ExternalLink, Clock } from "lucide-react";
+import { Loader2, Calendar, MapPin, CheckCircle2, Plus, Clock } from "lucide-react";
 
 interface Regatta {
   id: string;
@@ -15,13 +15,13 @@ interface Regatta {
   state: string | null;
   host_club: string | null;
   event_type: string | null;
-  rc_url: string | null;
+  level: string | null;
+  status: string | null;
 }
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
-  const diff = new Date(dateStr).getTime() - Date.now();
-  return Math.ceil(diff / 86400000);
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
 }
 
 function countdownLabel(days: number | null) {
@@ -37,18 +37,18 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
   const queryClient = useQueryClient();
 
   const today = new Date().toISOString().split("T")[0];
-  const future = new Date(Date.now() + 90 * 86400000).toISOString().split("T")[0];
+  const future = new Date(Date.now() + 120 * 86400000).toISOString().split("T")[0];
 
   const { data: regattas = [], isLoading } = useQuery<Regatta[]>({
     queryKey: ["upcoming-regattas"],
     queryFn: async () => {
       const { data } = await supabase
         .from("regattas")
-        .select("*")
+        .select("id, name, event_date, end_date, location, state, host_club, event_type, level, status")
         .gte("event_date", today)
         .lte("event_date", future)
         .order("event_date", { ascending: true })
-        .limit(50);
+        .limit(60);
       return (data || []) as Regatta[];
     },
   });
@@ -99,7 +99,7 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
       <div className="text-center py-16 text-muted-foreground">
         <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
         <p className="font-medium">No upcoming regattas found</p>
-        <p className="text-sm mt-1">Check back soon or search RegattaCentral to load data</p>
+        <p className="text-sm mt-1">Sync from CrewTimer on the Search tab to load data</p>
       </div>
     );
   }
@@ -116,7 +116,7 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-6">
-      {/* My upcoming */}
+      {/* My schedule */}
       {attending.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -174,6 +174,9 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
                               {r.event_type.replace("_", " ")}
                             </Badge>
                           )}
+                          {r.level && (
+                            <Badge variant="secondary" className="text-xs shrink-0">{r.level}</Badge>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
                           {r.event_date && (
@@ -199,13 +202,6 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
                             {countdownLabel(days)}
                           </Badge>
                         )}
-                        {r.rc_url && (
-                          <a href={r.rc_url} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          </a>
-                        )}
                         <Button
                           size="sm"
                           variant={isAttending ? "default" : "outline"}
@@ -214,8 +210,8 @@ export default function UpcomingRegattas({ profile }: { profile: any }) {
                           disabled={toggleAttend.isPending}
                         >
                           {isAttending
-                            ? <><CheckCircle2 className="h-3 w-3" /> Going</>
-                            : <><Plus className="h-3 w-3" /> Attend</>}
+                            ? <><CheckCircle2 className="h-3 w-3" />Going</>
+                            : <><Plus className="h-3 w-3" />Attend</>}
                         </Button>
                       </div>
                     </div>
