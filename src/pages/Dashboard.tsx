@@ -93,7 +93,6 @@ import RaceSection from "@/components/dashboard/RaceSection";
 import { PublicProfileSection } from "@/components/dashboard/PublicProfileSection";
 import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
 import { CollegeTargetsSection } from "@/components/dashboard/CollegeTargetsSection";
-import { CoachDirectorySection } from "@/components/dashboard/CoachDirectorySection";
 import CombineSection from "@/components/dashboard/CombineSection";
 import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
 import AthleteComparisonSection from "@/components/dashboard/AthleteComparisonSection";
@@ -226,7 +225,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "public-profile", label: "Public Profile", description: "Edit your public-facing profile", icon: Globe },
       { id: "recruiting-profile", label: "Recruiting Profile", description: "Manage your recruiting information", icon: Target },
       { id: "college-targets", label: "College Targets", description: "Track target schools and coaches", icon: School },
-      { id: "coach-directory", label: "Coach Directory", description: "Find and contact college coaches", icon: Users2 },
       { id: "combine", label: "Virtual Combine", description: "Participate in virtual combines", icon: Award },
       { id: "alumni", label: "Alumni Network", description: "Connect with alumni athletes", icon: GraduationCap },
     ],
@@ -557,8 +555,6 @@ const Dashboard = () => {
           return <RecruitingProfileSection />;
         case "college-targets":
           return <CollegeTargetsSection />;
-        case "coach-directory":
-          return <CoachDirectorySection profile={profile} />;
         case "combine":
           return <CombineSection />;
         case "alumni":

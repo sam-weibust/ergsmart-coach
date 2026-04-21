@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -15,6 +15,7 @@ const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
 const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66";
 const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66";
 const C2_STROKE_DATA  = "ce060034-43e5-11e4-916c-0800200c9a66";
+const C2_FORCE_CURVE  = "ce060037-43e5-11e4-916c-0800200c9a66";
 const HR_SVC          = "heart_rate";
 const HR_CHAR         = "heart_rate_measurement";
 
@@ -94,6 +95,16 @@ function fmtDriveTime(cs: number): string {
   return `${(cs / 100).toFixed(2)}s`;
 }
 
+function parseForceCurve(dv: DataView): number[] {
+  if (dv.byteLength < 2) return [];
+  const count = Math.min(dv.getUint8(0), 32);
+  const forces: number[] = [];
+  for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
+    forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1 N → N
+  }
+  return forces;
+}
+
 function parseSplitInput(str: string): number | null {
   const match = str.match(/^(\d+):(\d{1,2}(?:\.\d)?)$/);
   if (!match) return null;
@@ -119,6 +130,11 @@ export default function LiveErgView() {
   const [strokes, setStrokes] = useState<StrokePoint[]>([]);
   const [saved,   setSaved]   = useState(false);
 
+  const [currentCurve,        setCurrentCurve]        = useState<number[]>([]);
+  const [prevCurve,           setPrevCurve]           = useState<number[]>([]);
+  const [allCurves,           setAllCurves]           = useState<number[][]>([]);
+  const [forceCurveSupported, setForceCurveSupported] = useState<boolean | null>(null);
+
   const [targetInput, setTargetInput] = useState("");
   const [targetCs,    setTargetCs]    = useState<number | null>(null); // centiseconds
 
@@ -128,11 +144,15 @@ export default function LiveErgView() {
   const prevStateRef  = useRef<number | undefined>(undefined);
   const autoSavedRef  = useRef(false);
   const strokesRef    = useRef<StrokePoint[]>([]); // keep in sync for save
-  const dataRef       = useRef<Partial<LiveData>>({}); // keep in sync for save
+  const dataRef         = useRef<Partial<LiveData>>({}); // keep in sync for save
+  const currentCurveRef = useRef<number[]>([]);
+  const allCurvesRef    = useRef<number[][]>([]);
 
   // Sync strokes & data to refs for callbacks
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => { currentCurveRef.current = currentCurve; }, [currentCurve]);
+  useEffect(() => { allCurvesRef.current = allCurves; }, [allCurves]);
 
   // Accumulate graph points on every splitPace update
   const latestDist  = useRef(0);
@@ -201,7 +221,11 @@ export default function LiveErgView() {
         avg_heart_rate: d.heartRate || hrBpm || null,
         calories:       d.calories  || null,
         avg_watts:      avgWatts,
-        stroke_data:    pts.length > 0 ? pts : null,
+        stroke_data: (() => {
+          const hasCurves = allCurvesRef.current.length > 0;
+          if (pts.length > 0 && hasCurves) return { strokes: pts, forceCurves: allCurvesRef.current };
+          return pts.length > 0 ? pts : null;
+        })(),
       });
 
       setSaved(true);
@@ -262,6 +286,10 @@ export default function LiveErgView() {
     autoSavedRef.current = false;
     prevStateRef.current = undefined;
     setSaved(false);
+    setCurrentCurve([]);
+    setPrevCurve([]);
+    setAllCurves([]);
+    setForceCurveSupported(null);
 
     try {
       const device = await (navigator as any).bluetooth.requestDevice({
@@ -330,6 +358,23 @@ export default function LiveErgView() {
         accumulateStroke(parseStrokeData(e.target.value));
       });
     } catch {}
+
+    try {
+      const fcc = await svc.getCharacteristic(C2_FORCE_CURVE);
+      await fcc.startNotifications();
+      fcc.addEventListener("characteristicvaluechanged", (e: any) => {
+        const forces = parseForceCurve(e.target.value);
+        if (forces.length > 0) {
+          setForceCurveSupported(true);
+          setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
+          setCurrentCurve(forces);
+          setAllCurves(prev => [...prev, forces]);
+        }
+      });
+      setForceCurveSupported(true);
+    } catch {
+      setForceCurveSupported(false);
+    }
   };
 
   const disconnectErg = useCallback(() => {
@@ -362,6 +407,49 @@ export default function LiveErgView() {
   const splitValues = strokes.map(s => s.split).filter(Boolean);
   const minSplit = splitValues.length ? Math.min(...splitValues) - 500 : 6000;
   const maxSplit = splitValues.length ? Math.max(...splitValues) + 500 : 12000;
+
+  // ── Force curve derived data ──────────────────────────────────
+  const forceCurveChartData = useMemo(() => {
+    if (currentCurve.length === 0) return [];
+    const len = currentCurve.length;
+    const peakVal = Math.max(...currentCurve, 1);
+    const peakIdx = Math.round(len * 0.38);
+    const sigma = len * 0.22;
+    const avgValues = allCurves.length > 1
+      ? Array.from({ length: len }, (_, i) =>
+          allCurves.reduce((s, c) => s + (c[i] ?? 0), 0) / allCurves.length)
+      : null;
+    return Array.from({ length: len }, (_, i) => ({
+      idx: i,
+      current: parseFloat((currentCurve[i] ?? 0).toFixed(1)),
+      prev: prevCurve.length > 0
+        ? parseFloat((prevCurve[Math.round(i * prevCurve.length / len)] ?? 0).toFixed(1))
+        : undefined,
+      avg: avgValues ? parseFloat(avgValues[i].toFixed(1)) : undefined,
+      ideal: parseFloat((peakVal * Math.exp(-0.5 * Math.pow((i - peakIdx) / sigma, 2))).toFixed(1)),
+    }));
+  }, [currentCurve, prevCurve, allCurves]);
+
+  const forceCurveStats = useMemo(() => {
+    if (currentCurve.length === 0) return null;
+    const len = currentCurve.length;
+    const peakForce = Math.max(...currentCurve, 0);
+    const peakIdx = currentCurve.indexOf(peakForce);
+    const driveMs = data.driveTime ? data.driveTime * 10 : null;
+    const timeToPeak = driveMs ? Math.round((peakIdx / len) * driveMs) : null;
+    const drivePct = data.driveTime && data.recoveryTime
+      ? Math.round(data.driveTime / (data.driveTime + data.recoveryTime) * 100)
+      : null;
+    const d2 = currentCurve.slice(1, -1).map((v, i) =>
+      Math.abs((currentCurve[i + 2] ?? v) - 2 * v + currentCurve[i]));
+    const smoothness = d2.length > 0
+      ? Math.max(1, Math.min(10, Math.round(10 - (d2.reduce((a, b) => a + b, 0) / d2.length / Math.max(peakForce, 1)) * 30)))
+      : 5;
+    const catchSamples = Math.max(1, Math.floor(len * 0.12));
+    const catchAvg = currentCurve.slice(0, catchSamples).reduce((a, b) => a + b, 0) / catchSamples;
+    const catchSlip = peakForce > 0 && catchAvg < peakForce * 0.1;
+    return { peakForce: Math.round(peakForce), timeToPeak, drivePct, smoothness, catchSlip };
+  }, [currentCurve, data.driveTime, data.recoveryTime]);
 
   const statBlocks = [
     { label: "Split /500m",   value: fmtPace(data.splitPace ?? 0),                               big: true  },
@@ -529,6 +617,87 @@ export default function LiveErgView() {
           </div>
         )}
       </div>
+
+      {/* ── Force Curve ── */}
+      {forceCurveSupported !== false && currentCurve.length > 0 && (
+        <div className="px-4 pb-4">
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <div className="px-4 pt-3 pb-1 flex items-center justify-between">
+              <span className="text-xs text-gray-500 uppercase tracking-widest">Force Curve</span>
+              <span className="text-xs text-gray-600 font-mono">{allCurves.length} stroke{allCurves.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            <div style={{ height: 300 }} className="bg-gray-950">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={forceCurveChartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis
+                    dataKey="idx"
+                    tick={{ fill: "#9ca3af", fontSize: 10 }}
+                    axisLine={{ stroke: "#374151" }}
+                    tickLine={false}
+                    label={{ value: "Drive Phase →", position: "insideBottom", offset: -2, fill: "#4b5563", fontSize: 10 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "#9ca3af", fontSize: 10 }}
+                    axisLine={{ stroke: "#374151" }}
+                    tickLine={false}
+                    width={44}
+                    tickFormatter={(v: number) => `${v}N`}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                    labelFormatter={(v) => `Sample ${v}`}
+                    formatter={(value: any, name: string) => {
+                      const labels: Record<string, string> = { current: "Current", prev: "Previous", avg: "Average", ideal: "Ideal" };
+                      return [`${value}N`, labels[name] ?? name];
+                    }}
+                  />
+                  {/* Ghost ideal bell curve */}
+                  <Line type="monotone" dataKey="ideal" stroke="#374151" strokeWidth={1.5} dot={false} strokeDasharray="4 4" isAnimationActive={false} />
+                  {/* Average curve (dashed) */}
+                  {allCurves.length > 1 && (
+                    <Line type="monotone" dataKey="avg" stroke="#6b7280" strokeWidth={1.5} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
+                  )}
+                  {/* Previous stroke (faded blue) */}
+                  {prevCurve.length > 0 && (
+                    <Line type="monotone" dataKey="prev" stroke="#1d4ed8" strokeWidth={1.5} dot={false} strokeOpacity={0.4} isAnimationActive={false} />
+                  )}
+                  {/* Current stroke (bright blue) */}
+                  <Line type="monotone" dataKey="current" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {forceCurveStats && (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-gray-800 border-t border-gray-800">
+                <div className="bg-gray-950 px-3 py-2.5 text-center">
+                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Peak Force</p>
+                  <p className="text-sm font-bold text-white font-mono">{forceCurveStats.peakForce}N</p>
+                </div>
+                <div className="bg-gray-950 px-3 py-2.5 text-center">
+                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Time to Peak</p>
+                  <p className="text-sm font-bold text-white font-mono">{forceCurveStats.timeToPeak != null ? `${forceCurveStats.timeToPeak}ms` : "--"}</p>
+                </div>
+                <div className="bg-gray-950 px-3 py-2.5 text-center">
+                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Drive Length</p>
+                  <p className="text-sm font-bold text-white font-mono">{forceCurveStats.drivePct != null ? `${forceCurveStats.drivePct}%` : "--"}</p>
+                </div>
+                <div className="bg-gray-950 px-3 py-2.5 text-center">
+                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Smoothness</p>
+                  <p className="text-sm font-bold text-white font-mono">{forceCurveStats.smoothness}/10</p>
+                </div>
+                <div className="bg-gray-950 px-3 py-2.5 text-center">
+                  <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Catch Slip</p>
+                  <p className={`text-sm font-bold font-mono ${forceCurveStats.catchSlip ? "text-yellow-400" : "text-green-400"}`}>
+                    {forceCurveStats.catchSlip ? "Yes" : "No"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Not supported ── */}
       {!btSupported && (
