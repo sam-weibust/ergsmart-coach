@@ -108,15 +108,7 @@ export default function Concept2Section() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-semibold">Concept2 Integration</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Connect your Concept2 logbook to import your workout history and keep it in sync.
-        </p>
-      </div>
-
-      <Card>
+    <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Link className="h-5 w-5" />
@@ -171,6 +163,5 @@ export default function Concept2Section() {
           </div>
         </CardContent>
       </Card>
-    </div>
   );
 }

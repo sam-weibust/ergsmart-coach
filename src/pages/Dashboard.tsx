@@ -101,6 +101,7 @@ import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
+import WhoopConnectSection from "@/components/dashboard/WhoopConnectSection";
 import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
@@ -618,7 +619,16 @@ const Dashboard = () => {
         case "notifications":
           return <NotificationSettings />;
         case "connected-apps":
-          return <Concept2Section />;
+          return (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h2 className="text-xl font-semibold">Connected Apps</h2>
+                <p className="text-sm text-muted-foreground mt-1">Manage your third-party integrations.</p>
+              </div>
+              <Concept2Section />
+              <WhoopConnectSection />
+            </div>
+          );
         case "billing":
           return (
             <div className="max-w-2xl space-y-6">
