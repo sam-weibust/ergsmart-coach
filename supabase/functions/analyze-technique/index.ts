@@ -156,7 +156,7 @@ Return ONLY a valid JSON object, no markdown, no explanation outside the JSON:
   const timeout = setTimeout(() => controller.abort(), 55000);
 
   const claudeRequestBody = {
-    model: "claude-opus-4-5-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 2048,
     system: systemPrompt,
     messages: [{
