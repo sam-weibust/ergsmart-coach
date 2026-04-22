@@ -619,6 +619,8 @@ const PlanList = ({
   onDeletePlan,
   onSharePlan,
 }: PlanListProps) => {
+  const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(new Set());
+
   if (plansLoading) {
     return (
       <Card>
@@ -641,8 +643,6 @@ const PlanList = ({
   }
 
   if (!plans || plans.length === 0) return null;
-
-  const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(new Set());
 
   const toggleCalendarView = (planId: string) => {
     setCalendarPlanIds((prev) => {
