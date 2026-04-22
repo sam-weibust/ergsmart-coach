@@ -11,13 +11,14 @@ import {
   MapPin, School, Users, Globe, Instagram, Twitter, Youtube,
   ExternalLink, UserPlus, UserCheck, Eye, GraduationCap, TrendingUp,
   Dumbbell, BarChart3, Heart, Star, ArrowLeft, Mail, Link2,
-  RefreshCw, Unplug, Plug, Trophy
+  RefreshCw, Unplug, Plug, Trophy, Activity
 } from "lucide-react";
 import { CalendarHeatmap } from "@/components/dashboard/CalendarHeatmap";
 import { useToast } from "@/hooks/use-toast";
-import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
+import { c2Connect, c2Sync, c2Disconnect, whoopConnect, whoopSync, whoopDisconnect } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import { getSessionUser } from '@/lib/getUser';
+import { WhoopSection } from "@/components/dashboard/WhoopSection";
 
 const fmtSplit = (s: string | null) => {
   if (!s) return "—";
@@ -58,6 +59,12 @@ export default function AthleteProfile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Whoop state — must be declared unconditionally before any early returns
+  const [whoopConnected, setWhoopConnected] = useState<boolean | null>(null);
+  const [whoopLastSync, setWhoopLastSync] = useState<string | null>(null);
+  const [whoopSyncing, setWhoopSyncing] = useState(false);
+  const [whoopConnecting, setWhoopConnecting] = useState(false);
 
   // Concept2 state — must be declared unconditionally before any early returns
   const [c2Connected, setC2Connected] = useState<boolean | null>(null);
@@ -168,7 +175,24 @@ export default function AthleteProfile() {
       setC2Connected(true);
       setC2ImportedCount(parseInt(params.get("imported")!, 10));
     }
+    if (params.get("whoop") === "connected") {
+      setWhoopConnected(true);
+    }
   }, [profileData, currentUser]);
+
+  // Check Whoop connection status
+  useEffect(() => {
+    if (!currentUser || !profileData?.base?.id) return;
+    if (currentUser.id !== profileData.base.id) return;
+    supabase.from("whoop_connections")
+      .select("last_sync_at")
+      .eq("user_id", currentUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setWhoopConnected(!!data);
+        setWhoopLastSync(data?.last_sync_at ?? null);
+      });
+  }, [currentUser, profileData?.base?.id]);
 
   // Record view + increment count
   useEffect(() => {
@@ -272,6 +296,57 @@ export default function AthleteProfile() {
       setC2LastSync(null);
       setC2ImportedCount(null);
       toast({ title: "Concept2 disconnected" });
+    } catch {
+      toast({ title: "Disconnect failed", variant: "destructive" });
+    }
+  };
+
+  const handleWhoopConnect = async () => {
+    if (!currentUser) return;
+    setWhoopConnecting(true);
+    try {
+      const res = await whoopConnect({ user_id: currentUser.id });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({ title: "Connection error", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Connection failed", variant: "destructive" });
+    } finally {
+      setWhoopConnecting(false);
+    }
+  };
+
+  const handleWhoopSync = async () => {
+    if (!currentUser) return;
+    setWhoopSyncing(true);
+    try {
+      const res = await whoopSync({ user_id: currentUser.id });
+      const data = await res.json();
+      if (data.success) {
+        setWhoopLastSync(new Date().toISOString());
+        queryClient.invalidateQueries({ queryKey: ["whoop-section", base?.id] });
+        toast({ title: "Whoop synced!" });
+      } else {
+        toast({ title: "Sync failed", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setWhoopSyncing(false);
+    }
+  };
+
+  const handleWhoopDisconnect = async () => {
+    if (!currentUser) return;
+    try {
+      await whoopDisconnect({ user_id: currentUser.id });
+      setWhoopConnected(false);
+      setWhoopLastSync(null);
+      queryClient.invalidateQueries({ queryKey: ["whoop-section", base?.id] });
+      toast({ title: "Whoop disconnected" });
     } catch {
       toast({ title: "Disconnect failed", variant: "destructive" });
     }
@@ -483,6 +558,9 @@ export default function AthleteProfile() {
               </CardContent>
             </Card>
 
+            {/* Whoop Data Display */}
+            <WhoopSection userId={base.id} />
+
             {/* Recruiting Info */}
             {ap.is_recruiting && (
               <Card className="border-green-200 dark:border-green-800">
@@ -651,6 +729,71 @@ export default function AthleteProfile() {
                       >
                         <Plug className="h-3 w-3 mr-1" />
                         {c2Connecting ? "Connecting…" : "Connect Concept2 Account"}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Whoop Integration — only shown to profile owner */}
+            {isOwnProfile && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-[#e63946]" />
+                    Whoop
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {whoopConnected ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                          Connected
+                        </span>
+                      </div>
+                      {whoopLastSync && (
+                        <p className="text-xs text-muted-foreground">
+                          Last synced: {new Date(whoopLastSync).toLocaleDateString()}
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={handleWhoopSync}
+                          disabled={whoopSyncing}
+                        >
+                          <RefreshCw className={`h-3 w-3 mr-1 ${whoopSyncing ? "animate-spin" : ""}`} />
+                          {whoopSyncing ? "Syncing…" : "Sync Now"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-muted-foreground hover:text-destructive"
+                          onClick={handleWhoopDisconnect}
+                        >
+                          <Unplug className="h-3 w-3 mr-1" />
+                          Disconnect
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Connect Whoop to sync recovery, HRV, sleep, and strain data.
+                      </p>
+                      <Button
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={handleWhoopConnect}
+                        disabled={whoopConnecting}
+                      >
+                        <Plug className="h-3 w-3 mr-1" />
+                        {whoopConnecting ? "Connecting…" : "Connect Whoop"}
                       </Button>
                     </>
                   )}

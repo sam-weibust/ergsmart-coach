@@ -92,3 +92,19 @@ export function c2Disconnect(payload) {
 export function c2Sync(payload) {
   return callFunction("c2-sync", payload);
 }
+
+export function whoopConnect(payload) {
+  return callFunction("whoop-connect", payload);
+}
+
+export function whoopCallback(payload) {
+  return callFunction("whoop-callback", payload);
+}
+
+export function whoopSync(payload) {
+  return callFunction("whoop-sync", payload);
+}
+
+export function whoopDisconnect(payload) {
+  return callFunction("whoop-disconnect", payload);
+}

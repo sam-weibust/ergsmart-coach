@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import AthleteProfile from "./pages/AthleteProfile";
 import Concept2Callback from "./pages/Concept2Callback";
+import WhoopCallback from "./pages/WhoopCallback";
 import DirectoryPage from "./pages/DirectoryPage";
 import PersonalRecordsPage from "./pages/PersonalRecordsPage";
 import NotFound from "./pages/NotFound";
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/athlete/:username/prs" element={<PersonalRecordsPage />} />
             <Route path="/directory" element={<DirectoryPage />} />
             <Route path="/auth/concept2/callback" element={<Concept2Callback />} />
+            <Route path="/auth/whoop/callback" element={<WhoopCallback />} />
             <Route path="/regatta/:id" element={<RegattaPage />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

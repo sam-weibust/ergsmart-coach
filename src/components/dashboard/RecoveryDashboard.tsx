@@ -901,22 +901,27 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes, whoopRecRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
+        supabase.from("whoop_recovery").select("recovery_score,hrv_rmssd,sleep_performance_percentage").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
       const sleepEntries = sleepRes.data || [];
       const waterEntries = waterRes.data || [];
       const weightEntries = weightRes.data || [];
       const meals = mealsRes.data || [];
+      const whoopToday = whoopRecRes.data ?? null;
 
       // Sleep component (40 pts)
       const todaySleepEntry = sleepEntries.find(e => e.date === t);
       let sleepComponent = 0;
-      if (todaySleepEntry) {
+      if (whoopToday?.recovery_score != null) {
+        // Whoop recovery score is 0-100, use directly as sleep/recovery component
+        sleepComponent = whoopToday.recovery_score;
+      } else if (todaySleepEntry) {
         const durationScore = Math.min(1, todaySleepEntry.duration_hours / 8) * 0.7;
         const qualityScore = todaySleepEntry.quality_score ? (todaySleepEntry.quality_score / 10) * 0.3 : 0.3 * 0.5;
         sleepComponent = (durationScore + qualityScore) * 100;
@@ -957,20 +962,24 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      // Recovery score: sleep 40%, hydration 20%, calories 20%, weight 20%
-      const score: number | null = todaySleepEntry
-        ? sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
+      // Recovery score: if Whoop available use it as primary component (60%), else sleep 40%
+      const usingWhoop = whoopToday?.recovery_score != null;
+      const score: number | null = (usingWhoop || todaySleepEntry)
+        ? usingWhoop
+          ? sleepComponent * 0.6 + hydrationComponent * 0.2 + calorieComponent * 0.1 + weightComponent * 0.1
+          : sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
         : null;
 
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
-      const todaySleep = !!todaySleepEntry;
+      const todaySleep = !!todaySleepEntry || usingWhoop;
       const todayCalories = (mealsByDate[t] || 0) > 0;
       const checkInComplete = todaySleep && todayWaterLogged && todayWeight;
 
       return {
         score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
-        todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
+        todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete, usingWhoop,
+        whoopHrv: whoopToday?.hrv_rmssd ?? null,
       };
     },
   });
@@ -993,6 +1002,16 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         loading={scoreLoading}
         onLogSleep={() => { setActiveTab("sleep"); setShowSleepForm(true); }}
       />
+
+      {recoveryData?.usingWhoop && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <span className="inline-flex items-center gap-1 text-[#e63946] font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#e63946] inline-block" />
+            Powered by Whoop
+          </span>
+          <span>— recovery score uses Whoop data (HRV, sleep, resting HR)</span>
+        </div>
+      )}
 
       {isAfter9am && !recoveryData?.checkInComplete && !scoreLoading && (
         <Card className="border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/10">
