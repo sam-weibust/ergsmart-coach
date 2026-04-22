@@ -34,8 +34,37 @@ function movingAvg(data: { value: number }[], window: number): (number | null)[]
   });
 }
 
-function today() { return new Date().toISOString().split("T")[0]; }
-function nDaysAgo(n: number) { return subDays(new Date(), n).toISOString().split("T")[0]; }
+/** Returns YYYY-MM-DD in the user's local timezone. */
+function localDate(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function today() { return localDate(); }
+function nDaysAgo(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return localDate(d);
+}
+
+/** Returns the Monday (local) of the ISO week containing d. */
+function isoWeekMonday(d: Date = new Date()): string {
+  const date = new Date(d);
+  const day = date.getDay();
+  date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+  return localDate(date);
+}
+
+/** Human-readable date label for display. */
+function dateLabel(dateStr: string): string {
+  const t = today();
+  if (dateStr === t) return "Today";
+  const y = nDaysAgo(1);
+  if (dateStr === y) return "Yesterday";
+  return format(parseISO(dateStr), "MMM d");
+}
 
 const CHART_COLORS = {
   primary: "#2d6be4",
@@ -49,11 +78,12 @@ const CHART_COLORS = {
 // ── Recovery Score Card ───────────────────────────────────────────────────────
 
 function RecoveryScoreCard({
-  score, components, loading,
+  score, components, loading, onLogSleep,
 }: {
   score: number | null;
   components: { sleep: number; hydration: number; calories: number; weight: number };
   loading: boolean;
+  onLogSleep: () => void;
 }) {
   if (loading) return (
     <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
@@ -63,7 +93,22 @@ function RecoveryScoreCard({
     </Card>
   );
 
-  const s = score ?? 0;
+  // No score yet today — prompt check-in
+  if (score === null) return (
+    <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+      <CardContent className="p-5 text-center">
+        <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
+        <p className="text-white font-semibold text-sm mb-1">Complete today's recovery check-in</p>
+        <p className="text-white/50 text-xs mb-3">Log sleep, water, and weight to see your recovery score</p>
+        <Button size="sm" onClick={onLogSleep}
+          className="bg-amber-500 hover:bg-amber-600 text-white border-0 text-xs">
+          Log Sleep to Start
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  const s = score;
   const color = s >= 75 ? "#10b981" : s >= 50 ? "#f59e0b" : "#ef4444";
   const label = s >= 75 ? "Good" : s >= 50 ? "Moderate" : "Low";
 
@@ -203,12 +248,11 @@ function WeightTab({ profile }: { profile: any }) {
 
   const chartData = useMemo(() => {
     const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-    // Normalize to lbs for display consistency if mixed units
     return sorted.map((e, i) => {
       const weightInUnit = e.unit === unit ? e.weight : e.unit === "kg"
         ? parseFloat((e.weight * 2.20462).toFixed(1))
         : parseFloat((e.weight / 2.20462).toFixed(1));
-      return { date: format(parseISO(e.date), "MMM d"), value: weightInUnit, i };
+      return { date: dateLabel(e.date), rawDate: e.date, value: weightInUnit, i };
     });
   }, [entries, unit]);
 
@@ -369,7 +413,8 @@ function WaterTab({ profile }: { profile: any }) {
   const last7 = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
       const d = nDaysAgo(6 - i);
-      return { date: format(parseISO(d), "EEE"), amount: waterByDate[d] || 0, goal: hydrationGoal };
+      const label = i === 6 ? "Today" : format(parseISO(d), "EEE");
+      return { date: label, rawDate: d, amount: waterByDate[d] || 0, goal: hydrationGoal };
     });
   }, [waterByDate, hydrationGoal]);
 
@@ -512,7 +557,8 @@ function SleepTab({ profile }: { profile: any }) {
   const chartData = useMemo(() => {
     const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
     return sorted.map(e => ({
-      date: format(parseISO(e.date), "MMM d"),
+      date: dateLabel(e.date),
+      rawDate: e.date,
       hours: e.duration_hours,
       quality: e.quality_score,
     }));
@@ -618,28 +664,49 @@ function InsightsTab({ profile }: { profile: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const localToday = today();
+  const weekMonday = isoWeekMonday();
 
   const { data: cachedInsight } = useQuery({
-    queryKey: ["ai-insights"],
+    queryKey: ["ai-insights", "daily", localToday],
     queryFn: async () => {
       const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("ai_insights")
-        .select("*").eq("user_id", user.id).eq("insight_type", "daily").maybeSingle();
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("insight_type", "daily")
+        .eq("date", localToday)
+        .maybeSingle();
       return data;
     },
   });
 
-  const refreshInsight = async () => {
+  const { data: weeklyInsight } = useQuery({
+    queryKey: ["ai-insights", "weekly", weekMonday],
+    queryFn: async () => {
+      const user = await getSessionUser();
+      if (!user) return null;
+      const { data } = await supabase.from("ai_insights")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("insight_type", "weekly")
+        .eq("date", weekMonday)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const refreshInsight = async (type: "daily" | "weekly" = "daily") => {
     setRefreshing(true);
     try {
       const user = await getSessionUser();
       if (!user) return;
-      const { data, error } = await supabase.functions.invoke("generate-insights", {
-        body: { user_id: user.id },
+      const { error } = await supabase.functions.invoke("generate-insights", {
+        body: { user_id: user.id, local_date: type === "weekly" ? weekMonday : localToday, insight_type: type },
       });
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["ai-insights"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-insights", type] });
       toast({ title: "Insights updated" });
     } catch (e: any) {
       toast({ title: "Error generating insights", description: e.message, variant: "destructive" });
@@ -704,14 +771,15 @@ function InsightsTab({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-4">
+      {/* Daily insight */}
       <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
         <CardContent className="p-5">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-amber-400" />
-              <p className="text-white font-semibold text-sm">AI Coach Insight</p>
+              <p className="text-white font-semibold text-sm">Today's AI Coach Insight</p>
             </div>
-            <Button size="sm" variant="ghost" onClick={refreshInsight} disabled={refreshing}
+            <Button size="sm" variant="ghost" onClick={() => refreshInsight("daily")} disabled={refreshing}
               className="h-7 text-white/60 hover:text-white hover:bg-white/10">
               {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             </Button>
@@ -719,15 +787,46 @@ function InsightsTab({ profile }: { profile: any }) {
           {cachedInsight?.content ? (
             <>
               <p className="text-white/80 text-sm leading-relaxed">{cachedInsight.content}</p>
-              {lastUpdated && <p className="text-white/30 text-[10px] mt-3">Updated {lastUpdated}</p>}
+              {lastUpdated && <p className="text-white/30 text-[10px] mt-3">Generated {lastUpdated} · {dateLabel(localToday)}</p>}
             </>
           ) : (
             <div className="text-center py-4">
-              <p className="text-white/40 text-sm mb-3">Generate your first AI coaching insight</p>
-              <Button size="sm" onClick={refreshInsight} disabled={refreshing}
+              <p className="text-white/40 text-sm mb-3">Generate today's AI coaching insight</p>
+              <Button size="sm" onClick={() => refreshInsight("daily")} disabled={refreshing}
                 className="bg-white/10 hover:bg-white/20 text-white border-0">
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
                 Generate Insight
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Weekly insight */}
+      <Card className="border-0 bg-gradient-to-br from-[#0f1e3a] to-[#162b50]">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-blue-400" />
+              <p className="text-white font-semibold text-sm">Weekly Summary</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => refreshInsight("weekly")} disabled={refreshing}
+              className="h-7 text-white/60 hover:text-white hover:bg-white/10">
+              {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          </div>
+          {weeklyInsight?.content ? (
+            <>
+              <p className="text-white/80 text-sm leading-relaxed">{weeklyInsight.content}</p>
+              <p className="text-white/30 text-[10px] mt-3">Week of {format(parseISO(weekMonday), "MMM d")}</p>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-white/40 text-sm mb-3">Generate this week's summary</p>
+              <Button size="sm" onClick={() => refreshInsight("weekly")} disabled={refreshing}
+                className="bg-white/10 hover:bg-white/20 text-white border-0">
+                {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Target className="h-4 w-4 mr-2" />}
+                Generate Weekly
               </Button>
             </div>
           )}
@@ -793,10 +892,11 @@ function InsightsTab({ profile }: { profile: any }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("weight");
   const [showWeightForm, setShowWeightForm] = useState(false);
   const [showWaterForm, setShowWaterForm] = useState(false);
   const [showSleepForm, setShowSleepForm] = useState(false);
+  const isAfter9am = new Date().getHours() >= 9;
 
   const { data: recoveryData, isLoading: scoreLoading } = useQuery({
     queryKey: ["recovery-score"],
@@ -808,7 +908,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
       const [sleepRes, waterRes, weightRes, mealsRes] = await Promise.all([
-        supabase.from("sleep_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(7),
+        supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
@@ -819,12 +919,12 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const weightEntries = weightRes.data || [];
       const meals = mealsRes.data || [];
 
-      // Sleep component (40 pts)
-      const lastSleep = sleepEntries[0];
+      // Sleep component (40 pts) — only today's logged sleep counts
+      const todaySleepEntry = sleepEntries.find(e => e.date === t);
       let sleepComponent = 0;
-      if (lastSleep) {
-        const durationScore = Math.min(1, lastSleep.duration_hours / 8) * 0.7;
-        const qualityScore = lastSleep.quality_score ? (lastSleep.quality_score / 10) * 0.3 : 0.3 * 0.5;
+      if (todaySleepEntry) {
+        const durationScore = Math.min(1, todaySleepEntry.duration_hours / 8) * 0.7;
+        const qualityScore = todaySleepEntry.quality_score ? (todaySleepEntry.quality_score / 10) * 0.3 : 0.3 * 0.5;
         sleepComponent = (durationScore + qualityScore) * 100;
       }
 
@@ -863,17 +963,22 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      const score = sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2;
-
       // Today's logged status
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
-      const todaySleep = sleepEntries.some(e => e.date === t);
+      const todaySleep = !!todaySleepEntry;
       const todayCalories = (mealsByDate[t] || 0) > 0;
+
+      // Only show a score once at least sleep is logged for today
+      const score = todaySleep
+        ? sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
+        : null;
+
+      const checkInComplete = todaySleep && todayWaterLogged && todayWeight;
 
       return {
         score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
-        todayWeight, todayWaterLogged, todaySleep, todayCalories,
+        todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
       };
     },
   });
@@ -894,7 +999,21 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
           weight: recoveryData?.weightComponent ?? 0,
         }}
         loading={scoreLoading}
+        onLogSleep={() => { setActiveTab("sleep"); setShowSleepForm(true); }}
       />
+
+      {isAfter9am && !recoveryData?.checkInComplete && !scoreLoading && (
+        <Card className="border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/10">
+          <CardContent className="p-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+            <p className="text-sm font-medium">Complete today's recovery check-in — log sleep, water, and weight.</p>
+            <Button size="sm" variant="ghost" className="ml-auto text-amber-600 dark:text-amber-400 h-7 text-xs"
+              onClick={() => { setActiveTab("sleep"); setShowSleepForm(true); }}>
+              Start <ChevronRight className="h-3 w-3 ml-0.5" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <QuickLogRow
         onLogWeight={() => { setActiveTab("weight"); setShowWeightForm(true); }}

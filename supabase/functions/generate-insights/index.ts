@@ -18,14 +18,17 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { user_id } = await req.json();
+    const body = await req.json();
+    const { user_id, local_date, insight_type = "daily" } = body;
     if (!user_id) return new Response(JSON.stringify({ error: "Missing user_id" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
-    const today = new Date().toISOString().split("T")[0];
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    // Use client-supplied local date to avoid UTC day-boundary issues
+    const today = local_date || new Date().toISOString().split("T")[0];
+    const todayMs = new Date(today + "T00:00:00Z").getTime();
+    const thirtyDaysAgo = new Date(todayMs - 30 * 86400000).toISOString().split("T")[0];
+    const sevenDaysAgo = new Date(todayMs - 7 * 86400000).toISOString().split("T")[0];
 
     const [profileRes, weightRes, waterRes, sleepRes, mealsRes, workoutsRes] = await Promise.all([
       supabase.from("profiles").select("full_name,weight,height,age,diet_goal,hydration_goal_ml,weight_unit").eq("id", user_id).maybeSingle(),
@@ -131,13 +134,14 @@ ${workouts.map(w => `  ${w.workout_date}: ${w.distance}m, avg split ${w.avg_spli
     const aiResult = await anthropicResponse.json();
     const insight = aiResult?.content?.[0]?.text ?? "";
 
-    // Cache in database
+    // Cache in database — one row per user per insight_type per date
     await supabase.from("ai_insights").upsert({
       user_id,
-      insight_type: "daily",
+      insight_type,
+      date: today,
       content: insight,
       last_updated: new Date().toISOString(),
-    }, { onConflict: "user_id,insight_type" });
+    }, { onConflict: "user_id,insight_type,date" });
 
     return new Response(JSON.stringify({ insight, last_updated: new Date().toISOString() }), {
       status: 200,
