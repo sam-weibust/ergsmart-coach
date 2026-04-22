@@ -28,7 +28,7 @@ serve(async (req) => {
       client_id: CLIENT_ID,
       response_type: "code",
       redirect_uri: "https://crewsync.app/auth/whoop/callback",
-      scope: "read:recovery read:sleep read:workout read:profile read:cycles",
+      scope: "read:recovery read:sleep read:workout read:profile read:cycles offline",
       state: encodeURIComponent(user_id),
     });
 

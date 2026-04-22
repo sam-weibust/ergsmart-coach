@@ -168,7 +168,7 @@ serve(async (req) => {
 
     console.log("[sync-whoop] calling Whoop API endpoints in parallel...");
     const [recoveryData, sleepData, cycleData, workoutData] = await Promise.allSettled([
-      whoopGet(`/v1/recovery?start=${startStr}&end=${endStr}&limit=25`, token),
+      whoopGet(`/v1/recovery?limit=25`, token),
       whoopGet(`/v1/activity/sleep?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/cycle?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/activity/workout?start=${startStr}&end=${endStr}&limit=25`, token, true),
@@ -189,16 +189,18 @@ serve(async (req) => {
 
     if (recoveryData.status === "fulfilled") {
       console.log("[sync-whoop] recovery response keys:", Object.keys(recoveryData.value ?? {}));
+      console.log("[sync-whoop] recovery RAW (first 2000):", JSON.stringify(recoveryData.value).slice(0, 2000));
       if (recoveryRecords.length > 0) {
         console.log("[sync-whoop] first recovery record keys:", Object.keys(recoveryRecords[0]));
-        console.log("[sync-whoop] first recovery record:", JSON.stringify(recoveryRecords[0]).slice(0, 600));
+        console.log("[sync-whoop] ALL score_states:", recoveryRecords.map((r: any) => `${r.cycle_id ?? r.id}:${r.score_state}`).join(", "));
+        console.log("[sync-whoop] first recovery record FULL:", JSON.stringify(recoveryRecords[0]));
       }
       console.log("[sync-whoop] processing", recoveryRecords.length, "recovery records");
 
       for (const rec of recoveryRecords) {
-        if (rec.score_state === "UNSCORABLE") {
-          console.log("[sync-whoop] skipping UNSCORABLE recovery record cycle_id:", rec.cycle_id);
-          continue;
+        const isUnscorable = rec.score_state === "UNSCORABLE";
+        if (isUnscorable) {
+          console.log("[sync-whoop] UNSCORABLE recovery record cycle_id:", rec.cycle_id, "— will save biometrics if present");
         }
         // Date may be in created_at, updated_at, or cycle.start
         const dateStr = rec.created_at ?? rec.updated_at ?? rec.date ?? null;
@@ -206,7 +208,7 @@ serve(async (req) => {
         const date = toDate(dateStr);
         // score fields: score.recovery_score OR recovery_score at top level
         const score = rec.score ?? rec;
-        const recoveryScore = score.recovery_score ?? null;
+        const recoveryScore = isUnscorable ? null : (score.recovery_score ?? null);
         const hrv = score.hrv_rmssd_milli ?? score.hrv_rmssd ?? null;
         const rhr = score.resting_heart_rate ?? null;
         console.log("[sync-whoop] upserting whoop_recovery for date:", date, "cycle_id:", rec.cycle_id, "recovery_score:", recoveryScore, "hrv:", hrv, "rhr:", rhr);
@@ -228,33 +230,8 @@ serve(async (req) => {
       console.error("[sync-whoop] recovery fetch failed:", recoveryData.reason);
     }
 
-    // Fallback: if no recovery data saved, estimate from strain cycles
-    if (recoveryRowsSaved === 0 && cycleData.status === "fulfilled") {
-      const cycles: any[] = cycleData.value?.records ?? cycleData.value?.data ?? [];
-      const scoredCycles = cycles.filter(c => c.score_state !== "UNSCORABLE" && c.score?.strain != null);
-      if (scoredCycles.length > 0) {
-        console.log("[sync-whoop] no recovery records saved — generating estimated recovery from", scoredCycles.length, "strain cycles");
-        // Compute estimated recovery per day: 100 - (strain/21)*100, clamped 0-100
-        for (const cyc of scoredCycles) {
-          const date = toDate(cyc.start);
-          const strain = Number(cyc.score.strain);
-          const estRecovery = Math.round(Math.max(0, Math.min(100, 100 - (strain / 21) * 100)));
-          console.log("[sync-whoop] estimated recovery for date:", date, "strain:", strain, "est_recovery:", estRecovery);
-          const { error: estErr } = await supabase.from("whoop_recovery").upsert({
-            user_id,
-            whoop_cycle_id: cyc.id ?? null,
-            date,
-            recovery_score: estRecovery,
-            hrv_rmssd: null,
-            resting_heart_rate: null,
-            sleep_performance_percentage: null,
-            skin_temp_celsius: null,
-            blood_oxygen_percentage: null,
-          }, { onConflict: "user_id,date" });
-          if (estErr) console.error("[sync-whoop] estimated recovery upsert error:", estErr.message);
-          else { console.log("[sync-whoop] estimated recovery upsert OK for date:", date); synced++; }
-        }
-      }
+    if (recoveryRowsSaved === 0) {
+      console.log("[sync-whoop] no recovery records saved — /v1/recovery endpoint not available or returned no scored records for this account");
     }
 
     // Store sleep data + feed into sleep_entries
@@ -425,7 +402,10 @@ serve(async (req) => {
     if (syncTimeErr) console.error("[sync-whoop] failed to update last_sync_at:", syncTimeErr.message);
 
     console.log("[sync-whoop] done. synced:", synced);
-    return new Response(JSON.stringify({ success: true, synced }), {
+    const debugRecovery = recoveryData.status === "fulfilled"
+      ? { records: recoveryRecords.slice(0, 3).map((r: any) => ({ cycle_id: r.cycle_id, score_state: r.score_state, score: r.score, created_at: r.created_at })) }
+      : { error: String(recoveryData.reason) };
+    return new Response(JSON.stringify({ success: true, synced, debug_recovery: debugRecovery }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

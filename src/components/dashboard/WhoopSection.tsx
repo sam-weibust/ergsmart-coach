@@ -58,6 +58,13 @@ function CircleScore({ score, color }: { score: number | null; color: string }) 
 
 function interpretation(recovery: number | null, strain: number | null, hrv: number | null): string {
   if (recovery == null && strain == null) return "Sync your Whoop to get a training recommendation.";
+  // Strain-only interpretation when no scored recovery available
+  if (recovery == null && strain != null) {
+    if (strain < 8) return "Low strain load — your body has capacity. Today is a good day for a hard session.";
+    if (strain <= 13) return "Moderate strain load. A steady aerobic or technical session suits today well.";
+    if (strain <= 17) return "High strain load. Consider a lighter session or active recovery today.";
+    return "Very high strain load — rest or an easy paddle is recommended today.";
+  }
   const r = recovery ?? 50;
   const s = strain ?? 10;
   if (r >= 67 && s < 10) return "High recovery and low strain — today is ideal for a hard training session.";
@@ -114,7 +121,7 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
 
   if (isLoading) return null;
 
-  const hasAny = (data?.recovery.length ?? 0) > 0 || (data?.strain.length ?? 0) > 0;
+  const hasAny = (data?.strain.length ?? 0) > 0 || (data?.recovery.length ?? 0) > 0;
   if (!data || !hasAny) {
     return (
       <Card>
@@ -163,6 +170,9 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
   const rhr = latestRec?.resting_heart_rate != null ? Math.round(Number(latestRec.resting_heart_rate)) : null;
   const strain = latestStrain?.strain != null ? parseFloat(Number(latestStrain.strain).toFixed(1)) : null;
 
+  // If HRV and RHR are both null, the recovery score is strain-estimated (not from the Whoop recovery API)
+  const isEstimatedRecovery = hrv == null && rhr == null && recovScore != null;
+
   const rColor = recoveryColor(recovScore);
   const sColor = strainColor(strain);
 
@@ -181,7 +191,7 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
       </CardHeader>
       <CardContent className="space-y-5">
 
-        {/* ── 2×2 stat grid ── */}
+        {/* ── Stat grid ── */}
         <div className="grid grid-cols-2 gap-3">
 
           {/* Recovery Score */}
@@ -193,7 +203,9 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
               </span>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Recovery</p>
+              <p className="text-xs text-muted-foreground font-medium">
+                {isEstimatedRecovery ? "Est. Recovery" : "Recovery"}
+              </p>
               <p className="text-xs font-semibold mt-0.5" style={{ color: rColor }}>
                 {recovScore == null ? "—" : recovScore >= 67 ? "Green" : recovScore >= 34 ? "Yellow" : "Red"}
               </p>
@@ -215,39 +227,49 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
             </div>
           </div>
 
-          {/* HRV */}
-          <div className="rounded-xl border p-4">
-            <p className="text-xs text-muted-foreground font-medium mb-1">HRV</p>
-            <div className="flex items-end gap-1.5">
-              <span className="text-2xl font-bold text-foreground">{hrv ?? "—"}</span>
-              {hrv != null && <span className="text-xs text-muted-foreground mb-0.5">ms</span>}
-              <span className="mb-0.5 ml-0.5"><TrendIcon current={hrv} avg={avg7hrv} /></span>
+          {/* HRV — only show if data exists */}
+          {hrv != null && (
+            <div className="rounded-xl border p-4">
+              <p className="text-xs text-muted-foreground font-medium mb-1">HRV</p>
+              <div className="flex items-end gap-1.5">
+                <span className="text-2xl font-bold text-foreground">{hrv}</span>
+                <span className="text-xs text-muted-foreground mb-0.5">ms</span>
+                <span className="mb-0.5 ml-0.5"><TrendIcon current={hrv} avg={avg7hrv} /></span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {avg7hrv != null ? `7-day avg ${Math.round(avg7hrv)} ms` : ""}
+              </p>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {avg7hrv != null ? `7-day avg ${Math.round(avg7hrv)} ms` : "7-day avg —"}
-            </p>
-          </div>
+          )}
 
-          {/* Resting HR */}
-          <div className="rounded-xl border p-4">
-            <p className="text-xs text-muted-foreground font-medium mb-1">Resting HR</p>
-            <div className="flex items-end gap-1.5">
-              <span className="text-2xl font-bold text-foreground">{rhr ?? "—"}</span>
-              {rhr != null && <span className="text-xs text-muted-foreground mb-0.5">bpm</span>}
-              {/* Lower RHR is better, so flip trend direction */}
-              <span className="mb-0.5 ml-0.5">
-                {rhr != null && avg7rhr != null
-                  ? rhr < avg7rhr * 0.97 ? <TrendingDown className="h-3 w-3 text-green-500" />
-                  : rhr > avg7rhr * 1.03 ? <TrendingUp className="h-3 w-3 text-red-400" />
-                  : <Minus className="h-3 w-3 text-muted-foreground" />
-                  : <Minus className="h-3 w-3 text-muted-foreground" />}
-              </span>
+          {/* Resting HR — only show if data exists */}
+          {rhr != null && (
+            <div className="rounded-xl border p-4">
+              <p className="text-xs text-muted-foreground font-medium mb-1">Resting HR</p>
+              <div className="flex items-end gap-1.5">
+                <span className="text-2xl font-bold text-foreground">{rhr}</span>
+                <span className="text-xs text-muted-foreground mb-0.5">bpm</span>
+                <span className="mb-0.5 ml-0.5">
+                  {avg7rhr != null
+                    ? rhr < avg7rhr * 0.97 ? <TrendingDown className="h-3 w-3 text-green-500" />
+                    : rhr > avg7rhr * 1.03 ? <TrendingUp className="h-3 w-3 text-red-400" />
+                    : <Minus className="h-3 w-3 text-muted-foreground" />
+                    : <Minus className="h-3 w-3 text-muted-foreground" />}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {avg7rhr != null ? `7-day avg ${Math.round(avg7rhr)} bpm` : ""}
+              </p>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {avg7rhr != null ? `7-day avg ${Math.round(avg7rhr)} bpm` : "7-day avg —"}
-            </p>
-          </div>
+          )}
         </div>
+
+        {/* Estimated recovery note */}
+        {isEstimatedRecovery && (
+          <p className="text-[11px] text-muted-foreground leading-relaxed -mt-2">
+            Recovery estimated from strain. Full recovery, HRV, and RHR data requires Whoop API developer access.
+          </p>
+        )}
 
         {/* ── 7-day combo chart ── */}
         {chartData.length >= 2 && (
