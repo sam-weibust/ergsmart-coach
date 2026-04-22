@@ -13,6 +13,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import ShareWorkoutDialog from "./ShareWorkoutDialog";
+import ForceCurvePostWorkout from "./ForceCurvePostWorkout";
 import { RacePaceBoat } from "./RacePaceBoat";
 import { WorkoutAnnotations } from "./WorkoutAnnotations";
 import { ShareWorkoutButton } from "./WorkoutShareCard";
@@ -276,22 +277,6 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
       rawStrokeData && typeof rawStrokeData === "object" && !Array.isArray(rawStrokeData) && Array.isArray(rawStrokeData.forceCurves)
         ? rawStrokeData.forceCurves
         : null;
-    const [scrubIdx, setScrubIdx] = useState(0);
-    const displayCurve = forceCurves ? forceCurves[Math.min(scrubIdx, forceCurves.length - 1)] : null;
-    const avgCurve = forceCurves && forceCurves.length > 0 && forceCurves[0].length > 0
-      ? Array.from({ length: forceCurves[0].length }, (_, i) =>
-          forceCurves.reduce((s, c) => s + (c[i] ?? 0), 0) / forceCurves.length)
-      : null;
-    const forceCurveChartData = displayCurve && avgCurve
-      ? displayCurve.map((v, i) => ({
-          idx: i,
-          stroke: parseFloat(v.toFixed(1)),
-          avg: parseFloat(avgCurve[i].toFixed(1)),
-        }))
-      : displayCurve
-      ? displayCurve.map((v, i) => ({ idx: i, stroke: parseFloat(v.toFixed(1)) }))
-      : [];
-
     const hrAvg = d ? safeHR(d.heart_rate?.average) : safeHR(workout.heart_rate_average ?? workout.avg_heart_rate);
     const hrMax = d ? safeHR(d.heart_rate?.max)     : safeHR(workout.heart_rate_max ?? workout.max_heart_rate);
     const hrMin = d ? safeHR(d.heart_rate?.min)     : safeHR(workout.heart_rate_min ?? workout.min_heart_rate);
@@ -366,49 +351,9 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
           <p className="text-sm text-muted-foreground italic">{workout.notes}</p>
         )}
 
-        {/* Force curve history */}
-        {forceCurves && forceCurves.length > 0 && forceCurveChartData.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Force Curve History ({forceCurves.length} strokes)
-            </p>
-            <div className="rounded-xl bg-gray-950 border border-gray-800 overflow-hidden">
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={forceCurveChartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="idx" tick={{ fill: "#6b7280", fontSize: 9 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis tick={{ fill: "#6b7280", fontSize: 9 }} axisLine={{ stroke: "#374151" }} tickLine={false} width={40} tickFormatter={(v: number) => `${v}N`} />
-                    <Tooltip
-                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 6, fontSize: 11 }}
-                      formatter={(v: any, name: string) => [`${v}N`, name === "avg" ? "Average" : "Stroke"]}
-                    />
-                    {avgCurve && (
-                      <Line type="monotone" dataKey="avg" stroke="#6b7280" strokeWidth={1.5} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
-                    )}
-                    <Line type="monotone" dataKey="stroke" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {forceCurves.length > 1 && (
-                <div className="px-4 py-3 border-t border-gray-800 bg-gray-950">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 font-mono shrink-0 w-20">
-                      Stroke {scrubIdx + 1}/{forceCurves.length}
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={forceCurves.length - 1}
-                      value={scrubIdx}
-                      onChange={e => setScrubIdx(Number(e.target.value))}
-                      className="flex-1 accent-blue-500"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Force curve post-workout analysis */}
+        {forceCurves && forceCurves.length > 0 && (
+          <ForceCurvePostWorkout forceCurves={forceCurves} />
         )}
 
         {/* Intervals table */}
