@@ -15,7 +15,7 @@ interface Stats {
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "crewsync_stats_cache";
+const CACHE_KEY = "crewsync_stats_cache_v2";
 const CACHE_TTL = 5 * 60 * 1000;
 
 function useStats() {
@@ -38,12 +38,12 @@ function useStats() {
     async function fetchStats() {
       try {
         const [usersRes, workoutsRes, twoKRes] = await Promise.all([
-          supabase.from("profiles").select("id", { count: "exact", head: true }),
+          supabase.rpc("get_user_count"),
           supabase.from("erg_workouts").select("distance", { count: "exact" }),
           supabase.from("combine_entries").select("two_k_seconds").not("two_k_seconds", "is", null),
         ]);
 
-        const total_users = usersRes.count ?? 0;
+        const total_users = (usersRes.data as number) ?? 0;
         const total_workouts = workoutsRes.count ?? 0;
 
         const distances = (workoutsRes.data ?? []).map((r) => r.distance ?? 0);
