@@ -131,7 +131,7 @@ serve(async (req) => {
     // Store recovery data
     if (recoveryData.status === "fulfilled" && recoveryData.value?.records) {
       for (const rec of recoveryData.value.records) {
-        if (rec.score_state !== "SCORED" || !rec.score) continue;
+        if (rec.score_state === "UNSCORABLE") continue;
         const date = toDate(rec.created_at);
         await supabase.from("whoop_recovery").upsert({
           user_id,
@@ -151,7 +151,7 @@ serve(async (req) => {
     // Store sleep data + feed into sleep_entries
     if (sleepData.status === "fulfilled" && sleepData.value?.records) {
       for (const rec of sleepData.value.records) {
-        if (rec.nap || rec.score_state !== "SCORED" || !rec.score) continue;
+        if (rec.nap || rec.score_state === "UNSCORABLE") continue;
         const date = toDate(rec.end ?? rec.start);
         const stages = rec.score.stage_summary || {};
         const totalSleepMs = (stages.total_light_sleep_time_milli ?? 0) +
@@ -202,7 +202,7 @@ serve(async (req) => {
     // Store cycle/strain data
     if (cycleData.status === "fulfilled" && cycleData.value?.records) {
       for (const rec of cycleData.value.records) {
-        if (rec.score_state !== "SCORED" || !rec.score) continue;
+        if (rec.score_state === "UNSCORABLE") continue;
         const date = toDate(rec.start);
         await supabase.from("whoop_strain").upsert({
           user_id,
@@ -220,7 +220,7 @@ serve(async (req) => {
     // Store workout data + map rowing to erg_workouts
     if (workoutData.status === "fulfilled" && workoutData.value?.records) {
       for (const rec of workoutData.value.records) {
-        if (rec.score_state !== "SCORED" || !rec.score) continue;
+        if (rec.score_state === "UNSCORABLE") continue;
         const sportId = rec.sport_id ?? -1;
         const sportName = SPORT_NAMES[sportId] ?? `Sport ${sportId}`;
         const zones = rec.score.zone_duration ?? {};

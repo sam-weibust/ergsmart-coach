@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { format, subDays, parseISO, differenceInDays } from "date-fns";
 import { getSessionUser } from '@/lib/getUser';
+import { WhoopSection } from "@/components/dashboard/WhoopSection";
 
 interface RecoveryDashboardProps {
   profile: any;
@@ -1012,6 +1013,8 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
           <span>— recovery score uses Whoop data (HRV, sleep, resting HR)</span>
         </div>
       )}
+
+      {profile?.id && <WhoopSection userId={profile.id} />}
 
       {isAfter9am && !recoveryData?.checkInComplete && !scoreLoading && (
         <Card className="border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/10">

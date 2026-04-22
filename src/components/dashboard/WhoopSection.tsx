@@ -49,7 +49,23 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
   });
 
   if (isLoading) return null;
-  if (!data || data.recovery.length === 0) return null;
+  if (!data || data.recovery.length === 0) {
+    return (
+      <Card className="border-[#1a1a2e]/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4 text-[#e63946]" />
+            Whoop
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No Whoop data yet. Tap <strong>Sync Now</strong> in Settings → Connected Apps, or wait for your next Whoop cycle to be scored (usually overnight).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const today = data.recovery[0];
   const todayStrain = data.strain[0];
