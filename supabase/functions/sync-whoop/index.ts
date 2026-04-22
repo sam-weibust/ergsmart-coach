@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const WHOOP_BASE = "https://api.prod.whoop.com/developer";
@@ -72,6 +73,7 @@ function toDate(isoStr: string): string {
 }
 
 serve(async (req) => {
+  console.log("sync-whoop received request", req.method, new Date().toISOString());
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
