@@ -104,3 +104,12 @@ verify_jwt = false
 
 [functions.c2-logbook-sync]
 verify_jwt = false
+
+[functions.generate-insights]
+verify_jwt = false
+
+[functions.analyze-technique]
+verify_jwt = false
+
+[functions.fetch-crewtimer]
+verify_jwt = false
