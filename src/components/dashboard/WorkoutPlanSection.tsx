@@ -56,6 +56,7 @@ import { Calendar } from "@/components/ui/calendar";
 
 type Profile = {
   id: string;
+  full_name?: string | null;
   weight: number | null;
   height: number | null;
   experience_level?: string | null;
