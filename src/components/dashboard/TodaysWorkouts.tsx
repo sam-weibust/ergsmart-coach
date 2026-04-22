@@ -128,11 +128,14 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
       return {
         weekNumber: week.week || weekIndex + 1,
         phase: week.phase || "",
-        dayNumber: dayPlan.day || dayIndex + 1,
+        dayNumber: typeof dayPlan.day === "number" ? dayPlan.day : dayIndex + 1,
+        type: dayPlan.type || null,
         ergWorkout: dayPlan.ergWorkout || null,
         strengthWorkout: dayPlan.strengthWorkout || null,
         yogaSession: dayPlan.yogaSession || null,
         workout: dayPlan.workout || null,
+        warmup: dayPlan.warmup || null,
+        cooldown: dayPlan.cooldown || null,
       };
     } catch (e) {
       console.error("Error parsing today's plan:", e);
@@ -238,8 +241,8 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     );
   }
 
-  const { ergWorkout, strengthWorkout, yogaSession, workout, weekNumber, phase, dayNumber } = todaysPlan;
-  const isRestDay = !ergWorkout && !strengthWorkout && !!yogaSession;
+  const { ergWorkout, strengthWorkout, yogaSession, workout, weekNumber, phase, dayNumber, type: dayType, warmup: dayWarmup, cooldown: dayCooldown } = todaysPlan;
+  const isRestDay = dayType === "REST" || dayType === "OFF" || (!ergWorkout && !strengthWorkout && !!yogaSession);
 
   const handleLogErg = async () => {
     if (!profile || !ergWorkout) return;
@@ -396,7 +399,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
           </div>
           <CardDescription>
             {isRestDay
-              ? "Rest day — focus on recovery and yoga"
+              ? "Rest day — focus on recovery"
               : "From your training plan. Just fill in your actual results and log."}
           </CardDescription>
         </CardHeader>
@@ -422,7 +425,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         </Card>
       )}
 
-      {workout && !ergWorkout && !strengthWorkout && !yogaSession && (
+      {workout && !ergWorkout && !strengthWorkout && !yogaSession && !isRestDay && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">

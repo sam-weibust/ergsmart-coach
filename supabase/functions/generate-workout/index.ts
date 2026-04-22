@@ -147,8 +147,25 @@ Your ONLY output should be a single valid JSON object with this exact structure:
       "phase": "Base",
       "days": [
         {
-          "day": "Monday",
-          "workout": "..."
+          "day": 1,
+          "type": "UT2",
+          "warmup": "10 min easy rowing",
+          "workout": "60 min steady state",
+          "rest": "",
+          "breakup": "continuous",
+          "rates": "r18-20",
+          "cooldown": "10 min easy",
+          "ergWorkout": {
+            "zone": "UT2",
+            "description": "60 min steady state at UT2 intensity",
+            "distance": "14000",
+            "duration": "60 min",
+            "targetSplit": "2:05/500m",
+            "rate": "r18-20",
+            "warmup": "10 min easy rowing",
+            "cooldown": "10 min easy",
+            "restPeriods": ""
+          }
         }
       ]
     }
@@ -161,11 +178,21 @@ Rules you MUST follow:
 - No markdown formatting.
 - No text outside the JSON.
 - The "plan" array MUST contain exactly ${totalWeeks} week objects.
-- Each week MUST contain 7 days (Monday through Sunday).
-- Each day MUST have a "day" (day name string) and "workout" (detailed description string) field.
+- Each week MUST contain 7 days.
 - Each week MUST have a "phase" field: one of "Base", "Build", "Peak", or "Taper".
+- Each day MUST have ALL of these fields:
+  - "day": integer 1 (Monday) through 7 (Sunday)
+  - "type": one of "UT2", "UT1", "TR", "AT", "LIFT", "REST", "OFF", or "CROSS"
+  - "warmup": short string (e.g. "10 min easy") or "" for rest days
+  - "workout": concise printable description (e.g. "4x2000m @AT" or "Squat 4x6, Deadlift 3x5") or "Rest" for rest days
+  - "rest": rest interval between pieces (e.g. "3:00 rest") or ""
+  - "breakup": piece structure (e.g. "4x2000m" or "3x20 min") or "" for continuous/rest
+  - "rates": stroke rate or lift tempo (e.g. "r20-22" or "controlled") or ""
+  - "cooldown": short string (e.g. "10 min easy") or "" for rest days
+  - "ergWorkout": object with { zone, description, distance (meters as string), duration (e.g. "60 min"), targetSplit (e.g. "2:05/500m"), rate, warmup, cooldown, restPeriods } — use null for non-erg days
 - The workouts MUST be specific, actionable, and unique for each day.
-- Include erg zone (UT2/UT1/TR/AT), distance or duration, target split, and strength/recovery notes inline in the "workout" string.
+- For strength/lift days set "type" to "LIFT" and set "ergWorkout" to null.
+- For rest/off days set "type" to "REST", set "workout" to "Rest", and set "ergWorkout" to null.
 
 Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
 
