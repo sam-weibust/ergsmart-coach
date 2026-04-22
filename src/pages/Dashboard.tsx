@@ -87,6 +87,7 @@ import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
 import { SplitCalculator } from "@/components/dashboard/SplitCalculator";
 import RecoverySection from "@/components/dashboard/RecoverySection";
+import RecoveryDashboard from "@/components/dashboard/RecoveryDashboard";
 import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 import LiveErgView from "@/components/dashboard/LiveErgView";
 import RaceSection from "@/components/dashboard/RaceSection";
@@ -476,7 +477,7 @@ const Dashboard = () => {
         case "nutrition":
           return <MealPlanTab profile={profile} />;
         case "recovery":
-          return <RecoverySection profile={profile} />;
+          return <RecoveryDashboard profile={profile} />;
         case "schedule":
           return <TodaysWorkouts profile={profile} />;
         case "library":

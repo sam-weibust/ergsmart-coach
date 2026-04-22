@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Activity, Calendar, Medal, Pencil, Flame, Clock, Zap, Trophy,
   RefreshCw, Loader2, MessageSquare, ChevronRight, CheckCircle2,
-  User, Target, BarChart3, ArrowRight, AlertCircle
+  User, Target, BarChart3, ArrowRight, AlertCircle, Moon, Droplets, Scale
 } from "lucide-react";
 import { ProfileEditPanel } from "./ProfileEditPanel";
 import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
@@ -237,6 +237,38 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
     },
   });
 
+  // Recovery score for dashboard widget
+  const { data: recoveryScore } = useQuery({
+    queryKey: ["recovery-score-home"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const t = new Date().toISOString().split("T")[0];
+      const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+      const [sleepRes, waterRes, weightRes] = await Promise.all([
+        supabase.from("sleep_entries").select("duration_hours,quality_score,date").eq("user_id", user.id).order("date", { ascending: false }).limit(1),
+        supabase.from("water_entries").select("amount_ml,date").eq("user_id", user.id).eq("date", t),
+        supabase.from("weight_entries").select("date").eq("user_id", user.id).eq("date", t),
+      ]);
+      const lastSleep = sleepRes.data?.[0];
+      const todayWater = (waterRes.data || []).reduce((s: number, e: any) => s + (e.amount_ml || 0), 0);
+      const hydrationGoal = profile?.hydration_goal_ml || 2500;
+      const w = profile?.weight; const h = profile?.height || 175; const a = profile?.age || 25;
+      const bmr = w ? 10 * w + 6.25 * h - 5 * a + 5 : 2000;
+      const tdee = Math.round(bmr * 1.7);
+      let sleepComp = 50, hydComp = 50;
+      if (lastSleep) {
+        const dur = Math.min(1, lastSleep.duration_hours / 8) * 0.7;
+        const qual = lastSleep.quality_score ? (lastSleep.quality_score / 10) * 0.3 : 0.15;
+        sleepComp = (dur + qual) * 100;
+      }
+      hydComp = Math.min(100, (todayWater / hydrationGoal) * 100);
+      const score = Math.round(sleepComp * 0.5 + hydComp * 0.5);
+      return { score, weightLogged: (weightRes.data || []).length > 0 };
+    },
+    enabled: !loading,
+  });
+
   const handleSyncC2 = async () => {
     setSyncingC2(true);
     try {
@@ -408,6 +440,46 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
             </Card>
           </div>
         </div>
+
+        {/* Recovery Score Widget */}
+        <button
+          onClick={() => navTo("training", "recovery")}
+          className="w-full text-left"
+        >
+          <Card className="border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Moon className="h-4.5 w-4.5 text-primary" style={{ width: 18, height: 18 }} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Recovery</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {recoveryScore !== null && recoveryScore !== undefined ? (
+                        <>
+                          <span className="text-lg font-bold" style={{
+                            color: (recoveryScore?.score ?? 0) >= 75 ? "#10b981" : (recoveryScore?.score ?? 0) >= 50 ? "#f59e0b" : "#ef4444"
+                          }}>{recoveryScore?.score ?? "--"}</span>
+                          <span className="text-xs text-muted-foreground">/100</span>
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{
+                            background: ((recoveryScore?.score ?? 0) >= 75 ? "#10b981" : (recoveryScore?.score ?? 0) >= 50 ? "#f59e0b" : "#ef4444") + "22",
+                            color: (recoveryScore?.score ?? 0) >= 75 ? "#10b981" : (recoveryScore?.score ?? 0) >= 50 ? "#f59e0b" : "#ef4444"
+                          }}>
+                            {(recoveryScore?.score ?? 0) >= 75 ? "Good" : (recoveryScore?.score ?? 0) >= 50 ? "Moderate" : "Low"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Log data to score</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Quick Actions */}
         <div>
