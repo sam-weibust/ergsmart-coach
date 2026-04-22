@@ -15,7 +15,7 @@ interface Stats {
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "crewsync_stats_cache_v2";
+const CACHE_KEY = "crewsync_stats_cache_v3";
 const CACHE_TTL = 5 * 60 * 1000;
 
 function useStats() {
@@ -40,7 +40,7 @@ function useStats() {
         const [usersRes, workoutsRes, twoKRes] = await Promise.all([
           supabase.rpc("get_user_count"),
           supabase.from("erg_workouts").select("distance", { count: "exact" }),
-          supabase.from("combine_entries").select("two_k_seconds").not("two_k_seconds", "is", null),
+          supabase.rpc("get_avg_best_2k"),
         ]);
 
         const total_users = (usersRes.data as number) ?? 0;
@@ -55,12 +55,11 @@ function useStats() {
             ? `${(totalMeters / 1_000).toFixed(0)}K`
             : String(totalMeters);
 
-        const twoKTimes = (twoKRes.data ?? []).map((r) => r.two_k_seconds).filter(Boolean) as number[];
-        let average_2k = "7:30";
-        if (twoKTimes.length > 0) {
-          const avg = Math.round(twoKTimes.reduce((a, b) => a + b, 0) / twoKTimes.length);
-          const m = Math.floor(avg / 60);
-          const s = avg % 60;
+        const avgSec = twoKRes.data as number | null;
+        let average_2k = "---";
+        if (avgSec) {
+          const m = Math.floor(avgSec / 60);
+          const s = Math.round(avgSec % 60);
           average_2k = `${m}:${s.toString().padStart(2, "0")}`;
         }
 
