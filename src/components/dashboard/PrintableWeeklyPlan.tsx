@@ -111,153 +111,100 @@ export const PrintableWeeklyPlan = ({ weeks, title, userName }: PrintableWeeklyP
           </div>
         </div>
 
-        {weeks.map((week, weekIdx) => (
-          <div key={weekIdx} className="mb-8 print:mb-6 print:break-inside-avoid">
-            {/* Weekly grid table */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b-2 border-foreground">
-                    <th className="p-1 text-left w-20"></th>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                      <th key={d} className="p-1 text-center font-bold min-w-[100px]">
-                        {getDayLabel(d)}
-                      </th>
-                    ))}
-                    <th className={`p-1 text-center font-bold w-16 ${getPhaseColor(week.phase)}`}>
-                      {week.phase}
-                    </th>
-                  </tr>
-                  <tr className="border-b">
-                    <th className="p-1 text-left text-xs text-muted-foreground">
-                      Week {week.week}
-                    </th>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <th key={d} className={`p-1 text-center text-xs ${day?.type ? getTypeColor(day.type) : ""}`}>
-                          {week.startDate || ""}
-                        </th>
-                      );
-                    })}
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Type</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className={`p-1 text-center text-xs ${day?.type ? getTypeColor(day.type) : ""}`}>
-                          {day?.type || day?.ergWorkout?.zone || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Warmup</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.warmup || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Workout</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.workout || day?.ergWorkout?.description || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Rest</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.rest || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Breakup</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.breakup || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b border-dashed">
-                    <td className="p-1 text-xs font-medium">Rates</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.rates || day?.ergWorkout?.rate || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                  <tr className="border-b">
-                    <td className="p-1 text-xs font-medium">Cooldown</td>
-                    {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                      const day = week.days.find(dd => dd.day === d);
-                      return (
-                        <td key={d} className="p-1 text-center text-xs">
-                          {day?.cooldown || ""}
-                        </td>
-                      );
-                    })}
-                    <td></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+        {weeks.map((week, weekIdx) => {
+          const days: WorkoutDay[] = Array.isArray(week.days) ? week.days : [];
+          const findDay = (d: number) => days.find(dd => dd.day === d);
 
-            {/* Erg details section — days with ergWorkout data */}
-            {week.days.filter(d => d.ergWorkout).length > 0 && (
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 print:grid-cols-4">
-                {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                  const day = week.days.find(dd => dd.day === d);
-                  const ew = day?.ergWorkout;
-                  if (!ew) return null;
-                  return (
-                    <div
-                      key={d}
-                      className={`p-2 rounded border text-xs space-y-0.5 ${getTypeColor(day?.type || "")}`}
-                    >
-                      <div className="font-semibold">{getDayName(d)} — {ew.zone || day?.type}</div>
-                      {ew.description && <div className="text-muted-foreground">{ew.description}</div>}
-                      {ew.distance && <div><span className="font-medium">Dist:</span> {ew.distance}m</div>}
-                      {ew.duration && <div><span className="font-medium">Dur:</span> {ew.duration}</div>}
-                      {ew.targetSplit && <div><span className="font-medium">Split:</span> {ew.targetSplit}</div>}
-                      {ew.rate && <div><span className="font-medium">Rate:</span> {ew.rate}</div>}
-                      {ew.restPeriods && <div><span className="font-medium">Rest:</span> {ew.restPeriods}</div>}
-                    </div>
-                  );
-                })}
+          return (
+            <div key={weekIdx} className="mb-8 print:mb-6 print:break-inside-avoid">
+              {/* Weekly grid table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-foreground">
+                      <th className="p-1 text-left w-20"></th>
+                      {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                        <th key={d} className="p-1 text-center font-bold min-w-[100px]">
+                          {getDayLabel(d)}
+                        </th>
+                      ))}
+                      <th className={`p-1 text-center font-bold w-16 ${getPhaseColor(week.phase)}`}>
+                        {week.phase}
+                      </th>
+                    </tr>
+                    <tr className="border-b">
+                      <th className="p-1 text-left text-xs text-muted-foreground">
+                        Week {week.week}
+                      </th>
+                      {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                        const day = findDay(d);
+                        return (
+                          <th key={d} className={`p-1 text-center text-xs ${day?.type ? getTypeColor(day.type) : ""}`}>
+                            {week.startDate || ""}
+                          </th>
+                        );
+                      })}
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(["Type", "Warmup", "Workout", "Rest", "Breakup", "Rates", "Cooldown"] as const).map((rowLabel, rowIdx) => {
+                      const field = rowLabel.toLowerCase() as keyof WorkoutDay;
+                      const isLast = rowIdx === 6;
+                      return (
+                        <tr key={rowLabel} className={isLast ? "border-b" : "border-b border-dashed"}>
+                          <td className="p-1 text-xs font-medium">{rowLabel}</td>
+                          {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                            const day = findDay(d);
+                            let cellVal = "";
+                            if (rowLabel === "Type") cellVal = day?.type || day?.ergWorkout?.zone || "";
+                            else if (rowLabel === "Workout") cellVal = day?.workout || day?.ergWorkout?.description || "";
+                            else if (rowLabel === "Rates") cellVal = day?.rates || day?.ergWorkout?.rate || "";
+                            else cellVal = (day?.[field] as string) || "";
+                            return (
+                              <td
+                                key={d}
+                                className={`p-1 text-center text-xs ${rowLabel === "Type" && day?.type ? getTypeColor(day.type) : ""}`}
+                              >
+                                {cellVal}
+                              </td>
+                            );
+                          })}
+                          <td></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Erg details section — days with ergWorkout data */}
+              {days.some(d => d.ergWorkout) && (
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 print:grid-cols-4">
+                  {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                    const day = findDay(d);
+                    const ew = day?.ergWorkout;
+                    if (!ew) return null;
+                    return (
+                      <div
+                        key={d}
+                        className={`p-2 rounded border text-xs space-y-0.5 ${getTypeColor(day?.type || "")}`}
+                      >
+                        <div className="font-semibold">{getDayName(d)} — {ew.zone || day?.type}</div>
+                        {ew.description && <div className="text-muted-foreground">{ew.description}</div>}
+                        {ew.distance && <div><span className="font-medium">Dist:</span> {ew.distance}m</div>}
+                        {ew.duration && <div><span className="font-medium">Dur:</span> {ew.duration}</div>}
+                        {ew.targetSplit && <div><span className="font-medium">Split:</span> {ew.targetSplit}</div>}
+                        {ew.rate && <div><span className="font-medium">Rate:</span> {ew.rate}</div>}
+                        {ew.restPeriods && <div><span className="font-medium">Rest:</span> {ew.restPeriods}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* Print footer */}
         <div className="print:block hidden mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
