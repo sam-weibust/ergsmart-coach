@@ -19,6 +19,33 @@ interface TodaysWorkoutsProps {
 
 const lbsToKg = (lbs: number) => lbs / 2.20462;
 
+/** Extract meters from text like "5000m", "5,000 m", "10k", "10km" */
+function parseDistance(text: string): string {
+  if (!text) return "";
+  const mMatch = text.match(/(\d[\d,]*)\s*m(?:eters?)?\b/i);
+  if (mMatch) return mMatch[1].replace(/,/g, "");
+  const kMatch = text.match(/(\d+(?:\.\d+)?)\s*k(?:m)?\b/i);
+  if (kMatch) return String(Math.round(parseFloat(kMatch[1]) * 1000));
+  return "";
+}
+
+/** Extract minutes from text like "30 min", "45 minutes", "1 hour 15 min", "1:15:00" */
+function parseDurationMins(text: string): string {
+  if (!text) return "";
+  // HH:MM:SS or MM:SS
+  const colonMatch = text.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if (colonMatch) {
+    const a = parseInt(colonMatch[1]), b = parseInt(colonMatch[2]);
+    const hasSecs = colonMatch[3] !== undefined;
+    return hasSecs ? String(a * 60 + b) : String(a);
+  }
+  const hrMin = text.match(/(\d+)\s*h(?:our)?s?\s*(?:(\d+)\s*m(?:in)?)?/i);
+  if (hrMin) return String(parseInt(hrMin[1]) * 60 + parseInt(hrMin[2] || "0"));
+  const minMatch = text.match(/(\d+)\s*(?:min(?:utes?)?)/i);
+  if (minMatch) return minMatch[1];
+  return "";
+}
+
 const getZoneColor = (zone: string) => {
   switch (zone?.toUpperCase()) {
     case "UT2": return "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30";
@@ -39,6 +66,8 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
   const [planParseError, setPlanParseError] = useState(false);
 
   const [ergActuals, setErgActuals] = useState({
+    distance: "",
+    duration: "",
     avg_split: "",
     avg_heart_rate: "",
     calories: "",
@@ -125,6 +154,28 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
     }
   }, [todaysPlan]);
 
+  // Auto-populate erg actuals from the planned workout
+  useEffect(() => {
+    const ew = todaysPlan?.ergWorkout;
+    if (!ew) return;
+
+    // Distance: check explicit distance field first, then parse from description
+    const distance =
+      parseDistance(String(ew.distance ?? "")) ||
+      parseDistance(ew.description ?? "") ||
+      parseDistance(ew.workout ?? "");
+
+    // Duration in minutes: from the plan's duration string
+    const duration = parseDurationMins(ew.duration ?? "");
+
+    setErgActuals(prev => ({
+      ...prev,
+      distance,
+      duration,
+      avg_split: ew.targetSplit ?? "",
+    }));
+  }, [todaysPlan?.ergWorkout]);
+
   // Bug fix #8: Show parse error card
   if (planParseError) {
     return (
@@ -199,14 +250,11 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         ? `${ergWorkout.zone.toLowerCase()}_${ergWorkout.description?.toLowerCase().includes("interval") ? "intervals" : "steady_state"}`
         : "steady_state";
 
-      const durationStr = ergWorkout.duration || "";
-      const distanceMatch = ergWorkout.description?.match(/(\d{3,5})\s*m/);
-
       const workoutData = {
         user_id: profile.id,
         workout_type: workoutType,
-        distance: distanceMatch ? parseInt(distanceMatch[1]) : null,
-        duration: durationStr || null,
+        distance: ergActuals.distance ? parseInt(ergActuals.distance) : null,
+        duration: ergActuals.duration ? `${ergActuals.duration} minutes` : (ergWorkout.duration || null),
         avg_split: ergActuals.avg_split || ergWorkout.targetSplit || null,
         avg_heart_rate: ergActuals.avg_heart_rate ? parseInt(ergActuals.avg_heart_rate) : null,
         calories: ergActuals.calories ? parseInt(ergActuals.calories) : null,
@@ -247,7 +295,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
         if (fbData?.feedback) setErgFeedback(fbData.feedback);
       } catch {}
 
-      setErgActuals({ avg_split: "", avg_heart_rate: "", calories: "", notes: "" });
+      setErgActuals({ distance: "", duration: "", avg_split: "", avg_heart_rate: "", calories: "", notes: "" });
     } catch (error) {
       console.error("Error saving:", error);
       toast({ title: "Error", description: "Failed to save workout.", variant: "destructive" });
@@ -418,6 +466,27 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
 
               <div className="space-y-1">
                 <p className="text-sm font-medium text-primary">Your Actuals</p>
+                <p className="text-xs text-muted-foreground">Pre-filled from plan — edit if your actual differed.</p>
+              </div>
+              <div className="grid gap-3 grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Distance (m)</Label>
+                  <Input
+                    type="number"
+                    placeholder="5000"
+                    value={ergActuals.distance}
+                    onChange={(e) => setErgActuals(p => ({ ...p, distance: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Duration (min)</Label>
+                  <Input
+                    type="number"
+                    placeholder="30"
+                    value={ergActuals.duration}
+                    onChange={(e) => setErgActuals(p => ({ ...p, duration: e.target.value }))}
+                  />
+                </div>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-1">
