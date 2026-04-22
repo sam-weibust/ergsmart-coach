@@ -17,6 +17,7 @@ import DirectoryPage from "./pages/DirectoryPage";
 import PersonalRecordsPage from "./pages/PersonalRecordsPage";
 import NotFound from "./pages/NotFound";
 import RegattaPage from "./pages/RegattaPage";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/directory" element={<DirectoryPage />} />
             <Route path="/auth/concept2/callback" element={<Concept2Callback />} />
             <Route path="/regatta/:id" element={<RegattaPage />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
