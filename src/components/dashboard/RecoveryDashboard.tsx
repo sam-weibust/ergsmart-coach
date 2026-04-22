@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Scale, Droplets, Moon, Sparkles, RefreshCw, Check, TrendingUp,
   TrendingDown, Minus, Loader2, Flame, Target, ChevronRight, AlertCircle,
-  Wifi, WifiOff, Heart, Activity, ExternalLink
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -20,7 +19,6 @@ import {
 } from "recharts";
 import { format, subDays, parseISO, differenceInDays } from "date-fns";
 import { getSessionUser } from '@/lib/getUser';
-import { connectWearable, syncWearables, getConnections, providerLabel } from '@/lib/openWearablesService';
 
 interface RecoveryDashboardProps {
   profile: any;
@@ -79,106 +77,6 @@ const CHART_COLORS = {
 
 // ── Recovery Score Card ───────────────────────────────────────────────────────
 
-// ── Wearable Card ─────────────────────────────────────────────────────────────
-
-function WearableCard({ userId }: { userId: string }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [connecting, setConnecting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-
-  const { data: connections = [] } = useQuery({
-    queryKey: ["wearable-connections", userId],
-    queryFn: () => getConnections(userId),
-  });
-
-  const activeConnections = connections.filter(c => c.is_active);
-  const hasActive = activeConnections.length > 0;
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      await connectWearable(userId);
-    } catch (e: any) {
-      toast({ title: "Connect failed", description: e.message, variant: "destructive" });
-    } finally { setConnecting(false); }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await syncWearables(userId, 7);
-      queryClient.invalidateQueries({ queryKey: ["recovery-score"] });
-      queryClient.invalidateQueries({ queryKey: ["sleep-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["wearable-connections", userId] });
-      toast({ title: "Sync complete" });
-    } catch (e: any) {
-      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
-    } finally { setSyncing(false); }
-  };
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold">Wearable</p>
-          </div>
-          <div className="flex gap-2">
-            {hasActive && (
-              <Button size="sm" variant="ghost" onClick={handleSync} disabled={syncing} className="h-7 text-xs">
-                {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                Sync
-              </Button>
-            )}
-            <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting} className="h-7 text-xs">
-              {connecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ExternalLink className="h-3 w-3 mr-1" />}
-              {hasActive ? "Add Device" : "Connect"}
-            </Button>
-          </div>
-        </div>
-
-        {hasActive ? (
-          <div className="space-y-2">
-            {activeConnections.map(c => (
-              <div key={c.id} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  {c.error_message
-                    ? <WifiOff className="h-3.5 w-3.5 text-red-500" />
-                    : <Wifi className="h-3.5 w-3.5 text-green-500" />}
-                  <span className="font-medium">{providerLabel(c.provider)}</span>
-                  {c.error_message && (
-                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Reconnect needed</Badge>
-                  )}
-                </div>
-                <div className="text-right">
-                  {c.last_sync_at ? (
-                    <p className="text-xs text-muted-foreground">
-                      Synced {format(new Date(c.last_sync_at), "MMM d 'at' h:mm a")}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Never synced</p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground flex items-center justify-end gap-1">
-                    <Moon className="h-3 w-3" /> Sleep auto-import on
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Connect Garmin, WHOOP, Oura, Apple Health, Strava, Polar, or Fitbit via Open Wearables to auto-import sleep, HRV, and recovery data.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Recovery Score Card ───────────────────────────────────────────────────────
-
 function RecoveryScoreCard({
   score, components, loading, onLogSleep,
 }: {
@@ -195,12 +93,11 @@ function RecoveryScoreCard({
     </Card>
   );
 
-  // No score yet today — prompt check-in
   if (score === null) return (
     <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
       <CardContent className="p-5 text-center">
         <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
-        <p className="text-white font-semibold text-sm mb-1">Complete today's recovery check-in</p>
+        <p className="text-white font-semibold text-sm mb-1">Log today's recovery check-in</p>
         <p className="text-white/50 text-xs mb-3">Log sleep, water, and weight to see your recovery score</p>
         <Button size="sm" onClick={onLogSleep}
           className="bg-amber-500 hover:bg-amber-600 text-white border-0 text-xs">
@@ -221,7 +118,7 @@ function RecoveryScoreCard({
           <div>
             <p className="text-white/50 text-xs font-medium uppercase tracking-wide">Recovery Score</p>
             <div className="flex items-end gap-2 mt-1">
-              <span className="text-4xl font-bold" style={{ color }}>{score !== null ? Math.round(s) : "--"}</span>
+              <span className="text-4xl font-bold" style={{ color }}>{Math.round(s)}</span>
               <span className="text-white/40 text-lg mb-1">/100</span>
               <Badge className="mb-1 border-0 text-xs" style={{ background: color + "33", color }}>{label}</Badge>
             </div>
@@ -369,8 +266,6 @@ function WeightTab({ profile }: { profile: any }) {
     const days = differenceInDays(parseISO(last.date), parseISO(first.date)) || 1;
     const delta = last.weight - first.weight;
     const perWeek = (delta / days * 7).toFixed(1);
-    const sign = delta > 0 ? "+" : "";
-    // Plateau detection
     const last10 = entries.slice(0, 10);
     if (last10.length >= 10) {
       const max = Math.max(...last10.map(e => e.weight));
@@ -815,7 +710,6 @@ function InsightsTab({ profile }: { profile: any }) {
     } finally { setRefreshing(false); }
   };
 
-  // Cross-system correlation data
   const { data: sleepEntries = [] } = useQuery({
     queryKey: ["sleep-entries"],
     queryFn: async () => {
@@ -873,7 +767,6 @@ function InsightsTab({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-4">
-      {/* Daily insight */}
       <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
         <CardContent className="p-5">
           <div className="flex items-start justify-between mb-3">
@@ -904,7 +797,6 @@ function InsightsTab({ profile }: { profile: any }) {
         </CardContent>
       </Card>
 
-      {/* Weekly insight */}
       <Card className="border-0 bg-gradient-to-br from-[#0f1e3a] to-[#162b50]">
         <CardContent className="p-5">
           <div className="flex items-start justify-between mb-3">
@@ -1000,9 +892,6 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
   const [showSleepForm, setShowSleepForm] = useState(false);
   const isAfter9am = new Date().getHours() >= 9;
 
-  const [userId, setUserId] = useState<string | null>(null);
-  useState(() => { getSessionUser().then(u => u && setUserId(u.id)); });
-
   const { data: recoveryData, isLoading: scoreLoading } = useQuery({
     queryKey: ["recovery-score"],
     queryFn: async () => {
@@ -1012,21 +901,19 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes, metricsRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
-        supabase.from("recovery_metrics").select("*").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
       const sleepEntries = sleepRes.data || [];
       const waterEntries = waterRes.data || [];
       const weightEntries = weightRes.data || [];
       const meals = mealsRes.data || [];
-      const todayMetrics = metricsRes.data;
 
-      // Sleep component (40 pts) — only today's logged sleep counts
+      // Sleep component (40 pts)
       const todaySleepEntry = sleepEntries.find(e => e.date === t);
       let sleepComponent = 0;
       if (todaySleepEntry) {
@@ -1041,7 +928,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const todayWater = waterByDate[t] || 0;
       const hydrationComponent = Math.min(100, (todayWater / hydrationGoal) * 100);
 
-      // Calorie component — stability vs target
+      // Calorie component
       const mealsByDate: Record<string, number> = {};
       for (const m of meals) mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
       const w = profile?.weight;
@@ -1058,7 +945,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         calorieComponent = Math.max(0, Math.min(100, (1 - deviation * 2) * 100));
       }
 
-      // Weight component — stability / trend alignment
+      // Weight component
       let weightComponent = 70;
       if (weightEntries.length >= 7) {
         const last7w = weightEntries.slice(0, 7);
@@ -1070,30 +957,10 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      // Wearable HRV component (normalized 20-80ms → 0-100, higher is better)
-      let hrvComponent: number | null = null;
-      if (todayMetrics?.hrv != null) {
-        hrvComponent = Math.max(0, Math.min(100, ((todayMetrics.hrv - 20) / 60) * 100));
-      }
-
-      // Wearable RHR component (40-70bpm → 0-100, lower is better)
-      let rhrComponent: number | null = null;
-      if (todayMetrics?.resting_hr != null) {
-        rhrComponent = Math.max(0, Math.min(100, ((70 - todayMetrics.resting_hr) / 30) * 100));
-      }
-
-      // Score: adjust weights when wearable data available
-      const hasWearable = hrvComponent !== null || rhrComponent !== null;
-      let score: number | null = null;
-      if (todaySleepEntry) {
-        if (hasWearable) {
-          const hrvW = hrvComponent ?? 70;
-          const rhrW = rhrComponent ?? 70;
-          score = sleepComponent * 0.3 + hydrationComponent * 0.15 + calorieComponent * 0.15 + weightComponent * 0.15 + hrvW * 0.15 + rhrW * 0.1;
-        } else {
-          score = sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2;
-        }
-      }
+      // Recovery score: sleep 40%, hydration 20%, calories 20%, weight 20%
+      const score: number | null = todaySleepEntry
+        ? sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
+        : null;
 
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
@@ -1103,7 +970,6 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
 
       return {
         score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
-        hrvComponent, rhrComponent, todayMetrics,
         todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
       };
     },
@@ -1115,42 +981,6 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         <h2 className="text-xl font-bold text-foreground">Recovery</h2>
         <p className="text-sm text-muted-foreground">Track weight, hydration, sleep, and performance</p>
       </div>
-
-      {userId && <WearableCard userId={userId} />}
-
-      {/* Wearable metrics strip — shown when data available */}
-      {recoveryData?.todayMetrics && (
-        <div className="grid grid-cols-3 gap-3">
-          {recoveryData.todayMetrics.hrv != null && (
-            <Card><CardContent className="p-3 text-center">
-              <Heart className="h-3.5 w-3.5 mx-auto mb-1 text-red-400" />
-              <p className={`text-lg font-bold ${recoveryData.todayMetrics.hrv < 40 ? "text-red-500" : "text-foreground"}`}>
-                {Math.round(recoveryData.todayMetrics.hrv)}ms
-              </p>
-              <p className="text-xs text-muted-foreground">HRV</p>
-              {recoveryData.todayMetrics.hrv < 40 && (
-                <p className="text-[10px] text-red-500 mt-0.5">Low — rest day recommended</p>
-              )}
-            </CardContent></Card>
-          )}
-          {recoveryData.todayMetrics.resting_hr != null && (
-            <Card><CardContent className="p-3 text-center">
-              <Activity className="h-3.5 w-3.5 mx-auto mb-1 text-blue-400" />
-              <p className="text-lg font-bold">{Math.round(recoveryData.todayMetrics.resting_hr)}</p>
-              <p className="text-xs text-muted-foreground">Resting HR</p>
-            </CardContent></Card>
-          )}
-          {recoveryData.todayMetrics.recovery_score_input != null && (
-            <Card><CardContent className="p-3 text-center">
-              <Sparkles className="h-3.5 w-3.5 mx-auto mb-1 text-amber-400" />
-              <p className={`text-lg font-bold ${recoveryData.todayMetrics.recovery_score_input < 34 ? "text-red-500" : recoveryData.todayMetrics.recovery_score_input < 67 ? "text-amber-500" : "text-green-500"}`}>
-                {Math.round(recoveryData.todayMetrics.recovery_score_input)}%
-              </p>
-              <p className="text-xs text-muted-foreground">Readiness</p>
-            </CardContent></Card>
-          )}
-        </div>
-      )}
 
       <RecoveryScoreCard
         score={recoveryData?.score ?? null}
