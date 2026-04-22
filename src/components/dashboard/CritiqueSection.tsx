@@ -8,42 +8,36 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   Upload, Video, AlertTriangle, CheckCircle, Target, Dumbbell,
-  Loader2, X, Play, History, ChevronDown, ChevronUp, Star, Camera,
+  Loader2, X, History, ChevronDown, ChevronUp, Star, Camera,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getSessionUser } from '@/lib/getUser';
 
-interface Category {
-  name: string;
-  rating: number;
-  notes: string;
-}
-
+interface Category { name: string; rating: number; notes: string; }
 interface CritiqueResult {
-  overallScore: number;
-  phase: string;
-  summary: string;
+  overallScore: number; phase: string; summary: string;
   categories?: Category[];
-  strengths: string[];
-  issues: { area: string; problem: string; fix: string }[];
-  drills: string[];
-  priorityFix: string;
+  strengths: string[]; issues: { area: string; problem: string; fix: string }[];
+  drills: string[]; priorityFix: string;
 }
-
 interface PastAnalysis {
-  id: string;
-  video_path: string | null;
-  notes: string | null;
-  critique: CritiqueResult;
-  created_at: string;
+  id: string; video_path: string | null; notes: string | null;
+  critique: CritiqueResult; created_at: string;
 }
 
-// Evenly spaced through the stroke cycle
 const FRAME_POSITIONS = [0.10, 0.25, 0.40, 0.55, 0.70, 0.85];
-const FRAME_W = 800;
-const FRAME_H = 600;
+const FRAME_W = 640;
+const FRAME_H = 480;
 const YOUTUBE_TUTORIAL_ID = "zQ82RYIFLN8";
+
+// Step labels
+const STEPS = [
+  "Uploading video",
+  "Extracting frames",
+  "Analyzing technique",
+  "Complete",
+];
 
 const CritiqueSection = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -51,8 +45,9 @@ const CritiqueSection = () => {
   const [notes, setNotes] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
-  const [progressStage, setProgressStage] = useState<0 | 1 | 2 | 3>(0);
+  const [stepIndex, setStepIndex] = useState(0);   // 0=idle 1=upload 2=frames 3=ai 4=done
+  const [stepDetail, setStepDetail] = useState(""); // e.g. "frame 3 of 6"
+  const [error, setError] = useState<string | null>(null);
   const [critique, setCritique] = useState<CritiqueResult | null>(null);
   const [history, setHistory] = useState<PastAnalysis[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -75,15 +70,26 @@ const CritiqueSection = () => {
         .order("created_at", { ascending: false })
         .limit(10);
       if (data) setHistory(data as PastAnalysis[]);
-    } catch { /* table may not exist yet */ }
-    finally { setHistoryLoading(false); }
+    } catch (e: any) {
+      console.warn("loadHistory:", e?.message);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("video/")) { toast.error("Please upload a video file"); return; }
-    if (file.size > 200 * 1024 * 1024) { toast.error("Video must be under 200MB"); return; }
+    console.log("[critique] file selected:", file.name, file.size, file.type);
+    if (!file.type.startsWith("video/")) {
+      setError("Please upload a video file (MP4, MOV, AVI, or WebM).");
+      return;
+    }
+    if (file.size > 500 * 1024 * 1024) {
+      setError("Video must be under 500 MB.");
+      return;
+    }
+    setError(null);
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
     setCritique(null);
@@ -94,51 +100,102 @@ const CritiqueSection = () => {
     setVideoFile(null);
     setVideoUrl(null);
     setCritique(null);
+    setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Extract 6 frames at fixed positions using Canvas API — no server needed
+  // Extract frames using Canvas API — waits for seeked event before drawing
   const extractFrames = useCallback((): Promise<string[]> => {
     return new Promise((resolve, reject) => {
+      if (!videoUrl) { reject(new Error("No video URL available")); return; }
+
       const video = document.createElement("video");
       video.preload = "auto";
       video.muted = true;
       video.playsInline = true;
-      video.src = videoUrl!;
+      video.crossOrigin = "anonymous";
+      video.src = videoUrl;
 
       const canvas = document.createElement("canvas");
       canvas.width = FRAME_W;
       canvas.height = FRAME_H;
-      const ctx = canvas.getContext("2d")!;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas 2D context not available")); return; }
 
       const frames: string[] = [];
       let idx = 0;
+      let settled = false;
+      let seekTimeoutId: ReturnType<typeof setTimeout>;
 
-      const seekNext = () => {
-        if (idx >= FRAME_POSITIONS.length) {
-          resolve(frames);
-          video.src = "";
-          return;
-        }
-        setProgress(Math.round((idx / FRAME_POSITIONS.length) * 35)); // 0–35%
-        setProgressLabel(`Extracting frames from video… (${idx + 1}/${FRAME_POSITIONS.length})`);
-        video.currentTime = video.duration * FRAME_POSITIONS[idx];
+      const done = (result: string[] | Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(seekTimeoutId);
+        video.onseeked = null;
+        video.onerror = null;
+        video.onloadedmetadata = null;
+        video.src = "";
+        if (result instanceof Error) reject(result);
+        else resolve(result);
       };
 
-      video.onloadedmetadata = () => { seekNext(); };
+      const seekNext = () => {
+        clearTimeout(seekTimeoutId);
+        if (idx >= FRAME_POSITIONS.length) { done(frames); return; }
 
-      video.onseeked = () => {
-        ctx.drawImage(video, 0, 0, FRAME_W, FRAME_H);
-        frames.push(canvas.toDataURL("image/jpeg", 0.85));
+        const targetTime = video.duration * FRAME_POSITIONS[idx];
+        console.log(`[critique] seeking to frame ${idx + 1}/${FRAME_POSITIONS.length} — t=${targetTime.toFixed(2)}s`);
+
+        // React state updates from event handlers — batched in React 18
+        setProgress(Math.round(10 + (idx / FRAME_POSITIONS.length) * 40));
+        setStepDetail(`frame ${idx + 1} of ${FRAME_POSITIONS.length}`);
+
+        // Timeout in case seeked never fires (some codecs/formats)
+        seekTimeoutId = setTimeout(() => {
+          console.warn(`[critique] seeked event timed out for frame ${idx + 1}, drawing anyway`);
+          captureFrame();
+        }, 5000);
+
+        video.currentTime = targetTime;
+      };
+
+      const captureFrame = () => {
+        clearTimeout(seekTimeoutId);
+        try {
+          ctx.drawImage(video, 0, 0, FRAME_W, FRAME_H);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.80);
+          const b64Len = dataUrl.length - "data:image/jpeg;base64,".length;
+          console.log(`[critique] frame ${idx + 1} captured — base64 length: ${b64Len}`);
+          if (b64Len < 100) {
+            console.warn(`[critique] frame ${idx + 1} appears blank (base64 length ${b64Len})`);
+          }
+          frames.push(dataUrl);
+        } catch (e: any) {
+          console.error(`[critique] canvas.drawImage failed for frame ${idx + 1}:`, e?.message);
+        }
         idx++;
         seekNext();
       };
 
-      video.onerror = () => reject(new Error("Could not load video for frame extraction"));
+      video.onloadedmetadata = () => {
+        const dur = video.duration;
+        console.log(`[critique] video metadata loaded — duration: ${dur.toFixed(2)}s, size: ${video.videoWidth}x${video.videoHeight}`);
+        if (!isFinite(dur) || dur <= 0) {
+          done(new Error(`Video duration is invalid (${dur}) — the file may be corrupt or an unsupported format.`));
+          return;
+        }
+        seekNext();
+      };
+
+      video.onseeked = () => { captureFrame(); };
+      video.onerror = () => {
+        const code = (video.error?.code ?? -1);
+        const msg = video.error?.message ?? "unknown error";
+        done(new Error(`Video failed to load (code ${code}): ${msg}. Try a different file or format.`));
+      };
     });
   }, [videoUrl]);
 
-  // Upload extracted JPEG frames to Supabase storage (not the full video)
   const uploadFrames = async (userId: string, frames: string[]): Promise<string | null> => {
     try {
       const basePath = `${userId}/${Date.now()}`;
@@ -153,7 +210,8 @@ const CritiqueSection = () => {
           .upload(`${basePath}/frame-${i + 1}.jpg`, bytes, { contentType: "image/jpeg", upsert: false });
       }
       return basePath;
-    } catch {
+    } catch (e: any) {
+      console.warn("[critique] frame upload failed (non-fatal):", e?.message);
       return null;
     }
   };
@@ -162,68 +220,115 @@ const CritiqueSection = () => {
     if (!videoUrl || !videoFile) return;
     setIsAnalyzing(true);
     setProgress(0);
-    setProgressStage(1);
-    setProgressLabel("Extracting frames from video…");
+    setStepIndex(1);
+    setStepDetail("reading file");
+    setError(null);
     setCritique(null);
 
     try {
+      // ── Auth ──────────────────────────────────────────────────────────────
       const { data: { session } } = await supabase.auth.getSession();
       const user = await getSessionUser();
-      if (!session?.access_token || !user?.id) throw new Error("Not logged in");
+      if (!session?.access_token || !user?.id) {
+        throw new Error("You must be logged in to analyze video. Please refresh and log in again.");
+      }
+      console.log("[critique] user:", user.id, "| file:", videoFile.name, videoFile.size, videoFile.type);
 
-      // ── Stage 1: Extract frames (0–35%) ────────────────────────────────────
-      const frames = await extractFrames();
-      setProgress(35);
+      // ── Stage 1: Extract frames ───────────────────────────────────────────
+      setStepIndex(2);
+      setProgress(10);
+      console.log("[critique] starting frame extraction");
+      let frames: string[];
+      try {
+        frames = await extractFrames();
+      } catch (e: any) {
+        throw new Error(`Frame extraction failed: ${e.message}`);
+      }
 
-      // ── Stage 2: Upload frames + call AI (35–85%) ──────────────────────────
-      setProgressStage(2);
-      setProgressLabel("Analyzing technique with AI…");
-      setProgress(40);
+      const validFrames = frames.filter((f) => f.length > 100);
+      console.log(`[critique] extracted ${frames.length} frames, ${validFrames.length} valid`);
+      if (validFrames.length === 0) {
+        throw new Error("Frame extraction produced no usable images. The video may be too short, corrupt, or in an unsupported codec. Try converting to MP4 (H.264).");
+      }
 
-      // Upload frames in background (don't block AI call)
-      const framesPathPromise = uploadFrames(user.id, frames);
+      setProgress(50);
 
-      setProgress(45);
+      // Upload in background — don't block AI call
+      const framesPathPromise = uploadFrames(user.id, validFrames);
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-technique`,
-        {
+      // ── Stage 2: Call AI ──────────────────────────────────────────────────
+      setStepIndex(3);
+      setStepDetail("");
+      setProgress(55);
+
+      const payloadBytes = validFrames.reduce((acc, f) => acc + f.length, 0);
+      console.log(`[critique] calling analyze-technique — frames: ${validFrames.length}, payload size: ${(payloadBytes / 1024).toFixed(0)} KB`);
+
+      const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-technique`;
+      console.log("[critique] endpoint:", fnUrl);
+
+      let resp: Response;
+      try {
+        resp = await fetch(fnUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
+            "Authorization": `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ user_id: user.id, frames, notes, frames_path: null }),
-        }
-      );
-
-      setProgress(80);
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
-        throw new Error(err.error || `Server error ${resp.status}`);
+          body: JSON.stringify({ user_id: user.id, frames: validFrames, notes, frames_path: null }),
+        });
+      } catch (e: any) {
+        throw new Error(`Network error calling AI service: ${e.message}. Check your connection.`);
       }
 
-      // ── Stage 3: Parse & display (85–100%) ────────────────────────────────
-      setProgressStage(3);
-      setProgressLabel("Generating feedback…");
-      setProgress(85);
+      console.log(`[critique] edge function response: HTTP ${resp.status}`);
 
-      const data = await resp.json();
-      if (!data.critique) throw new Error("No critique returned from AI");
+      const rawText = await resp.text();
+      console.log("[critique] raw response body:", rawText.slice(0, 1000));
 
-      // Attach frames_path once upload resolves (fire-and-forget, don't block display)
+      if (!resp.ok) {
+        let errMsg = `Server error ${resp.status}`;
+        try {
+          const parsed = JSON.parse(rawText);
+          errMsg = parsed.error ?? parsed.message ?? errMsg;
+        } catch {}
+        throw new Error(`AI service error (${resp.status}): ${errMsg}`);
+      }
+
+      // ── Stage 3: Parse & display ──────────────────────────────────────────
+      setProgress(90);
+      setStepIndex(4);
+      setStepDetail("");
+
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Could not parse AI response as JSON. Raw: ${rawText.slice(0, 200)}`);
+      }
+
+      console.log("[critique] parsed response:", JSON.stringify(data).slice(0, 500));
+
+      if (!data.critique) {
+        throw new Error(`AI response missing 'critique' field. Got: ${JSON.stringify(data).slice(0, 200)}`);
+      }
+
       framesPathPromise.catch(() => {});
-
       setProgress(100);
       setCritique(data.critique);
       toast.success("Form analysis complete!");
       loadHistory();
+
     } catch (err: any) {
-      toast.error(err.message || "Failed to analyze video");
+      const msg = err?.message ?? "Unknown error analyzing video";
+      console.error("[critique] FAILED:", msg);
+      setError(msg);
+      toast.error("Analysis failed — see error above");
     } finally {
       setIsAnalyzing(false);
-      setProgressStage(0);
+      if (!error) {
+        setTimeout(() => { setStepIndex(0); setStepDetail(""); setProgress(0); }, 2000);
+      }
     }
   };
 
@@ -291,7 +396,7 @@ const CritiqueSection = () => {
         </Card>
       )}
 
-      {c.strengths.length > 0 && (
+      {c.strengths?.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -310,7 +415,7 @@ const CritiqueSection = () => {
         </Card>
       )}
 
-      {c.issues.length > 0 && (
+      {c.issues?.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -329,7 +434,7 @@ const CritiqueSection = () => {
         </Card>
       )}
 
-      {c.drills.length > 0 && (
+      {c.drills?.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -350,12 +455,10 @@ const CritiqueSection = () => {
     </div>
   );
 
-  // Stage labels for the progress indicator
-  const stages = [
-    { n: 1, label: "Extracting frames from video" },
-    { n: 2, label: "Analyzing technique with AI" },
-    { n: 3, label: "Generating feedback" },
-  ];
+  // Active step label
+  const activeStepLabel = stepIndex > 0 && stepIndex <= STEPS.length
+    ? STEPS[stepIndex - 1]
+    : "";
 
   return (
     <div className="space-y-6">
@@ -366,10 +469,25 @@ const CritiqueSection = () => {
             <Video className="h-5 w-5 text-primary" /> AI Form Critique
           </CardTitle>
           <CardDescription>
-            Upload a rowing video. 6 frames are extracted automatically and analyzed by AI — results in under 20 seconds.
+            Upload a rowing video (MP4, MOV, AVI, WebM). 6 frames are extracted and analyzed by AI — results in under 30 seconds.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+
+          {/* Visible error box */}
+          {error && (
+            <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-red-700 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-sm mb-1">Analysis Failed</p>
+                <p className="text-sm leading-relaxed">{error}</p>
+              </div>
+              <button onClick={() => setError(null)} className="shrink-0 opacity-60 hover:opacity-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {!videoUrl ? (
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -377,7 +495,7 @@ const CritiqueSection = () => {
             >
               <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
               <p className="font-medium text-foreground">Click to upload a rowing video</p>
-              <p className="text-sm text-muted-foreground mt-1">MP4, MOV, or WebM — max 200MB</p>
+              <p className="text-sm text-muted-foreground mt-1">MP4, MOV, AVI, or WebM — max 500 MB</p>
               <p className="text-xs text-muted-foreground mt-2 opacity-70">
                 6 frames extracted at 10%, 25%, 40%, 55%, 70%, 85% of duration
               </p>
@@ -391,12 +509,18 @@ const CritiqueSection = () => {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                {videoFile?.name} ({(videoFile!.size / 1024 / 1024).toFixed(1)} MB)
+                {videoFile?.name} ({(videoFile!.size / 1024 / 1024).toFixed(1)} MB · {videoFile?.type || "unknown type"})
               </p>
             </div>
           )}
 
-          <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/mp4,video/quicktime,video/avi,video/x-msvideo,video/webm,video/*"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
 
           <Textarea
             placeholder="Any notes? e.g. 'Steady state, I think my catch is too early'…"
@@ -406,36 +530,45 @@ const CritiqueSection = () => {
             disabled={isAnalyzing}
           />
 
-          {/* Progress indicator with stage steps */}
+          {/* Progress indicator */}
           {isAnalyzing && (
-            <div className="space-y-3">
-              <Progress value={progress} className="h-2" />
-              <div className="flex justify-between gap-1">
-                {stages.map((s) => (
-                  <div
-                    key={s.n}
-                    className={`flex-1 text-center text-xs px-1 py-1 rounded transition-colors ${
-                      progressStage === s.n
-                        ? "bg-primary/15 text-primary font-semibold"
-                        : progressStage > s.n
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center justify-center gap-1 mb-0.5">
-                      {progressStage > s.n ? (
-                        <CheckCircle className="h-3 w-3" />
-                      ) : progressStage === s.n ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <span className="h-3 w-3 rounded-full border border-current inline-block" />
-                      )}
-                    </div>
-                    <span className="leading-tight block">{s.label}</span>
-                  </div>
-                ))}
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  {activeStepLabel}{stepDetail ? ` — ${stepDetail}` : ""}
+                </span>
+                <span className="text-xs text-muted-foreground">{progress}%</span>
               </div>
-              <p className="text-xs text-muted-foreground text-center">{progressLabel}</p>
+              <Progress value={progress} className="h-2" />
+              <div className="flex justify-between gap-1 pt-1">
+                {STEPS.map((label, i) => {
+                  const n = i + 1;
+                  const done = stepIndex > n;
+                  const active = stepIndex === n;
+                  return (
+                    <div
+                      key={n}
+                      className={`flex-1 text-center text-xs px-1 py-1.5 rounded transition-colors ${
+                        active ? "bg-primary/15 text-primary font-semibold"
+                        : done ? "text-green-600 dark:text-green-400"
+                        : "text-muted-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                        {done ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : active ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <span className="h-3 w-3 rounded-full border border-current inline-block" />
+                        )}
+                      </div>
+                      <span className="leading-tight block">{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
