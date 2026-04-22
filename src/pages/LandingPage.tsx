@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import logoIcon from "@/assets/crewsync-logo-icon.jpg";
+import logoFull from "@/assets/crewsync-logo-full.jpg";
 import { supabase } from "@/integrations/supabase/client";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -238,51 +239,6 @@ const LandingPage = () => {
     { icon: "📈", title: "2k Improvement Timeline", tag: null },
   ];
 
-  const pricingPlans = [
-    {
-      name: "Free",
-      price: "$0",
-      period: "",
-      features: ["Basic training log", "Workout history", "Public athlete profile"],
-    },
-    {
-      name: "Pro",
-      price: "$10",
-      period: "/month",
-      features: ["AI training plans", "PM5 live tracking", "Concept2 sync"],
-    },
-    {
-      name: "Elite",
-      price: "$15",
-      period: "/month",
-      features: ["Everything in Pro", "Head-to-head racing", "Recruiting tools + PDF"],
-    },
-    {
-      name: "Elite+",
-      price: "$25",
-      period: "/month",
-      features: ["Everything in Elite", "Full team + coach tools", "Priority AI support"],
-    },
-  ];
-
-  const testimonials = [
-    {
-      quote: "CrewSync completely changed how I train. The AI plan actually adapts when I'm tired — it's like having a coach in my pocket.",
-      name: "Beta Tester",
-      role: "Club Rower · 7:12 2k",
-    },
-    {
-      quote: "The head-to-head racing feature keeps me honest. I PR'd twice in one week just from the competitive pressure.",
-      name: "Beta Tester",
-      role: "High School Athlete · 6:58 2k",
-    },
-    {
-      quote: "As a coach, the lineup optimizer alone is worth it. I used to spend hours on seat racing analysis — now it's instant.",
-      name: "Beta Tester",
-      role: "Head Coach · Varsity Program",
-    },
-  ];
-
   const s: React.CSSProperties = {};
   void s;
 
@@ -328,11 +284,8 @@ const LandingPage = () => {
         justifyContent: "space-between", height: "64px", position: "sticky", top: 0, zIndex: 100,
         borderBottom: "1px solid rgba(255,255,255,0.07)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "32px", height: "32px", backgroundColor: "#2d6be4", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "16px" }}>C</span>
-          </div>
-          <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.3px" }}>CrewSync</span>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <img src={logoFull} alt="CrewSync" style={{ height: "36px", width: "auto", objectFit: "contain" }} />
         </div>
         <div className="nav-links-row" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
           {["Features", "For Coaches", "Competition", "Pricing"].map((link) => (
@@ -351,6 +304,8 @@ const LandingPage = () => {
       }}>
         <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(45,107,228,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", maxWidth: "800px", animation: "fadeInUp 0.7s ease both" }}>
+          <img src={logoIcon} alt="CrewSync" style={{ height: "80px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px" }} />
+          <br />
           <span style={{ display: "inline-block", backgroundColor: "rgba(45,107,228,0.15)", border: "1px solid rgba(45,107,228,0.35)", color: "#7ba7f0", fontSize: "13px", fontWeight: 600, padding: "6px 16px", borderRadius: "100px", marginBottom: "28px", letterSpacing: "0.03em" }}>
             Built for competitive rowers
           </span>
@@ -561,7 +516,7 @@ const LandingPage = () => {
       {/* ── SOCIAL PROOF ─────────────────────────────────────── */}
       <section style={{ backgroundColor: "#0a1628", padding: "80px 24px" }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "32px", textAlign: "center", marginBottom: "64px" }} className="stats-grid">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "32px", textAlign: "center" }} className="stats-grid">
             {[
               { label: "Athletes Training", value: stats?.total_users ?? "—" },
               { label: "Avg 2k", value: stats?.average_2k ?? "—" },
@@ -574,46 +529,6 @@ const LandingPage = () => {
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }} className="comp-grid">
-            {testimonials.map((t, i) => (
-              <div key={i} style={{ backgroundColor: "#112240", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", padding: "28px" }}>
-                <p style={{ color: "rgba(255,255,255,0.85)", fontSize: "15px", lineHeight: 1.7, margin: "0 0 20px", fontStyle: "italic" }}>"{t.quote}"</p>
-                <div>
-                  <div style={{ color: "#ffffff", fontWeight: 700, fontSize: "14px" }}>{t.name}</div>
-                  <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px" }}>{t.role}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRICING ──────────────────────────────────────────── */}
-      <section id="pricing" style={{ backgroundColor: "#f8f9fb", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, marginBottom: "12px", letterSpacing: "-0.02em" }}>
-            Simple pricing for every rower.
-          </h2>
-          <p style={{ color: "#4a5568", fontSize: "16px", marginBottom: "44px" }}>Start free. Upgrade when you're ready.</p>
-          <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "18px", marginBottom: "36px" }}>
-            {pricingPlans.map((plan) => (
-              <div key={plan.name} className="pricing-card" style={{ textAlign: "left" }}>
-                <div style={{ color: "#0a1628", fontWeight: 800, fontSize: "18px", marginBottom: "4px" }}>{plan.name}</div>
-                <div style={{ marginBottom: "20px" }}>
-                  <span style={{ color: "#2d6be4", fontSize: "28px", fontWeight: 800 }}>{plan.price}</span>
-                  <span style={{ color: "#4a5568", fontSize: "14px" }}>{plan.period}</span>
-                </div>
-                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {plan.features.map((f) => (
-                    <li key={f} style={{ display: "flex", gap: "8px", color: "#4a5568", fontSize: "14px", alignItems: "flex-start" }}>
-                      <span style={{ color: "#2d6be4", fontWeight: 700 }}>✓</span>{f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <button className="btn-primary" onClick={() => navigate("/pricing")}>See Full Pricing</button>
         </div>
       </section>
 
@@ -642,11 +557,8 @@ const LandingPage = () => {
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "32px", marginBottom: "36px" }}>
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <div style={{ width: "32px", height: "32px", backgroundColor: "#2d6be4", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "16px" }}>C</span>
-                </div>
-                <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px" }}>CrewSync</span>
+              <div style={{ marginBottom: "10px" }}>
+                <img src={logoFull} alt="CrewSync" style={{ height: "32px", width: "auto", objectFit: "contain" }} />
               </div>
               <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px", margin: 0 }}>Built for rowers who want more.</p>
             </div>
