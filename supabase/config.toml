@@ -113,3 +113,15 @@ verify_jwt = false
 
 [functions.fetch-crewtimer]
 verify_jwt = false
+
+[functions.wearable-connect]
+verify_jwt = false
+
+[functions.wearable-callback]
+verify_jwt = false
+
+[functions.wearable-webhook]
+verify_jwt = false
+
+[functions.wearable-sync]
+verify_jwt = false

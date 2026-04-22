@@ -30,13 +30,14 @@ serve(async (req) => {
     const thirtyDaysAgo = new Date(todayMs - 30 * 86400000).toISOString().split("T")[0];
     const sevenDaysAgo = new Date(todayMs - 7 * 86400000).toISOString().split("T")[0];
 
-    const [profileRes, weightRes, waterRes, sleepRes, mealsRes, workoutsRes] = await Promise.all([
+    const [profileRes, weightRes, waterRes, sleepRes, mealsRes, workoutsRes, metricsRes] = await Promise.all([
       supabase.from("profiles").select("full_name,weight,height,age,diet_goal,hydration_goal_ml,weight_unit").eq("id", user_id).maybeSingle(),
       supabase.from("weight_entries").select("date,weight,unit").eq("user_id", user_id).gte("date", thirtyDaysAgo).order("date", { ascending: false }),
       supabase.from("water_entries").select("date,amount_ml").eq("user_id", user_id).gte("date", sevenDaysAgo).order("date", { ascending: false }),
       supabase.from("sleep_entries").select("date,duration_hours,quality_score").eq("user_id", user_id).gte("date", sevenDaysAgo).order("date", { ascending: false }),
       supabase.from("meal_plans").select("meal_date,calories,protein,carbs,fats").eq("user_id", user_id).gte("meal_date", sevenDaysAgo).order("meal_date", { ascending: false }),
       supabase.from("erg_workouts").select("workout_date,distance,avg_split,avg_watts").eq("user_id", user_id).gte("workout_date", sevenDaysAgo).order("workout_date", { ascending: false }),
+      supabase.from("recovery_metrics").select("date,hrv,resting_hr,recovery_score_input,strain,provider").eq("user_id", user_id).gte("date", sevenDaysAgo).order("date", { ascending: false }),
     ]);
 
     const profile = profileRes.data;
@@ -45,6 +46,7 @@ serve(async (req) => {
     const sleepEntries = sleepRes.data || [];
     const meals = mealsRes.data || [];
     const workouts = workoutsRes.data || [];
+    const wearableMetrics = metricsRes.data || [];
 
     // Aggregate meals by date
     const mealsByDate: Record<string, number> = {};
@@ -104,9 +106,20 @@ Average: ${avgCalories ? `${avgCalories} kcal` : "N/A"}
 
 LAST 7 DAYS WORKOUTS:
 ${workouts.map(w => `  ${w.workout_date}: ${w.distance}m, avg split ${w.avg_split || "N/A"}${w.avg_watts ? `, ${w.avg_watts}W` : ""}`).join("\n") || "  No data"}
+
+WEARABLE METRICS (last 7 days):
+${wearableMetrics.map(m => {
+  const parts = [`  ${m.date} [${m.provider || "wearable"}]:`];
+  if (m.hrv != null) parts.push(`HRV ${m.hrv}ms`);
+  if (m.resting_hr != null) parts.push(`RHR ${m.resting_hr}bpm`);
+  if (m.recovery_score_input != null) parts.push(`readiness ${m.recovery_score_input}/100`);
+  if (m.strain != null) parts.push(`strain ${m.strain}`);
+  return parts.join(" ");
+}).join("\n") || "  No wearable data"}
+${wearableMetrics.length > 0 ? `HRV flags: ${wearableMetrics.filter(m => m.hrv != null && m.hrv < 40).map(m => m.date).join(", ") || "none below 40ms"}` : ""}
 `.trim();
 
-    const systemPrompt = `You are a high-performance rowing coach and sports scientist. Generate a concise, data-driven, actionable weekly insight summary. Be direct and specific — like a coach, not a chatbot. Use exact numbers from the data. Identify real patterns (correlations between sleep/performance, hydration/output, calories/weight). Call out what needs attention. Keep it to 4-6 sentences max. No fluff, no generic advice. Output plain text only, no markdown.`;
+    const systemPrompt = `You are a high-performance rowing coach and sports scientist. Generate a concise, data-driven, actionable insight summary. Be direct and specific — like a coach, not a chatbot. Use exact numbers from the data. Identify real patterns (sleep/performance correlation, hydration/output, calories/weight). If wearable data is present: flag low HRV (below 40ms) as a recovery warning, note poor sleep from wearable sleep scores, and call out high strain vs low readiness mismatches. Keep it to 4-6 sentences max. No fluff, no generic advice. Output plain text only, no markdown.`;
 
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

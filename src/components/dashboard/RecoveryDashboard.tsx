@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Scale, Droplets, Moon, Sparkles, RefreshCw, Check, TrendingUp,
-  TrendingDown, Minus, Loader2, Flame, Target, ChevronRight, AlertCircle
+  TrendingDown, Minus, Loader2, Flame, Target, ChevronRight, AlertCircle,
+  Wifi, WifiOff, Heart, Activity, ExternalLink
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -74,6 +75,123 @@ const CHART_COLORS = {
   purple: "#8b5cf6",
   cyan: "#06b6d4",
 };
+
+// ── Recovery Score Card ───────────────────────────────────────────────────────
+
+// ── Wearable Card ─────────────────────────────────────────────────────────────
+
+const PROVIDER_LABELS: Record<string, string> = {
+  garmin: "Garmin", whoop: "WHOOP", oura: "Oura Ring",
+  polar: "Polar", fitbit: "Fitbit", apple: "Apple Health",
+};
+
+function WearableCard({ userId }: { userId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const { data: connections = [] } = useQuery({
+    queryKey: ["wearable-connections", userId],
+    queryFn: async () => {
+      const { data } = await supabase.from("wearable_connections")
+        .select("*").eq("user_id", userId).order("connected_at", { ascending: false });
+      return data || [];
+    },
+  });
+
+  const activeConnections = connections.filter((c: any) => c.is_active);
+  const hasActive = activeConnections.length > 0;
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wearable-connect", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.url) window.open(data.url, "_blank", "width=600,height=700");
+      else throw new Error("No widget URL returned");
+    } catch (e: any) {
+      toast({ title: "Connect failed", description: e.message, variant: "destructive" });
+    } finally { setConnecting(false); }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { error } = await supabase.functions.invoke("wearable-sync", {
+        body: { user_id: userId, days: 7 },
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["recovery-score"] });
+      queryClient.invalidateQueries({ queryKey: ["sleep-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["wearable-connections", userId] });
+      toast({ title: "Sync complete" });
+    } catch (e: any) {
+      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
+    } finally { setSyncing(false); }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold">Wearable</p>
+          </div>
+          <div className="flex gap-2">
+            {hasActive && (
+              <Button size="sm" variant="ghost" onClick={handleSync} disabled={syncing} className="h-7 text-xs">
+                {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                Sync
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting} className="h-7 text-xs">
+              {connecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ExternalLink className="h-3 w-3 mr-1" />}
+              {hasActive ? "Add Device" : "Connect"}
+            </Button>
+          </div>
+        </div>
+
+        {hasActive ? (
+          <div className="space-y-2">
+            {activeConnections.map((c: any) => (
+              <div key={c.id} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  {c.error_message
+                    ? <WifiOff className="h-3.5 w-3.5 text-red-500" />
+                    : <Wifi className="h-3.5 w-3.5 text-green-500" />}
+                  <span className="font-medium">{PROVIDER_LABELS[c.provider] || c.provider}</span>
+                  {c.error_message && (
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Disconnected</Badge>
+                  )}
+                </div>
+                <div className="text-right">
+                  {c.last_sync_at ? (
+                    <p className="text-xs text-muted-foreground">
+                      Synced {format(new Date(c.last_sync_at), "MMM d 'at' h:mm a")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Never synced</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground flex items-center justify-end gap-1">
+                    <Moon className="h-3 w-3" /> Sleep auto-import on
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Connect Garmin, WHOOP, Oura, Polar, or Fitbit to auto-import sleep, HRV, and recovery data.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ── Recovery Score Card ───────────────────────────────────────────────────────
 
@@ -898,6 +1016,9 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
   const [showSleepForm, setShowSleepForm] = useState(false);
   const isAfter9am = new Date().getHours() >= 9;
 
+  const [userId, setUserId] = useState<string | null>(null);
+  useState(() => { getSessionUser().then(u => u && setUserId(u.id)); });
+
   const { data: recoveryData, isLoading: scoreLoading } = useQuery({
     queryKey: ["recovery-score"],
     queryFn: async () => {
@@ -907,17 +1028,19 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes, metricsRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
+        supabase.from("recovery_metrics").select("*").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
       const sleepEntries = sleepRes.data || [];
       const waterEntries = waterRes.data || [];
       const weightEntries = weightRes.data || [];
       const meals = mealsRes.data || [];
+      const todayMetrics = metricsRes.data;
 
       // Sleep component (40 pts) — only today's logged sleep counts
       const todaySleepEntry = sleepEntries.find(e => e.date === t);
@@ -928,13 +1051,13 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         sleepComponent = (durationScore + qualityScore) * 100;
       }
 
-      // Hydration component (20 pts)
+      // Hydration component
       const waterByDate: Record<string, number> = {};
       for (const w of waterEntries) waterByDate[w.date] = (waterByDate[w.date] || 0) + w.amount_ml;
       const todayWater = waterByDate[t] || 0;
       const hydrationComponent = Math.min(100, (todayWater / hydrationGoal) * 100);
 
-      // Calorie component (20 pts) — stability vs target
+      // Calorie component — stability vs target
       const mealsByDate: Record<string, number> = {};
       for (const m of meals) mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
       const w = profile?.weight;
@@ -946,12 +1069,12 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const calValues = Object.values(mealsByDate);
       let calorieComponent = 50;
       if (calValues.length > 0) {
-        const avgCal = calValues.reduce((a, b) => a + b, 0) / calValues.length;
+        const avgCal = calValues.reduce((a: number, b: number) => a + b, 0) / calValues.length;
         const deviation = Math.abs(avgCal - goal) / goal;
         calorieComponent = Math.max(0, Math.min(100, (1 - deviation * 2) * 100));
       }
 
-      // Weight component (20 pts) — stability / trend alignment
+      // Weight component — stability / trend alignment
       let weightComponent = 70;
       if (weightEntries.length >= 7) {
         const last7w = weightEntries.slice(0, 7);
@@ -963,21 +1086,40 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      // Today's logged status
+      // Wearable HRV component (normalized 20-80ms → 0-100, higher is better)
+      let hrvComponent: number | null = null;
+      if (todayMetrics?.hrv != null) {
+        hrvComponent = Math.max(0, Math.min(100, ((todayMetrics.hrv - 20) / 60) * 100));
+      }
+
+      // Wearable RHR component (40-70bpm → 0-100, lower is better)
+      let rhrComponent: number | null = null;
+      if (todayMetrics?.resting_hr != null) {
+        rhrComponent = Math.max(0, Math.min(100, ((70 - todayMetrics.resting_hr) / 30) * 100));
+      }
+
+      // Score: adjust weights when wearable data available
+      const hasWearable = hrvComponent !== null || rhrComponent !== null;
+      let score: number | null = null;
+      if (todaySleepEntry) {
+        if (hasWearable) {
+          const hrvW = hrvComponent ?? 70;
+          const rhrW = rhrComponent ?? 70;
+          score = sleepComponent * 0.3 + hydrationComponent * 0.15 + calorieComponent * 0.15 + weightComponent * 0.15 + hrvW * 0.15 + rhrW * 0.1;
+        } else {
+          score = sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2;
+        }
+      }
+
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
       const todaySleep = !!todaySleepEntry;
       const todayCalories = (mealsByDate[t] || 0) > 0;
-
-      // Only show a score once at least sleep is logged for today
-      const score = todaySleep
-        ? sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
-        : null;
-
       const checkInComplete = todaySleep && todayWaterLogged && todayWeight;
 
       return {
         score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
+        hrvComponent, rhrComponent, todayMetrics,
         todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
       };
     },
@@ -989,6 +1131,42 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         <h2 className="text-xl font-bold text-foreground">Recovery</h2>
         <p className="text-sm text-muted-foreground">Track weight, hydration, sleep, and performance</p>
       </div>
+
+      {userId && <WearableCard userId={userId} />}
+
+      {/* Wearable metrics strip — shown when data available */}
+      {recoveryData?.todayMetrics && (
+        <div className="grid grid-cols-3 gap-3">
+          {recoveryData.todayMetrics.hrv != null && (
+            <Card><CardContent className="p-3 text-center">
+              <Heart className="h-3.5 w-3.5 mx-auto mb-1 text-red-400" />
+              <p className={`text-lg font-bold ${recoveryData.todayMetrics.hrv < 40 ? "text-red-500" : "text-foreground"}`}>
+                {Math.round(recoveryData.todayMetrics.hrv)}ms
+              </p>
+              <p className="text-xs text-muted-foreground">HRV</p>
+              {recoveryData.todayMetrics.hrv < 40 && (
+                <p className="text-[10px] text-red-500 mt-0.5">Low — rest day recommended</p>
+              )}
+            </CardContent></Card>
+          )}
+          {recoveryData.todayMetrics.resting_hr != null && (
+            <Card><CardContent className="p-3 text-center">
+              <Activity className="h-3.5 w-3.5 mx-auto mb-1 text-blue-400" />
+              <p className="text-lg font-bold">{Math.round(recoveryData.todayMetrics.resting_hr)}</p>
+              <p className="text-xs text-muted-foreground">Resting HR</p>
+            </CardContent></Card>
+          )}
+          {recoveryData.todayMetrics.recovery_score_input != null && (
+            <Card><CardContent className="p-3 text-center">
+              <Sparkles className="h-3.5 w-3.5 mx-auto mb-1 text-amber-400" />
+              <p className={`text-lg font-bold ${recoveryData.todayMetrics.recovery_score_input < 34 ? "text-red-500" : recoveryData.todayMetrics.recovery_score_input < 67 ? "text-amber-500" : "text-green-500"}`}>
+                {Math.round(recoveryData.todayMetrics.recovery_score_input)}%
+              </p>
+              <p className="text-xs text-muted-foreground">Readiness</p>
+            </CardContent></Card>
+          )}
+        </div>
+      )}
 
       <RecoveryScoreCard
         score={recoveryData?.score ?? null}
