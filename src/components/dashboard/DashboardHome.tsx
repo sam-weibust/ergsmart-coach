@@ -245,27 +245,32 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       const user = await getSessionUser();
       if (!user) return null;
       const t = new Date().toISOString().split("T")[0];
-      const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
-      const [sleepRes, waterRes, weightRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, whoopRes] = await Promise.all([
         supabase.from("sleep_entries").select("duration_hours,quality_score,date").eq("user_id", user.id).order("date", { ascending: false }).limit(1),
         supabase.from("water_entries").select("amount_ml,date").eq("user_id", user.id).eq("date", t),
         supabase.from("weight_entries").select("date").eq("user_id", user.id).eq("date", t),
+        supabase.from("whoop_recovery").select("recovery_score,hrv_rmssd").eq("user_id", user.id).order("date", { ascending: false }).limit(1).maybeSingle(),
       ]);
+      const whoopToday = whoopRes.data ?? null;
       const lastSleep = sleepRes.data?.[0];
       const todayWater = (waterRes.data || []).reduce((s: number, e: any) => s + (e.amount_ml || 0), 0);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
-      const w = profile?.weight; const h = profile?.height || 175; const a = profile?.age || 25;
-      const bmr = w ? 10 * w + 6.25 * h - 5 * a + 5 : 2000;
-      const tdee = Math.round(bmr * 1.7);
-      let sleepComp = 50, hydComp = 50;
-      if (lastSleep) {
-        const dur = Math.min(1, lastSleep.duration_hours / 8) * 0.7;
-        const qual = lastSleep.quality_score ? (lastSleep.quality_score / 10) * 0.3 : 0.15;
-        sleepComp = (dur + qual) * 100;
+      let score: number;
+      if (whoopToday?.recovery_score != null) {
+        // Whoop is the authoritative recovery source
+        const hydComp = Math.min(100, (todayWater / hydrationGoal) * 100);
+        score = Math.round(whoopToday.recovery_score * 0.7 + hydComp * 0.3);
+      } else {
+        let sleepComp = 50, hydComp = 50;
+        if (lastSleep) {
+          const dur = Math.min(1, lastSleep.duration_hours / 8) * 0.7;
+          const qual = lastSleep.quality_score ? (lastSleep.quality_score / 10) * 0.3 : 0.15;
+          sleepComp = (dur + qual) * 100;
+        }
+        hydComp = Math.min(100, (todayWater / hydrationGoal) * 100);
+        score = Math.round(sleepComp * 0.5 + hydComp * 0.5);
       }
-      hydComp = Math.min(100, (todayWater / hydrationGoal) * 100);
-      const score = Math.round(sleepComp * 0.5 + hydComp * 0.5);
-      return { score, weightLogged: (weightRes.data || []).length > 0 };
+      return { score, weightLogged: (weightRes.data || []).length > 0, fromWhoop: whoopToday?.recovery_score != null };
     },
   });
 
@@ -468,6 +473,9 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
                           }}>
                             {(recoveryScore?.score ?? 0) >= 75 ? "Good" : (recoveryScore?.score ?? 0) >= 50 ? "Moderate" : "Low"}
                           </span>
+                          {recoveryScore?.fromWhoop && (
+                            <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-[#e63946]/10 text-[#e63946]">Whoop</span>
+                          )}
                         </>
                       ) : (
                         <span className="text-xs text-muted-foreground">Log data to score</span>

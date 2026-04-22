@@ -64,7 +64,7 @@ async function refreshToken(
   return tokens.access_token;
 }
 
-async function whoopGet(path: string, token: string): Promise<any> {
+async function whoopGet(path: string, token: string, silent404 = false): Promise<any> {
   const url = `${WHOOP_BASE}${path}`;
   console.log("[sync-whoop] whoopGet:", url);
   const res = await fetch(url, {
@@ -72,6 +72,10 @@ async function whoopGet(path: string, token: string): Promise<any> {
   });
   console.log("[sync-whoop] whoopGet status:", res.status, "for", path);
   if (!res.ok) {
+    if (res.status === 404 && silent404) {
+      console.log("[sync-whoop] whoopGet 404 (not available on this plan), skipping:", path);
+      return null;
+    }
     const body = await res.text();
     console.error("[sync-whoop] whoopGet error body:", body);
     throw new Error(`Whoop API ${path} failed: ${res.status} ${body}`);
@@ -165,7 +169,7 @@ serve(async (req) => {
       whoopGet(`/v1/recovery?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/activity/sleep?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/cycle?start=${startStr}&end=${endStr}&limit=25`, token),
-      whoopGet(`/v1/activity/workout?start=${startStr}&end=${endStr}&limit=25`, token),
+      whoopGet(`/v1/activity/workout?start=${startStr}&end=${endStr}&limit=25`, token, true),
     ]);
 
     console.log("[sync-whoop] recovery:", recoveryData.status, recoveryData.status === "rejected" ? recoveryData.reason : `${recoveryData.value?.records?.length ?? 0} records`);
@@ -294,7 +298,9 @@ serve(async (req) => {
     }
 
     // Store workout data + map rowing to erg_workouts
-    if (workoutData.status === "fulfilled" && workoutData.value?.records) {
+    if (workoutData.status === "fulfilled" && workoutData.value === null) {
+      console.log("[sync-whoop] workouts not available on this Whoop plan, skipping");
+    } else if (workoutData.status === "fulfilled" && workoutData.value?.records) {
       const records = workoutData.value.records;
       console.log("[sync-whoop] processing", records.length, "workout records");
       for (const rec of records) {
