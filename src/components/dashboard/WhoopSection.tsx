@@ -253,27 +253,49 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
         {chartData.length >= 2 && (
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">7-Day Trend</p>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={chartData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="recovery" domain={[0, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="strain" orientation="right" domain={[0, 21]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 10, border: "none", boxShadow: "0 4px 16px rgba(0,0,0,0.10)" }}
-                  formatter={(v: number, name: string) => [
-                    name === "Recovery" ? `${v}` : `${v}`,
-                    name,
-                  ]}
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={chartData} margin={{ top: 8, right: 48, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={false}
                 />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <YAxis
+                  yAxisId="recovery"
+                  orientation="left"
+                  domain={[0, 100]}
+                  ticks={[0, 33, 67, 100]}
+                  tick={{ fontSize: 10, fill: "#10b981" }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{ value: "Recovery", angle: -90, position: "insideLeft", offset: 12, style: { fontSize: 10, fill: "#10b981" } }}
+                  width={52}
+                />
+                <YAxis
+                  yAxisId="strain"
+                  orientation="right"
+                  domain={[0, 21]}
+                  ticks={[0, 7, 14, 21]}
+                  tick={{ fontSize: 10, fill: "#2d6be4" }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{ value: "Strain", angle: 90, position: "insideRight", offset: 12, style: { fontSize: 10, fill: "#2d6be4" } }}
+                  width={44}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+                  formatter={(v: number, name: string) => [v, name]}
+                />
+                <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
                 <Line
                   yAxisId="recovery" type="monotone" dataKey="recovery" name="Recovery"
-                  stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981" }} connectNulls
+                  stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: "#10b981", strokeWidth: 0 }} connectNulls
                 />
                 <Line
                   yAxisId="strain" type="monotone" dataKey="strain" name="Strain"
-                  stroke="#2d6be4" strokeWidth={2.5} dot={{ r: 4, fill: "#2d6be4" }} connectNulls
+                  stroke="#2d6be4" strokeWidth={2.5} dot={{ r: 3, fill: "#2d6be4", strokeWidth: 0 }} connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>

@@ -64,7 +64,7 @@ async function refreshToken(
   return tokens.access_token;
 }
 
-async function whoopGet(path: string, token: string, silent404 = false): Promise<any> {
+async function whoopGet(path: string, token: string, silent404 = false, logRaw = false): Promise<any> {
   const url = `${WHOOP_BASE}${path}`;
   console.log("[sync-whoop] whoopGet:", url);
   const res = await fetch(url, {
@@ -80,8 +80,10 @@ async function whoopGet(path: string, token: string, silent404 = false): Promise
     console.error("[sync-whoop] whoopGet error body:", body);
     throw new Error(`Whoop API ${path} failed: ${res.status} ${body}`);
   }
-  const json = await res.json();
-  console.log("[sync-whoop] whoopGet records count:", json?.records?.length ?? "no records field", "for", path);
+  const text = await res.text();
+  console.log("[sync-whoop] whoopGet raw (first 500):", text.slice(0, 500));
+  const json = JSON.parse(text);
+  console.log("[sync-whoop] whoopGet records count:", json?.records?.length ?? json?.data?.length ?? "no records/data field", "for", path);
   return json;
 }
 
@@ -172,42 +174,87 @@ serve(async (req) => {
       whoopGet(`/v1/activity/workout?start=${startStr}&end=${endStr}&limit=25`, token, true),
     ]);
 
-    console.log("[sync-whoop] recovery:", recoveryData.status, recoveryData.status === "rejected" ? recoveryData.reason : `${recoveryData.value?.records?.length ?? 0} records`);
-    console.log("[sync-whoop] sleep:", sleepData.status, sleepData.status === "rejected" ? sleepData.reason : `${sleepData.value?.records?.length ?? 0} records`);
-    console.log("[sync-whoop] cycles:", cycleData.status, cycleData.status === "rejected" ? cycleData.reason : `${cycleData.value?.records?.length ?? 0} records`);
-    console.log("[sync-whoop] workouts:", workoutData.status, workoutData.status === "rejected" ? workoutData.reason : `${workoutData.value?.records?.length ?? 0} records`);
+    console.log("[sync-whoop] recovery:", recoveryData.status, recoveryData.status === "rejected" ? recoveryData.reason : `records=${recoveryData.value?.records?.length ?? 0} data=${recoveryData.value?.data?.length ?? 0}`);
+    console.log("[sync-whoop] sleep:", sleepData.status, sleepData.status === "rejected" ? sleepData.reason : `records=${sleepData.value?.records?.length ?? 0}`);
+    console.log("[sync-whoop] cycles:", cycleData.status, cycleData.status === "rejected" ? cycleData.reason : `records=${cycleData.value?.records?.length ?? 0}`);
+    console.log("[sync-whoop] workouts:", workoutData.status, workoutData.status === "rejected" ? workoutData.reason : `records=${workoutData.value?.records?.length ?? 0}`);
 
     let synced = 0;
+    let recoveryRowsSaved = 0;
 
-    // Store recovery data
-    if (recoveryData.status === "fulfilled" && recoveryData.value?.records) {
-      const records = recoveryData.value.records;
-      console.log("[sync-whoop] processing", records.length, "recovery records");
-      for (const rec of records) {
+    // Store recovery data — Whoop API may use "records" or "data" field
+    const recoveryRecords: any[] = recoveryData.status === "fulfilled"
+      ? (recoveryData.value?.records ?? recoveryData.value?.data ?? [])
+      : [];
+
+    if (recoveryData.status === "fulfilled") {
+      console.log("[sync-whoop] recovery response keys:", Object.keys(recoveryData.value ?? {}));
+      if (recoveryRecords.length > 0) {
+        console.log("[sync-whoop] first recovery record keys:", Object.keys(recoveryRecords[0]));
+        console.log("[sync-whoop] first recovery record:", JSON.stringify(recoveryRecords[0]).slice(0, 600));
+      }
+      console.log("[sync-whoop] processing", recoveryRecords.length, "recovery records");
+
+      for (const rec of recoveryRecords) {
         if (rec.score_state === "UNSCORABLE") {
           console.log("[sync-whoop] skipping UNSCORABLE recovery record cycle_id:", rec.cycle_id);
           continue;
         }
-        const date = toDate(rec.created_at);
-        console.log("[sync-whoop] upserting whoop_recovery for date:", date, "cycle_id:", rec.cycle_id, "score:", rec.score?.recovery_score);
+        // Date may be in created_at, updated_at, or cycle.start
+        const dateStr = rec.created_at ?? rec.updated_at ?? rec.date ?? null;
+        if (!dateStr) { console.log("[sync-whoop] skipping recovery record with no date:", JSON.stringify(rec).slice(0, 200)); continue; }
+        const date = toDate(dateStr);
+        // score fields: score.recovery_score OR recovery_score at top level
+        const score = rec.score ?? rec;
+        const recoveryScore = score.recovery_score ?? null;
+        const hrv = score.hrv_rmssd_milli ?? score.hrv_rmssd ?? null;
+        const rhr = score.resting_heart_rate ?? null;
+        console.log("[sync-whoop] upserting whoop_recovery for date:", date, "cycle_id:", rec.cycle_id, "recovery_score:", recoveryScore, "hrv:", hrv, "rhr:", rhr);
         const { error: recErr } = await supabase.from("whoop_recovery").upsert({
           user_id,
-          whoop_cycle_id: rec.cycle_id,
+          whoop_cycle_id: rec.cycle_id ?? null,
           date,
-          recovery_score: rec.score?.recovery_score ?? null,
-          hrv_rmssd: rec.score?.hrv_rmssd_milli ?? null,
-          resting_heart_rate: rec.score?.resting_heart_rate ?? null,
-          sleep_performance_percentage: rec.score?.sleep_performance_percentage ?? null,
-          skin_temp_celsius: rec.score?.skin_temp_celsius ?? null,
-          blood_oxygen_percentage: rec.score?.spo2_percentage ?? null,
+          recovery_score: recoveryScore,
+          hrv_rmssd: hrv,
+          resting_heart_rate: rhr,
+          sleep_performance_percentage: score.sleep_performance_percentage ?? null,
+          skin_temp_celsius: score.skin_temp_celsius ?? null,
+          blood_oxygen_percentage: score.spo2_percentage ?? null,
         }, { onConflict: "user_id,date" });
-        if (recErr) console.error("[sync-whoop] whoop_recovery upsert error:", recErr.message, "code:", recErr.code);
-        else { console.log("[sync-whoop] whoop_recovery upsert OK for date:", date); synced++; }
+        if (recErr) console.error("[sync-whoop] whoop_recovery upsert error:", recErr.message, "code:", recErr.code, "details:", recErr.details);
+        else { console.log("[sync-whoop] whoop_recovery upsert OK for date:", date); synced++; recoveryRowsSaved++; }
       }
-    } else if (recoveryData.status === "rejected") {
-      console.error("[sync-whoop] recovery fetch failed:", recoveryData.reason);
     } else {
-      console.log("[sync-whoop] recovery: no records field in response, value keys:", Object.keys(recoveryData.value ?? {}));
+      console.error("[sync-whoop] recovery fetch failed:", recoveryData.reason);
+    }
+
+    // Fallback: if no recovery data saved, estimate from strain cycles
+    if (recoveryRowsSaved === 0 && cycleData.status === "fulfilled") {
+      const cycles: any[] = cycleData.value?.records ?? cycleData.value?.data ?? [];
+      const scoredCycles = cycles.filter(c => c.score_state !== "UNSCORABLE" && c.score?.strain != null);
+      if (scoredCycles.length > 0) {
+        console.log("[sync-whoop] no recovery records saved — generating estimated recovery from", scoredCycles.length, "strain cycles");
+        // Compute estimated recovery per day: 100 - (strain/21)*100, clamped 0-100
+        for (const cyc of scoredCycles) {
+          const date = toDate(cyc.start);
+          const strain = Number(cyc.score.strain);
+          const estRecovery = Math.round(Math.max(0, Math.min(100, 100 - (strain / 21) * 100)));
+          console.log("[sync-whoop] estimated recovery for date:", date, "strain:", strain, "est_recovery:", estRecovery);
+          const { error: estErr } = await supabase.from("whoop_recovery").upsert({
+            user_id,
+            whoop_cycle_id: cyc.id ?? null,
+            date,
+            recovery_score: estRecovery,
+            hrv_rmssd: null,
+            resting_heart_rate: null,
+            sleep_performance_percentage: null,
+            skin_temp_celsius: null,
+            blood_oxygen_percentage: null,
+          }, { onConflict: "user_id,date" });
+          if (estErr) console.error("[sync-whoop] estimated recovery upsert error:", estErr.message);
+          else { console.log("[sync-whoop] estimated recovery upsert OK for date:", date); synced++; }
+        }
+      }
     }
 
     // Store sleep data + feed into sleep_entries
