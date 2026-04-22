@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  fetchSleep, fetchDaily, fetchWorkouts,
-  utcToLocalDate, sleepDate, localHHMM,
-} from "../_shared/openWearables.ts";
+  fetchProviderSleep, fetchProviderDaily, fetchProviderWorkouts,
+  refreshProviderToken, decryptToken, encryptToken,
+  utcToLocalDate, sleepDate, localHHMM, type Provider,
+} from "../_shared/providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,33 +15,35 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    if (!Deno.env.get("OPEN_WEARABLES_API_KEY")) {
-      return new Response(JSON.stringify({ error: "Wearable integration not configured" }), {
-        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const { user_id, days = 7 } = await req.json();
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { user_id, days = 7 } = await req.json();
-    if (!user_id) return new Response(JSON.stringify({ error: "Missing user_id" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: connections } = await supabase.from("wearable_connections")
-      .select("*").eq("user_id", user_id).eq("is_active", true);
+    const { data: connections } = await supabase
+      .from("wearable_connections")
+      .select("*")
+      .eq("user_id", user_id)
+      .eq("is_active", true);
 
     if (!connections?.length) {
-      return new Response(JSON.stringify({ message: "No active wearable connections" }), {
+      return new Response(JSON.stringify({ synced: [], errors: [], message: "No active wearable connections" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: profile } = await supabase.from("profiles")
-      .select("timezone").eq("id", user_id).maybeSingle();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("timezone")
+      .eq("id", user_id)
+      .maybeSingle();
     const tz = profile?.timezone || "UTC";
 
     const now = new Date();
@@ -50,14 +53,47 @@ serve(async (req) => {
     const errors: string[] = [];
 
     for (const conn of connections) {
-      const owUserId: string = conn.open_wearables_user_id;
-      if (!owUserId) continue;
-
       try {
-        const wearableTs = new Date().toISOString();
+        if (!conn.access_token_enc) {
+          errors.push(conn.provider);
+          await supabase.from("wearable_connections")
+            .update({ error_message: "No access token — please reconnect" })
+            .eq("id", conn.id);
+          continue;
+        }
 
-        // ── Sleep ──────────────────────────────────────────────────────────────
-        const sleepSessions = await fetchSleep(owUserId, startDate, endDate);
+        // Refresh token if expired or expiring within 5 minutes
+        let accessToken = await decryptToken(conn.access_token_enc);
+        if (conn.token_expires_at && conn.refresh_token_enc) {
+          const expiresAt = new Date(conn.token_expires_at).getTime();
+          if (expiresAt <= Date.now() + 5 * 60 * 1000) {
+            try {
+              const refreshToken = await decryptToken(conn.refresh_token_enc);
+              const newTokens = await refreshProviderToken(conn.provider as Provider, refreshToken);
+              accessToken = newTokens.access_token;
+              await supabase.from("wearable_connections").update({
+                access_token_enc: await encryptToken(newTokens.access_token),
+                refresh_token_enc: newTokens.refresh_token
+                  ? await encryptToken(newTokens.refresh_token)
+                  : conn.refresh_token_enc,
+                token_expires_at: newTokens.expires_at ?? null,
+              }).eq("id", conn.id);
+            } catch (refreshErr) {
+              console.error(`[wearable-sync] ${conn.provider} token refresh failed:`, refreshErr);
+              await supabase.from("wearable_connections")
+                .update({ is_active: false, error_message: "Token expired — please reconnect" })
+                .eq("id", conn.id);
+              errors.push(conn.provider);
+              continue;
+            }
+          }
+        }
+
+        const wearableTs = new Date().toISOString();
+        const provider = conn.provider as Provider;
+
+        // ── Sleep ────────────────────────────────────────────────────────────
+        const sleepSessions = await fetchProviderSleep(provider, accessToken, startDate, endDate);
         for (const s of sleepSessions) {
           if (!s.end_time || !s.duration_seconds) continue;
 
@@ -88,26 +124,24 @@ serve(async (req) => {
             }).eq("id", existing.id);
           }
 
-          // Push HRV/RHR from sleep payload if present
           if (s.hrv_rmssd != null || s.resting_hr != null) {
-            const mRow: Record<string, any> = {
+            const mRow: Record<string, unknown> = {
               user_id, date, provider: conn.provider, source: "wearable",
               wearable_updated_at: wearableTs, updated_at: wearableTs,
             };
             if (s.hrv_rmssd != null) mRow.hrv = s.hrv_rmssd;
             if (s.resting_hr != null) mRow.resting_hr = s.resting_hr;
-            await supabase.from("recovery_metrics")
-              .upsert(mRow, { onConflict: "user_id,date" });
+            await supabase.from("recovery_metrics").upsert(mRow, { onConflict: "user_id,date" });
           }
         }
 
-        // ── Daily summaries ────────────────────────────────────────────────────
-        const dailySummaries = await fetchDaily(owUserId, startDate, endDate);
+        // ── Daily summaries ──────────────────────────────────────────────────
+        const dailySummaries = await fetchProviderDaily(provider, accessToken, startDate, endDate);
         for (const d of dailySummaries) {
           const date = d.date ? utcToLocalDate(d.date + "T12:00:00Z", tz) : null;
           if (!date) continue;
 
-          const row: Record<string, any> = {
+          const row: Record<string, unknown> = {
             user_id, date, provider: conn.provider,
             source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
           };
@@ -118,25 +152,24 @@ serve(async (req) => {
           if (d.active_calories != null) row.active_calories = d.active_calories;
           if (d.strain != null) row.strain = d.strain;
 
-          await supabase.from("recovery_metrics")
-            .upsert(row, { onConflict: "user_id,date" });
+          await supabase.from("recovery_metrics").upsert(row, { onConflict: "user_id,date" });
         }
 
-        // ── Workouts ───────────────────────────────────────────────────────────
-        const workouts = await fetchWorkouts(owUserId, startDate, endDate);
+        // ── Workouts ─────────────────────────────────────────────────────────
+        const workouts = await fetchProviderWorkouts(provider, accessToken, startDate, endDate);
         for (const w of workouts) {
           if (!w.workout_id || !w.start_time) continue;
           if (w.strain == null) continue;
           const date = utcToLocalDate(w.start_time, tz);
-          await supabase.from("recovery_metrics")
-            .upsert({
-              user_id, date, strain: w.strain, provider: conn.provider,
-              source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
-            }, { onConflict: "user_id,date" });
+          await supabase.from("recovery_metrics").upsert({
+            user_id, date, strain: w.strain, provider: conn.provider,
+            source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
+          }, { onConflict: "user_id,date" });
         }
 
         await supabase.from("wearable_connections")
-          .update({ last_sync_at: wearableTs, error_message: null }).eq("id", conn.id);
+          .update({ last_sync_at: wearableTs, error_message: null })
+          .eq("id", conn.id);
 
         synced.push(conn.provider);
         console.log("[wearable-sync] synced", conn.provider);

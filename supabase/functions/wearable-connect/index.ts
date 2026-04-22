@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createConnectSession } from "../_shared/openWearables.ts";
+import { getOAuthUrl, encodeState, SUPPORTED_PROVIDERS, type Provider } from "../_shared/providers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,27 +10,31 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    if (!Deno.env.get("OPEN_WEARABLES_API_KEY")) {
-      return new Response(JSON.stringify({ error: "Wearable integration not configured" }), {
-        status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const { user_id, provider } = await req.json();
+
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!provider) {
+      return new Response(JSON.stringify({ error: "Missing provider" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!SUPPORTED_PROVIDERS.includes(provider)) {
+      return new Response(JSON.stringify({ error: `Unsupported provider: ${provider}` }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { user_id, provider } = await req.json();
-    if (!user_id) return new Response(JSON.stringify({ error: "Missing user_id" }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // The redirect_uri must be registered in each provider's OAuth app settings.
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+    const redirectUri = `${SUPABASE_URL}/functions/v1/wearable-callback`;
+    const state = encodeState(user_id, provider as Provider);
+    const url = getOAuthUrl(provider as Provider, redirectUri, state);
 
-    const APP_URL = Deno.env.get("APP_URL") || "https://crewsync.app";
-
-    const session = await createConnectSession({
-      reference_id: user_id,
-      provider: provider ?? undefined,
-      success_url: `${APP_URL}/recovery?wearable=connected`,
-      failure_url: `${APP_URL}/recovery?wearable=failed`,
-    });
-
-    return new Response(JSON.stringify({ url: session.auth_url, session_id: session.session_id }), {
+    return new Response(JSON.stringify({ url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

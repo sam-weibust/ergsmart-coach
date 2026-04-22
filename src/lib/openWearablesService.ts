@@ -1,6 +1,6 @@
 /**
- * Open Wearables client-side service.
- * All actual API calls go through Supabase Edge Functions (server-side only).
+ * Wearable integration client-side service.
+ * All provider OAuth and data-fetch logic runs in Supabase Edge Functions.
  * This module provides typed helpers for the frontend to invoke those functions.
  */
 import { supabase } from "@/integrations/supabase/client";
@@ -28,7 +28,7 @@ export interface WearableConnection {
   error_message: string | null;
 }
 
-/** Opens the Open Wearables hosted auth flow in a popup window. */
+/** Opens the provider OAuth flow in a popup window. Requires provider to be specified. */
 export async function connectWearable(
   userId: string,
   provider?: WearableProvider

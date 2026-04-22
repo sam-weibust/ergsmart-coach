@@ -142,8 +142,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
       { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
       { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
-      { id: "schedule", label: "Schedule", description: "Today's scheduled workouts", icon: Calendar },
-      { id: "library", label: "Library", description: "Browse workout templates", icon: BookOpen },
     ],
   },
   {
@@ -154,7 +152,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "analytics", label: "Analytics", description: "Deep-dive performance analytics", icon: BarChart3 },
       { id: "trends", label: "Trends", description: "Compare and track trends over time", icon: TrendingUp },
       { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
-      { id: "pacing", label: "Pacing", description: "Calculate and plan splits", icon: Calculator },
       { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
       { id: "ask", label: "AI Coach", description: "Chat with your AI rowing coach", icon: Sparkles },
     ],
@@ -223,8 +220,7 @@ const NAV_CONFIG: NavSection[] = [
     label: "Recruiting",
     icon: GraduationCap,
     subs: [
-      { id: "my-profile", label: "My Profile", description: "View your public athlete profile", icon: User },
-      { id: "public-profile", label: "Public Profile", description: "Edit your public-facing profile", icon: Globe },
+      { id: "public-profile", label: "Profile", description: "View and edit your public-facing profile", icon: User },
       { id: "recruiting-profile", label: "Recruiting Profile", description: "Manage your recruiting information", icon: Target },
       { id: "college-targets", label: "College Targets", description: "Track target schools and coaches", icon: School },
       { id: "combine", label: "Virtual Combine", description: "Participate in virtual combines", icon: Award },
@@ -252,7 +248,6 @@ const NAV_CONFIG: NavSection[] = [
       { id: "h2h", label: "Head-to-Head", description: "Race against other athletes", icon: Swords },
       { id: "challenges", label: "Challenges", description: "Weekly community challenges", icon: Zap },
       { id: "achievements", label: "Achievements", description: "View your awards and badges", icon: Trophy },
-      { id: "rankings", label: "Rankings", description: "Official event rankings", icon: Star },
     ],
   },
   {
