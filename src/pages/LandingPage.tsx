@@ -389,6 +389,46 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* ── INTEGRATIONS SECTION ─────────────────────────────── */}
+      <section style={{ backgroundColor: "#f8f9fb", padding: "80px 24px" }}>
+        <div style={{ maxWidth: "700px", margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.4rem, 2.8vw, 2.2rem)", fontWeight: 800, marginBottom: "12px", letterSpacing: "-0.02em" }}>
+            Works with the tools you already use.
+          </h2>
+          <p style={{ color: "#4a5568", fontSize: "15px", marginBottom: "40px" }}>
+            Connect your devices and import your data automatically.
+          </p>
+          <div style={{ display: "flex", gap: "20px", justifyContent: "center", flexWrap: "wrap", marginBottom: "28px" }}>
+            {[
+              { logo: "/c2logo.png", name: "Concept2", desc: "Full logbook sync and live PM5 tracking." },
+              { logo: "/whooplogo.png", name: "Whoop", desc: "Recovery score, HRV, and sleep data." },
+            ].map((item) => (
+              <div key={item.name} style={{
+                backgroundColor: "#ffffff",
+                border: "1px solid #e5e7eb",
+                borderRadius: "16px",
+                padding: "28px 32px",
+                width: "240px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "14px",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+              }}>
+                <img src={item.logo} alt={item.name} style={{ height: 32, width: "auto", objectFit: "contain" }} />
+                <div>
+                  <p style={{ color: "#0a1628", fontWeight: 700, fontSize: "15px", margin: "0 0 6px" }}>{item.name}</p>
+                  <p style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.5, margin: 0 }}>{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ color: "#9ca3af", fontSize: "13px" }}>
+            More integrations coming soon — Garmin, Apple Health, Strava.
+          </p>
+        </div>
+      </section>
+
       {/* ── COACHING SECTION ─────────────────────────────────── */}
       <section id="for-coaches" style={{ backgroundColor: "#0a1628", padding: "80px 24px" }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>

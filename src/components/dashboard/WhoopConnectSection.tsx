@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { CheckCircle2, XCircle, Loader2, RefreshCw, Activity } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 import { whoopConnect, whoopSync, whoopDisconnect } from "@/lib/api";
 import { getSessionUser } from "@/lib/getUser";
 
@@ -87,7 +87,7 @@ export default function WhoopConnectSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-[#e63946]" />
+          <img src="/whooplogo.png" alt="Whoop" style={{ height: 20, width: "auto" }} />
           Whoop
         </CardTitle>
         <CardDescription>
@@ -101,7 +101,10 @@ export default function WhoopConnectSection() {
               ? <CheckCircle2 className="h-5 w-5 text-green-500" />
               : <XCircle className="h-5 w-5 text-muted-foreground" />}
             <div>
-              <p className="font-medium text-sm">{connected ? "Connected" : "Not connected"}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm">{connected ? "Connected" : "Not connected"}</p>
+                {connected && <img src="/whooplogo.png" alt="Whoop" style={{ height: 14, width: "auto", opacity: 0.7 }} />}
+              </div>
               {connected && lastSync && (
                 <p className="text-xs text-muted-foreground">
                   Last sync: {new Date(lastSync).toLocaleDateString()}
@@ -125,7 +128,7 @@ export default function WhoopConnectSection() {
               <Button size="sm" onClick={connectWhoop} disabled={isConnecting}>
                 {isConnecting
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</>
-                  : "Connect Whoop"}
+                  : <><img src="/whooplogo.png" alt="" style={{ height: 16, width: "auto" }} className="mr-1.5" />Connect Whoop</>}
               </Button>
             )}
           </div>

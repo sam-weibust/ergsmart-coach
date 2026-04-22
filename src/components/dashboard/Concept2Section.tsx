@@ -111,7 +111,7 @@ export default function Concept2Section() {
     <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Link className="h-5 w-5" />
+            <img src="/c2logo.png" alt="Concept2" style={{ height: 20, width: "auto" }} />
             Concept2 Logbook Sync
           </CardTitle>
           <CardDescription>
@@ -125,7 +125,10 @@ export default function Concept2Section() {
                 ? <CheckCircle2 className="h-5 w-5 text-green-500" />
                 : <XCircle className="h-5 w-5 text-muted-foreground" />}
               <div>
-                <p className="font-medium text-sm">{c2Connected ? "Connected" : "Not connected"}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-sm">{c2Connected ? "Connected" : "Not connected"}</p>
+                  {c2Connected && <img src="/c2logo.png" alt="Concept2" style={{ height: 14, width: "auto", opacity: 0.7 }} />}
+                </div>
                 {c2Connected && c2LastSync && (
                   <p className="text-xs text-muted-foreground">
                     Last sync: {new Date(c2LastSync).toLocaleDateString()}
@@ -149,7 +152,7 @@ export default function Concept2Section() {
                 <Button size="sm" onClick={connectC2} disabled={isConnectingC2}>
                   {isConnectingC2
                     ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Waiting…</>
-                    : "Connect Logbook"}
+                    : <><img src="/c2logo.png" alt="" style={{ height: 16, width: "auto" }} className="mr-1.5" />Connect Logbook</>}
                 </Button>
               )}
             </div>

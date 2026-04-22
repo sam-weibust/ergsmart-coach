@@ -666,12 +666,7 @@ export default function AthleteProfile() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <img
-                      src="https://www.concept2.com/favicon.ico"
-                      alt="Concept2"
-                      className="h-4 w-4"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
+                    <img src="/c2logo.png" alt="Concept2" style={{ height: 20, width: "auto" }} />
                     Concept2 Logbook
                   </CardTitle>
                 </CardHeader>
@@ -683,6 +678,7 @@ export default function AthleteProfile() {
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
                           Connected
                         </span>
+                        <img src="/c2logo.png" alt="Concept2" style={{ height: 14, width: "auto", opacity: 0.7 }} />
                       </div>
                       {c2ImportedCount !== null && (
                         <p className="text-xs text-muted-foreground">
@@ -727,8 +723,7 @@ export default function AthleteProfile() {
                         onClick={handleC2Connect}
                         disabled={c2Connecting}
                       >
-                        <Plug className="h-3 w-3 mr-1" />
-                        {c2Connecting ? "Connecting…" : "Connect Concept2 Account"}
+                        {c2Connecting ? "Connecting…" : <><img src="/c2logo.png" alt="" style={{ height: 14, width: "auto" }} className="mr-1.5" />Connect Concept2 Account</>}
                       </Button>
                     </>
                   )}
@@ -741,7 +736,7 @@ export default function AthleteProfile() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-[#e63946]" />
+                    <img src="/whooplogo.png" alt="Whoop" style={{ height: 20, width: "auto" }} />
                     Whoop
                   </CardTitle>
                 </CardHeader>
@@ -753,6 +748,7 @@ export default function AthleteProfile() {
                           <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
                           Connected
                         </span>
+                        <img src="/whooplogo.png" alt="Whoop" style={{ height: 14, width: "auto", opacity: 0.7 }} />
                       </div>
                       {whoopLastSync && (
                         <p className="text-xs text-muted-foreground">
@@ -792,8 +788,7 @@ export default function AthleteProfile() {
                         onClick={handleWhoopConnect}
                         disabled={whoopConnecting}
                       >
-                        <Plug className="h-3 w-3 mr-1" />
-                        {whoopConnecting ? "Connecting…" : "Connect Whoop"}
+                        {whoopConnecting ? "Connecting…" : <><img src="/whooplogo.png" alt="" style={{ height: 14, width: "auto" }} className="mr-1.5" />Connect Whoop</>}
                       </Button>
                     </>
                   )}
