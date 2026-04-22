@@ -777,6 +777,7 @@ const PlanList = ({
                         <PrintableWeeklyPlan
                           weeks={workoutWeeks}
                           title={plan.title}
+                          userName={profile?.full_name ?? undefined}
                         />
                       )}
 
