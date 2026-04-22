@@ -54,6 +54,8 @@ import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
 import { GenerationProgress } from "./GenerationProgress";
 import { Calendar } from "@/components/ui/calendar";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type Profile = {
   id: string;
   full_name?: string | null;
@@ -100,7 +102,25 @@ type GenerationProgressState = {
   totalBatches: number;
 };
 
-const getZoneColor = (zone: string) => {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Safely extract the weeks array from workout_data.
+ * Handles:
+ *  - Already an array                  → use as-is
+ *  - Object with .plan array           → use .plan
+ *  - Object with .weeks array          → use .weeks
+ *  - Anything else / null / undefined  → []
+ */
+const extractWorkoutWeeks = (workout_data: any): any[] => {
+  if (!workout_data) return [];
+  if (Array.isArray(workout_data)) return workout_data;
+  if (Array.isArray(workout_data?.plan)) return workout_data.plan;
+  if (Array.isArray(workout_data?.weeks)) return workout_data.weeks;
+  return [];
+};
+
+const getZoneColor = (zone?: string) => {
   switch (zone?.toUpperCase()) {
     case "UT2":
       return "bg-green-500/20 text-green-700 border-green-500/30";
@@ -114,6 +134,8 @@ const getZoneColor = (zone: string) => {
       return "bg-muted text-muted-foreground";
   }
 };
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 type GeneratePlanControlsProps = {
   months: string;
@@ -206,37 +228,37 @@ const ErgBlock = ({ ergWorkout }: ErgBlockProps) => {
     <div className="flex flex-wrap items-start gap-2">
       <Badge
         variant="outline"
-        className={getZoneColor(ergWorkout.zone)}
+        className={getZoneColor(ergWorkout?.zone)}
       >
-        {ergWorkout.zone || "Erg"}
+        {ergWorkout?.zone || "Erg"}
       </Badge>
       <div className="flex-1">
         <div className="font-medium">
-          {ergWorkout.description || "Workout"}
+          {ergWorkout?.description || "Workout"}
         </div>
         <div className="text-sm text-muted-foreground">
-          {ergWorkout.duration && `${ergWorkout.duration}`}
-          {ergWorkout.distance && ` • ${ergWorkout.distance}m`}
-          {ergWorkout.targetSplit &&
+          {ergWorkout?.duration && `${ergWorkout.duration}`}
+          {ergWorkout?.distance && ` • ${ergWorkout.distance}m`}
+          {ergWorkout?.targetSplit &&
             ` • Target: ${ergWorkout.targetSplit}`}
-          {ergWorkout.rate && ` • ${ergWorkout.rate}`}
+          {ergWorkout?.rate && ` • ${ergWorkout.rate}`}
         </div>
-        {ergWorkout.warmup && (
+        {ergWorkout?.warmup && (
           <div className="text-xs text-green-600 dark:text-green-400 mt-1">
             🔥 Warmup: {ergWorkout.warmup}
           </div>
         )}
-        {ergWorkout.restPeriods && (
+        {ergWorkout?.restPeriods && (
           <div className="text-xs text-yellow-600 dark:text-yellow-400">
             ⏱ Rest: {ergWorkout.restPeriods}
           </div>
         )}
-        {ergWorkout.cooldown && (
+        {ergWorkout?.cooldown && (
           <div className="text-xs text-blue-600 dark:text-blue-400">
             ❄️ Cooldown: {ergWorkout.cooldown}
           </div>
         )}
-        {ergWorkout.notes && (
+        {ergWorkout?.notes && (
           <div className="text-xs text-muted-foreground italic mt-1">
             {ergWorkout.notes}
           </div>
@@ -280,11 +302,8 @@ const StrengthBlock = ({ strengthWorkout }: StrengthBlockProps) => {
               <span className="text-muted-foreground">
                 {ex?.sets ?? 0}x{ex?.reps ?? 0}
                 {ex?.weight && ` @ ${ex.weight}`}
-                {ex?.restBetweenSets &&
-                  ` (${ex.restBetweenSets} rest)`}
-                {ex?.rest &&
-                  !ex.restBetweenSets &&
-                  ` (Rest: ${ex.rest})`}
+                {ex?.restBetweenSets && ` (${ex.restBetweenSets} rest)`}
+                {ex?.rest && !ex.restBetweenSets && ` (Rest: ${ex.rest})`}
               </span>
             </div>
           ))}
@@ -293,8 +312,7 @@ const StrengthBlock = ({ strengthWorkout }: StrengthBlockProps) => {
         <span className="text-sm">
           {strengthWorkout.exercise} -{" "}
           {strengthWorkout.sets ?? 0}x{strengthWorkout.reps ?? 0}
-          {strengthWorkout.weight &&
-            ` @ ${strengthWorkout.weight}`}
+          {strengthWorkout.weight && ` @ ${strengthWorkout.weight}`}
         </span>
       ) : (
         <span className="text-sm text-muted-foreground">
@@ -328,9 +346,7 @@ const YogaBlock = ({ yogaSession }: YogaBlockProps) => {
     <div className="border-l-2 border-purple-500/30 pl-3">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-purple-600">🧘</span>
-        <span className="font-medium">
-          Rest Day - Yoga/Recovery
-        </span>
+        <span className="font-medium">Rest Day - Yoga/Recovery</span>
         {yogaSession.duration && (
           <Badge variant="secondary" className="text-xs">
             {yogaSession.duration}
@@ -339,14 +355,11 @@ const YogaBlock = ({ yogaSession }: YogaBlockProps) => {
       </div>
       {yogaSession.focus && (
         <div className="text-sm">
-          <span className="font-medium">Focus:</span>{" "}
-          {yogaSession.focus}
+          <span className="font-medium">Focus:</span> {yogaSession.focus}
         </div>
       )}
       {yogaSession.poses && (
-        <div className="text-sm text-muted-foreground">
-          {yogaSession.poses}
-        </div>
+        <div className="text-sm text-muted-foreground">{yogaSession.poses}</div>
       )}
     </div>
   );
@@ -373,26 +386,22 @@ const MealBlock = ({ mealPlan }: MealBlockProps) => {
       <div className="grid gap-1 text-sm">
         {mealPlan.breakfast && (
           <div>
-            <span className="font-medium">Breakfast:</span>{" "}
-            {mealPlan.breakfast}
+            <span className="font-medium">Breakfast:</span> {mealPlan.breakfast}
           </div>
         )}
         {mealPlan.lunch && (
           <div>
-            <span className="font-medium">Lunch:</span>{" "}
-            {mealPlan.lunch}
+            <span className="font-medium">Lunch:</span> {mealPlan.lunch}
           </div>
         )}
         {mealPlan.dinner && (
           <div>
-            <span className="font-medium">Dinner:</span>{" "}
-            {mealPlan.dinner}
+            <span className="font-medium">Dinner:</span> {mealPlan.dinner}
           </div>
         )}
         {mealPlan.snacks && (
           <div>
-            <span className="font-medium">Snacks:</span>{" "}
-            {mealPlan.snacks}
+            <span className="font-medium">Snacks:</span> {mealPlan.snacks}
           </div>
         )}
         {mealPlan.macros && (
@@ -410,28 +419,48 @@ type DayCardProps = {
   dayIndex: number;
 };
 
-const DayCard = ({ day, dayIndex }: DayCardProps) => (
-  <div className="p-4 border rounded-lg space-y-3">
-    <div className="font-medium text-lg">
-      {typeof day?.day === "string" ? day.day : `Day ${day?.day ?? dayIndex + 1}`}
+const DayCard = ({ day, dayIndex }: DayCardProps) => {
+  // Old schema: day.day is a string like "Monday", new schema: day.day is a number
+  const dayLabel =
+    typeof day?.day === "string"
+      ? day.day
+      : `Day ${day?.day ?? dayIndex + 1}`;
+
+  // Old schema only has a plain workout string; new schema has structured fields.
+  // Show the plain workout string when present (covers old schema).
+  const hasPlainWorkout = typeof day?.workout === "string" && day.workout.length > 0;
+  // New schema structured fields
+  const hasStructured =
+    !hasPlainWorkout &&
+    (day?.ergWorkout || day?.strengthWorkout || day?.yogaSession || day?.mealPlan);
+
+  return (
+    <div className="p-4 border rounded-lg space-y-3">
+      <div className="font-medium text-lg">{dayLabel}</div>
+
+      {hasPlainWorkout && (
+        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+          {day.workout}
+        </p>
+      )}
+
+      {hasStructured && (
+        <>
+          {day.ergWorkout && <ErgBlock ergWorkout={day.ergWorkout} />}
+          {day.strengthWorkout && (
+            <StrengthBlock strengthWorkout={day.strengthWorkout} />
+          )}
+          {day.yogaSession && <YogaBlock yogaSession={day.yogaSession} />}
+          {day.mealPlan && <MealBlock mealPlan={day.mealPlan} />}
+        </>
+      )}
+
+      {!hasPlainWorkout && !hasStructured && (
+        <p className="text-sm text-muted-foreground">Rest / No workout</p>
+      )}
     </div>
-
-    {/* New schema: plain workout string */}
-    {day?.workout && (
-      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{day.workout}</p>
-    )}
-
-    {/* Legacy schema: structured blocks */}
-    {!day?.workout && day?.ergWorkout && <ErgBlock ergWorkout={day.ergWorkout} />}
-    {!day?.workout && day?.strengthWorkout && (
-      <StrengthBlock strengthWorkout={day.strengthWorkout} />
-    )}
-    {!day?.workout && day?.yogaSession && (
-      <YogaBlock yogaSession={day.yogaSession} />
-    )}
-    {!day?.workout && day?.mealPlan && <MealBlock mealPlan={day.mealPlan} />}
-  </div>
-);
+  );
+};
 
 type WeekAccordionProps = {
   planId: string;
@@ -453,10 +482,7 @@ const WeekAccordion = ({
     className="w-full"
   >
     {weeks.map((week: any, weekIdx: number) => (
-      <AccordionItem
-        key={weekIdx}
-        value={`week-${weekIdx}`}
-      >
+      <AccordionItem key={weekIdx} value={`week-${weekIdx}`}>
         <AccordionTrigger className="hover:no-underline">
           <div className="flex items-center gap-2">
             <h4 className="font-semibold">
@@ -471,17 +497,14 @@ const WeekAccordion = ({
         </AccordionTrigger>
         <AccordionContent>
           <div className="grid gap-3">
-            {Array.isArray(week?.days) &&
-            week.days.length > 0 ? (
-              week.days.map(
-                (day: any, dayIdx: number) => (
-                  <DayCard
-                    key={day?.day ?? dayIdx}
-                    day={day}
-                    dayIndex={dayIdx}
-                  />
-                )
-              )
+            {Array.isArray(week?.days) && week.days.length > 0 ? (
+              week.days.map((day: any, dayIdx: number) => (
+                <DayCard
+                  key={day?.day ?? dayIdx}
+                  day={day}
+                  dayIndex={dayIdx}
+                />
+              ))
             ) : (
               <div className="text-muted-foreground text-sm">
                 No days in this week
@@ -499,11 +522,7 @@ type SharePlanDialogProps = {
   friends: Friend[] | undefined;
   teams: Team[] | undefined;
   isCoach: boolean;
-  onShare: (args: {
-    planId: string;
-    userId?: string;
-    teamId?: string;
-  }) => void;
+  onShare: (args: { planId: string; userId?: string; teamId?: string }) => void;
 };
 
 const SharePlanDialog = ({
@@ -531,21 +550,14 @@ const SharePlanDialog = ({
         <div className="space-y-4">
           {hasFriends && (
             <div>
-              <h4 className="font-medium mb-2">
-                Share with Friend
-              </h4>
+              <h4 className="font-medium mb-2">Share with Friend</h4>
               <div className="space-y-2">
                 {friends!.map((f) => (
                   <Button
                     key={f.id}
                     variant="outline"
                     className="w-full justify-start"
-                    onClick={() =>
-                      onShare({
-                        planId,
-                        userId: f.friend.id,
-                      })
-                    }
+                    onClick={() => onShare({ planId, userId: f.friend.id })}
                   >
                     {f.friend.full_name || f.friend.email}
                   </Button>
@@ -556,21 +568,14 @@ const SharePlanDialog = ({
 
           {isCoach && hasTeams && (
             <div>
-              <h4 className="font-medium mb-2">
-                Share with Team
-              </h4>
+              <h4 className="font-medium mb-2">Share with Team</h4>
               <div className="space-y-2">
                 {teams!.map((team) => (
                   <Button
                     key={team.id}
                     variant="outline"
                     className="w-full justify-start"
-                    onClick={() =>
-                      onShare({
-                        planId,
-                        teamId: team.id,
-                      })
-                    }
+                    onClick={() => onShare({ planId, teamId: team.id })}
                   >
                     {team.name}
                   </Button>
@@ -600,6 +605,7 @@ type PlanListProps = {
   friends: Friend[] | undefined;
   teams: Team[] | undefined;
   isCoach: boolean;
+  userName?: string | null;
   onDeletePlan: (planId: string) => void;
   onSharePlan: (args: {
     planId: string;
@@ -616,10 +622,14 @@ const PlanList = ({
   friends,
   teams,
   isCoach,
+  userName,
   onDeletePlan,
   onSharePlan,
 }: PlanListProps) => {
-  const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(new Set());
+  // ALL hooks must be called unconditionally before any early returns
+  const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(
+    new Set()
+  );
 
   if (plansLoading) {
     return (
@@ -647,7 +657,8 @@ const PlanList = ({
   const toggleCalendarView = (planId: string) => {
     setCalendarPlanIds((prev) => {
       const next = new Set(prev);
-      if (next.has(planId)) next.delete(planId); else next.add(planId);
+      if (next.has(planId)) next.delete(planId);
+      else next.add(planId);
       return next;
     });
   };
@@ -656,8 +667,7 @@ const PlanList = ({
     const weekIds = weeks.map((_: any, idx: number) => `week-${idx}`);
     const currentExpanded = expandedWeeks[planId] || [];
     const allExpanded =
-      weeks.length > 0 &&
-      currentExpanded.length === weeks.length;
+      weeks.length > 0 && currentExpanded.length === weeks.length;
 
     setExpandedWeeks((prev) => ({
       ...prev,
@@ -673,51 +683,41 @@ const PlanList = ({
       <CardContent>
         <Accordion type="single" collapsible className="w-full">
           {plans.map((plan) => {
-            const workoutWeeks = Array.isArray(plan.workout_data)
-              ? (plan.workout_data as any[])
-              : [];
-            const planExpandedWeeks =
-              expandedWeeks[plan.id] || [];
+            // Safely extract weeks array from any workout_data shape
+            const workoutWeeks = extractWorkoutWeeks(plan.workout_data);
+            const planExpandedWeeks = expandedWeeks[plan.id] || [];
             const allExpanded =
               workoutWeeks.length > 0 &&
-              planExpandedWeeks.length ===
-                workoutWeeks.length;
+              planExpandedWeeks.length === workoutWeeks.length;
 
             return (
-              <AccordionItem
-                key={plan.id}
-                value={plan.id}
-              >
+              <AccordionItem key={plan.id} value={plan.id}>
                 <AccordionTrigger>
                   <div className="flex justify-between w-full pr-4">
                     <span>{plan.title}</span>
                     <span className="text-sm text-muted-foreground">
                       {plan.created_at
-                        ? new Date(
-                            plan.created_at
-                          ).toLocaleDateString()
+                        ? new Date(plan.created_at).toLocaleDateString()
                         : ""}
                     </span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                  {/* Removed max-h/overflow-y-auto so the plan is never clipped
+                      (including in print view). Use space-y-4 for layout only. */}
+                  <div className="space-y-4">
                     {workoutWeeks.length > 0 &&
                       workoutWeeks[0]?.fileUrl && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <FileImage className="h-4 w-4" />
                             <span>
-                              Uploaded:{" "}
-                              {workoutWeeks[0]?.fileName}
+                              Uploaded: {workoutWeeks[0]?.fileName}
                             </span>
                           </div>
-                          {workoutWeeks[0]?.fileType ===
-                          "pdf" ? (
+                          {workoutWeeks[0]?.fileType === "pdf" ? (
                             <iframe
-                              src={
-                                workoutWeeks[0].fileUrl
-                              }
+                              src={workoutWeeks[0].fileUrl}
                               className="w-full h-[500px] border rounded-lg"
                               title="Workout Plan PDF"
                             />
@@ -732,10 +732,7 @@ const PlanList = ({
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              window.open(
-                                workoutWeeks[0].fileUrl,
-                                "_blank"
-                              )
+                              window.open(workoutWeeks[0].fileUrl, "_blank")
                             }
                           >
                             <Printer className="h-4 w-4 mr-2" />
@@ -753,7 +750,9 @@ const PlanList = ({
                             onClick={() => toggleCalendarView(plan.id)}
                           >
                             <CalendarDays className="h-4 w-4 mr-2" />
-                            {calendarPlanIds.has(plan.id) ? "List View" : "Calendar View"}
+                            {calendarPlanIds.has(plan.id)
+                              ? "List View"
+                              : "Calendar View"}
                           </Button>
                           <Button
                             variant="outline"
@@ -778,7 +777,7 @@ const PlanList = ({
                         <PrintableWeeklyPlan
                           weeks={workoutWeeks}
                           title={plan.title}
-                          userName={profile?.full_name ?? undefined}
+                          userName={userName ?? undefined}
                         />
                       )}
 
@@ -790,10 +789,7 @@ const PlanList = ({
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              toggleAllWeeks(
-                                plan.id,
-                                workoutWeeks
-                              )
+                              toggleAllWeeks(plan.id, workoutWeeks)
                             }
                           >
                             {allExpanded ? (
@@ -811,8 +807,8 @@ const PlanList = ({
                         </div>
                       )}
 
-                    {!calendarPlanIds.has(plan.id) && (
-                      workoutWeeks.length > 0 ? (
+                    {!calendarPlanIds.has(plan.id) &&
+                      (workoutWeeks.length > 0 ? (
                         <WeekAccordion
                           planId={plan.id}
                           weeks={workoutWeeks}
@@ -830,8 +826,7 @@ const PlanList = ({
                             ? "Unable to display workout data"
                             : "No workout data available"}
                         </div>
-                      )
-                    )}
+                      ))}
 
                     <div className="flex flex-wrap gap-2 pt-4 border-t">
                       <SharePlanDialog
@@ -852,9 +847,7 @@ const PlanList = ({
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() =>
-                          onDeletePlan(plan.id)
-                        }
+                        onClick={() => onDeletePlan(plan.id)}
                       >
                         Delete Plan
                       </Button>
@@ -870,50 +863,60 @@ const PlanList = ({
   );
 };
 
-// ─── ICS export ──────────────────────────────────────────────────────────────
+// ─── ICS export ───────────────────────────────────────────────────────────────
 
 const sanitizeICS = (s: string) =>
-  s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+  s
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
 
 const generateICS = (plan: WorkoutPlan): string => {
   const startDate = plan.created_at ? new Date(plan.created_at) : new Date();
-  const weeks = Array.isArray(plan.workout_data) ? (plan.workout_data as any[]) : [];
+  const weeks = extractWorkoutWeeks(plan.workout_data);
   const fmtDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
 
   const events = weeks.flatMap((week: any, wi: number) =>
-    (week.days || []).map((day: any, di: number) => {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + wi * 7 + di);
-      const dateStr = fmtDate(d);
+    (Array.isArray(week?.days) ? week.days : []).map(
+      (day: any, di: number) => {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + wi * 7 + di);
+        const dateStr = fmtDate(d);
 
-      const summary = day.ergWorkout
-        ? `${day.ergWorkout.zone ? day.ergWorkout.zone + ": " : ""}${day.ergWorkout.description || "Erg Workout"}`
-        : day.strengthWorkout
-        ? `Strength: ${day.strengthWorkout.focus || "Workout"}`
-        : day.yogaSession
-        ? "Rest / Recovery"
-        : day.workout
-        ? String(day.workout).slice(0, 60)
-        : "Training Day";
+        const summary = day?.ergWorkout
+          ? `${day.ergWorkout?.zone ? day.ergWorkout.zone + ": " : ""}${day.ergWorkout?.description || "Erg Workout"}`
+          : day?.strengthWorkout
+          ? `Strength: ${day.strengthWorkout?.focus || "Workout"}`
+          : day?.yogaSession
+          ? "Rest / Recovery"
+          : day?.workout
+          ? String(day.workout).slice(0, 60)
+          : "Training Day";
 
-      const description =
-        day.workout ||
-        day.ergWorkout?.description ||
-        (day.strengthWorkout ? `${day.strengthWorkout.focus || "Strength"} training` : "") ||
-        (day.yogaSession ? `Recovery: ${day.yogaSession.focus || ""}` : "") ||
-        "";
+        const description =
+          day?.workout ||
+          day?.ergWorkout?.description ||
+          (day?.strengthWorkout
+            ? `${day.strengthWorkout?.focus || "Strength"} training`
+            : "") ||
+          (day?.yogaSession
+            ? `Recovery: ${day.yogaSession?.focus || ""}`
+            : "") ||
+          "";
 
-      const lines = [
-        "BEGIN:VEVENT",
-        `DTSTART;VALUE=DATE:${dateStr}`,
-        `DTEND;VALUE=DATE:${dateStr}`,
-        `SUMMARY:${sanitizeICS(summary)}`,
-        description ? `DESCRIPTION:${sanitizeICS(description)}` : null,
-        `UID:${plan.id}-w${wi}-d${di}@crewsync`,
-        "END:VEVENT",
-      ];
-      return lines.filter(Boolean).join("\r\n");
-    })
+        const lines = [
+          "BEGIN:VEVENT",
+          `DTSTART;VALUE=DATE:${dateStr}`,
+          `DTEND;VALUE=DATE:${dateStr}`,
+          `SUMMARY:${sanitizeICS(summary)}`,
+          description ? `DESCRIPTION:${sanitizeICS(description)}` : null,
+          `UID:${plan.id}-w${wi}-d${di}@crewsync`,
+          "END:VEVENT",
+        ];
+        return lines.filter(Boolean).join("\r\n");
+      }
+    )
   );
 
   return [
@@ -945,55 +948,78 @@ const downloadICS = (plan: WorkoutPlan) => {
 const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
-  const { startDate, workoutMap, ergDays, strengthDays, restDays } = useMemo(() => {
-    const start = plan.created_at ? new Date(plan.created_at) : new Date();
-    const map: Record<string, { summary: string; type: string }> = {};
-    const erg: Date[] = [];
-    const str: Date[] = [];
-    const rest: Date[] = [];
+  const { startDate, workoutMap, ergDays, strengthDays, restDays } =
+    useMemo(() => {
+      const start = plan.created_at ? new Date(plan.created_at) : new Date();
+      const map: Record<string, { summary: string; type: string }> = {};
+      const erg: Date[] = [];
+      const str: Date[] = [];
+      const rest: Date[] = [];
 
-    const weeks = Array.isArray(plan.workout_data) ? (plan.workout_data as any[]) : [];
-    weeks.forEach((week: any, wi: number) => {
-      (week.days || []).forEach((day: any, di: number) => {
-        const d = new Date(start);
-        d.setDate(d.getDate() + wi * 7 + di);
-        const key = d.toDateString();
+      const weeks = extractWorkoutWeeks(plan.workout_data);
+      weeks.forEach((week: any, wi: number) => {
+        (Array.isArray(week?.days) ? week.days : []).forEach(
+          (day: any, di: number) => {
+            const d = new Date(start);
+            d.setDate(d.getDate() + wi * 7 + di);
+            const key = d.toDateString();
 
-        if (day.ergWorkout) {
-          erg.push(new Date(d));
-          map[key] = {
-            summary: `${day.ergWorkout.zone ? "[" + day.ergWorkout.zone + "] " : ""}${day.ergWorkout.description || "Erg workout"}`,
-            type: "erg",
-          };
-        } else if (day.strengthWorkout) {
-          str.push(new Date(d));
-          map[key] = { summary: `Strength: ${day.strengthWorkout.focus || "Workout"}`, type: "strength" };
-        } else if (day.yogaSession) {
-          rest.push(new Date(d));
-          map[key] = { summary: `Recovery: ${day.yogaSession.focus || "Rest day"}`, type: "rest" };
-        } else if (day.workout) {
-          erg.push(new Date(d));
-          map[key] = { summary: String(day.workout).slice(0, 80), type: "erg" };
-        }
+            if (day?.ergWorkout) {
+              erg.push(new Date(d));
+              map[key] = {
+                summary: `${day.ergWorkout?.zone ? "[" + day.ergWorkout.zone + "] " : ""}${day.ergWorkout?.description || "Erg workout"}`,
+                type: "erg",
+              };
+            } else if (day?.strengthWorkout) {
+              str.push(new Date(d));
+              map[key] = {
+                summary: `Strength: ${day.strengthWorkout?.focus || "Workout"}`,
+                type: "strength",
+              };
+            } else if (day?.yogaSession) {
+              rest.push(new Date(d));
+              map[key] = {
+                summary: `Recovery: ${day.yogaSession?.focus || "Rest day"}`,
+                type: "rest",
+              };
+            } else if (day?.workout) {
+              erg.push(new Date(d));
+              map[key] = {
+                summary: String(day.workout).slice(0, 80),
+                type: "erg",
+              };
+            }
+          }
+        );
       });
-    });
 
-    return { startDate: start, workoutMap: map, ergDays: erg, strengthDays: str, restDays: rest };
-  }, [plan]);
+      return {
+        startDate: start,
+        workoutMap: map,
+        ergDays: erg,
+        strengthDays: str,
+        restDays: rest,
+      };
+    }, [plan]);
 
-  const selectedWorkout = selectedDate ? workoutMap[selectedDate.toDateString()] : null;
+  const selectedWorkout = selectedDate
+    ? workoutMap[selectedDate.toDateString()]
+    : null;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-4 text-xs flex-wrap text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Erg / Cardio
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />{" "}
+          Erg / Cardio
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" /> Strength
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />{" "}
+          Strength
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Rest / Recovery
+          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" />{" "}
+          Rest / Recovery
         </span>
       </div>
 
@@ -1005,7 +1031,8 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
         modifiers={{ erg: ergDays, strength: strengthDays, rest: restDays }}
         modifiersClassNames={{
           erg: "!bg-blue-100 !text-blue-800 dark:!bg-blue-900/40 dark:!text-blue-300 font-semibold hover:!bg-blue-200",
-          strength: "!bg-orange-100 !text-orange-800 dark:!bg-orange-900/40 dark:!text-orange-300 font-semibold hover:!bg-orange-200",
+          strength:
+            "!bg-orange-100 !text-orange-800 dark:!bg-orange-900/40 dark:!text-orange-300 font-semibold hover:!bg-orange-200",
           rest: "!bg-purple-100 !text-purple-800 dark:!bg-purple-900/40 dark:!text-purple-300 font-semibold hover:!bg-purple-200",
         }}
         className="rounded-md border w-fit"
@@ -1032,9 +1059,10 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Main section ─────────────────────────────────────────────────────────────
 
 export const WorkoutPlanSection = () => {
+  // ALL hooks unconditionally at the top
   const [months, setMonths] = useState<string>("3");
   const [expandedWeeks, setExpandedWeeks] = useState<
     Record<string, string[]>
@@ -1077,16 +1105,12 @@ export const WorkoutPlanSection = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error && (error as any).code !== "PGRST116")
-        throw error;
+      if (error && (error as any).code !== "PGRST116") throw error;
       return data as UserGoals | null;
     },
   });
 
-  const {
-    data: plans,
-    isLoading: plansLoading,
-  } = useQuery<WorkoutPlan[]>({
+  const { data: plans, isLoading: plansLoading } = useQuery<WorkoutPlan[]>({
     queryKey: ["workout-plans"],
     queryFn: async () => {
       const user = await getSessionUser();
@@ -1150,33 +1174,24 @@ export const WorkoutPlanSection = () => {
     let interval: ReturnType<typeof setInterval>;
     if (
       generationProgress.totalBatches > 0 &&
-      generationProgress.currentBatch <
-        generationProgress.totalBatches
+      generationProgress.currentBatch < generationProgress.totalBatches
     ) {
       interval = setInterval(() => {
         setGenerationProgress((prev) => {
           if (prev.currentBatch < prev.totalBatches) {
-            return {
-              ...prev,
-              currentBatch: prev.currentBatch + 1,
-            };
+            return { ...prev, currentBatch: prev.currentBatch + 1 };
           }
           return prev;
         });
       }, 25000);
     }
     return () => clearInterval(interval);
-  }, [
-    generationProgress.totalBatches,
-    generationProgress.currentBatch,
-  ]);
+  }, [generationProgress.totalBatches, generationProgress.currentBatch]);
 
   const generatePlan = useMutation({
     mutationFn: async () => {
       if (!profile?.weight || !profile?.height) {
-        throw new Error(
-          "Please complete your profile first"
-        );
+        throw new Error("Please complete your profile first");
       }
 
       const user = await getSessionUser();
@@ -1190,42 +1205,32 @@ export const WorkoutPlanSection = () => {
 
       const numWeeks = parseInt(months) * 4;
       const batches = Math.ceil(numWeeks / 4);
-      setGenerationProgress({
-        currentBatch: 1,
-        totalBatches: batches,
-      });
+      setGenerationProgress({ currentBatch: 1, totalBatches: batches });
 
-      const { data, error } =
-        await supabase.functions.invoke(
-          "generate-workout",
-          {
-            body: {
-              user_id: user.id,
-              workout_type: "plan",
-              preferences: {
-                months: parseInt(months),
-                weight: profile.weight,
-                height: profile.height,
-                experience:
-                  profile.experience_level ||
-                  "intermediate",
-                goals:
-                  profile.goals || "general fitness",
-                current2k: freshGoals?.current_2k_time
-                  ? String(
-                      freshGoals.current_2k_time
-                    )
-                  : null,
-                goal2k: freshGoals?.goal_2k_time
-                  ? String(freshGoals.goal_2k_time)
-                  : null,
-                age: profile.age || null,
-                healthIssues:
-                  profile.health_issues || [],
-              },
+      const { data, error } = await supabase.functions.invoke(
+        "generate-workout",
+        {
+          body: {
+            user_id: user.id,
+            workout_type: "plan",
+            preferences: {
+              months: parseInt(months),
+              weight: profile.weight,
+              height: profile.height,
+              experience: profile.experience_level || "intermediate",
+              goals: profile.goals || "general fitness",
+              current2k: freshGoals?.current_2k_time
+                ? String(freshGoals.current_2k_time)
+                : null,
+              goal2k: freshGoals?.goal_2k_time
+                ? String(freshGoals.goal_2k_time)
+                : null,
+              age: profile.age || null,
+              healthIssues: profile.health_issues || [],
             },
-          }
-        );
+          },
+        }
+      );
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -1233,24 +1238,17 @@ export const WorkoutPlanSection = () => {
       return data;
     },
     onSuccess: async (data: any) => {
-      setGenerationProgress({
-        currentBatch: 0,
-        totalBatches: 0,
-      });
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
 
       const user = await getSessionUser();
       if (!user) return;
 
-      const { error } = await supabase
-        .from("workout_plans")
-        .insert({
-          user_id: user.id,
-          title: `${months}-Month Training Plan`,
-          description: `Generated plan for ${
-            profile?.goals || "general fitness"
-          }`,
-          workout_data: data?.plan ?? data,
-        });
+      const { error } = await supabase.from("workout_plans").insert({
+        user_id: user.id,
+        title: `${months}-Month Training Plan`,
+        description: `Generated plan for ${profile?.goals || "general fitness"}`,
+        workout_data: data?.plan ?? data,
+      });
 
       if (error) throw error;
 
@@ -1259,15 +1257,10 @@ export const WorkoutPlanSection = () => {
         description: `Your ${months}-month plan is ready!`,
       });
 
-      queryClient.invalidateQueries({
-        queryKey: ["workout-plans"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
     },
     onError: (error: Error) => {
-      setGenerationProgress({
-        currentBatch: 0,
-        totalBatches: 0,
-      });
+      setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
       toast({
         title: "Error",
         description: error.message,
@@ -1286,9 +1279,7 @@ export const WorkoutPlanSection = () => {
     },
     onSuccess: () => {
       toast({ title: "Plan deleted" });
-      queryClient.invalidateQueries({
-        queryKey: ["workout-plans"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["workout-plans"] });
     },
   });
 
@@ -1305,14 +1296,12 @@ export const WorkoutPlanSection = () => {
       const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from("plan_shares")
-        .insert({
-          plan_id: planId,
-          shared_by: user.id,
-          shared_with_user: userId || null,
-          shared_with_team: teamId || null,
-        });
+      const { error } = await supabase.from("plan_shares").insert({
+        plan_id: planId,
+        shared_by: user.id,
+        shared_with_user: userId || null,
+        shared_with_team: teamId || null,
+      });
 
       if (error) throw error;
     },
@@ -1328,8 +1317,7 @@ export const WorkoutPlanSection = () => {
     },
   });
 
-  const isProfileComplete =
-    !!profile?.weight && !!profile?.height;
+  const isProfileComplete = !!profile?.weight && !!profile?.height;
   const isCoach = profile?.user_type === "coach";
 
   return (
@@ -1353,12 +1341,9 @@ export const WorkoutPlanSection = () => {
         friends={friends}
         teams={teams}
         isCoach={isCoach}
-        onDeletePlan={(planId) =>
-          deletePlan.mutate(planId)
-        }
-        onSharePlan={(args) =>
-          sharePlan.mutate(args)
-        }
+        userName={profile?.full_name ?? null}
+        onDeletePlan={(planId) => deletePlan.mutate(planId)}
+        onSharePlan={(args) => sharePlan.mutate(args)}
       />
     </div>
   );
