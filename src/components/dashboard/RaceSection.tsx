@@ -13,6 +13,7 @@ import {
   Play, LogOut, AlertCircle, Crown, Medal, Swords, CheckCircle2,
   RotateCcw, Zap, Heart,
 } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 // ── BLE UUIDs (Concept2 PM5) ────────────────────────────────────
 const C2_SERVICE     = "ce060000-43e5-11e4-916c-0800200c9a66";
@@ -149,7 +150,7 @@ export default function RaceSection() {
   // ── Load user profile ─────────────────────────────────────────
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       setMyUserId(user.id);
       const { data: profile } = await supabase.from("profiles").select("username,full_name").eq("id", user.id).maybeSingle();

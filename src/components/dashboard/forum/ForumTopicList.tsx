@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, MessageSquare, Pin, Lock, Clock, ImagePlus, X, ThumbsUp, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 interface Props {
   categoryId: string;
@@ -28,7 +29,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });
@@ -79,7 +80,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
 
   const createTopic = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       
       const trimmedTitle = newTitle.trim();
@@ -134,7 +135,7 @@ const ForumTopicList = ({ categoryId, categoryName, onBack, onSelectTopic }: Pro
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
 
     setIsUploading(true);

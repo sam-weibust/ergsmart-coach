@@ -13,6 +13,7 @@ import {
   School, Plus, Trash2, Loader2, Sparkles, TrendingUp, Target,
   CheckCircle2, MapPin, Phone, ChevronDown, ChevronUp
 } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -40,13 +41,13 @@ export const CollegeTargetsSection = () => {
 
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
+    queryFn: async () => { const user = await getSessionUser(); return user; },
   });
 
   const { data: targets, isLoading } = useQuery({
     queryKey: ["college-targets"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("college_targets").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
       return data || [];
@@ -55,7 +56,7 @@ export const CollegeTargetsSection = () => {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user || !newSchool.trim()) throw new Error("Invalid input");
       const { error } = await supabase.from("college_targets").insert({
         user_id: user.id,

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { GraduationCap, Plus, Trash2, MapPin, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const DIVISIONS = ["D1", "D2", "D3", "Ivy", "NAIA", "Club"];
@@ -47,7 +48,7 @@ const AlumniNetworkSection = () => {
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });
@@ -55,7 +56,7 @@ const AlumniNetworkSection = () => {
   const { data: alumni } = useQuery({
     queryKey: ["program-alumni"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await (supabase as any)
         .from("program_alumni")

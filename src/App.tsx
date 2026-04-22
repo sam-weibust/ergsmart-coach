@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
@@ -16,7 +18,32 @@ import PersonalRecordsPage from "./pages/PersonalRecordsPage";
 import NotFound from "./pages/NotFound";
 import RegattaPage from "./pages/RegattaPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Don't retry on auth errors — they won't self-heal without a sign-in
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401 || error?.status === 403) return false;
+        return failureCount < 2;
+      },
+      staleTime: 30_000, // 30s — avoids re-fetching on every tab focus
+    },
+  },
+});
+
+// Root-level auth listener: clears the query cache on sign-out so stale data
+// from a previous user never bleeds into a new session.
+function AuthBridge() {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        queryClient.clear();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+  return null;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -26,6 +53,7 @@ const App = () => (
         <SpeedInsights />
         <Toaster />
         <Sonner />
+        <AuthBridge />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LandingPage />} />

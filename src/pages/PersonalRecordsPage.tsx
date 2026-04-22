@@ -40,7 +40,7 @@ export default function PersonalRecordsPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    supabase.auth.getSession().then(({ data: { session } }) => setCurrentUser(session?.user ?? null));
   }, []);
 
   const { data: profileData } = useQuery({

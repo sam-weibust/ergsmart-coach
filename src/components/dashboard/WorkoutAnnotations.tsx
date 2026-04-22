@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageSquarePlus, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getSessionUser } from '@/lib/getUser';
 
 interface WorkoutAnnotationsProps {
   workoutId: string;
@@ -35,7 +36,7 @@ export const WorkoutAnnotations = ({ workoutId, workoutType, athleteId, isCoach,
 
   const addAnnotation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not logged in");
       const { error } = await supabase.from("workout_annotations").insert({
         workout_id: workoutId,

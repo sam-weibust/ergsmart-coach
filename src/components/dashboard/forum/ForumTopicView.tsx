@@ -10,6 +10,7 @@ import { ArrowLeft, Clock, Trash2, Edit2, Send, ImagePlus, X, ThumbsUp, ShieldCh
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { getSessionUser } from '@/lib/getUser';
 
 interface Props {
   topicId: string;
@@ -28,7 +29,7 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });

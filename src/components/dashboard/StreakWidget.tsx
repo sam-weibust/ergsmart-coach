@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Flame, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getSessionUser } from '@/lib/getUser';
 
 export function StreakWidget() {
   const { data: workoutDates = [] } = useQuery({
     queryKey: ["workout-dates-streak"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("erg_workouts")

@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bell, BellOff, Check, Trash2, UserPlus, MessageSquare, Dumbbell, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 const getNotificationIcon = (type: string) => {
   switch (type) {
@@ -31,7 +32,7 @@ export const NotificationBell = () => {
   const { data: notifications } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       const { data, error } = await supabase
@@ -103,7 +104,7 @@ export const NotificationBell = () => {
 
   const markAllAsRead = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       
       const { error } = await supabase

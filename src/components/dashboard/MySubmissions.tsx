@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 const formatInterval = (interval: string | null): string => {
   if (!interval) return "-";
@@ -37,7 +38,7 @@ export const MySubmissions = () => {
   const { data: submissions, isLoading } = useQuery({
     queryKey: ["my-submissions"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       const { data, error } = await supabase

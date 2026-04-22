@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Snowflake } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getSessionUser } from '@/lib/getUser';
 
 interface StreakFreezeProps {
   profile: any;
@@ -19,7 +20,7 @@ export const StreakFreeze = ({ profile, currentStreak, uniqueDaysLogged }: Strea
   const { data: freezes } = useQuery({
     queryKey: ["streak-freezes", profile?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("streak_freezes")
@@ -40,7 +41,7 @@ export const StreakFreeze = ({ profile, currentStreak, uniqueDaysLogged }: Strea
 
   const freezeMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not logged in");
       const { error } = await supabase
         .from("streak_freezes")

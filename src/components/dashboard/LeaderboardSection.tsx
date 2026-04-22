@@ -6,13 +6,14 @@ import { TimeVerificationAdmin } from "./TimeVerificationAdmin";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { MySubmissions } from "./MySubmissions";
+import { getSessionUser } from '@/lib/getUser';
 
 export const LeaderboardSection = () => {
   // Check if user is admin
   const { data: isAdmin } = useQuery({
     queryKey: ["is-admin"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return false;
 
       const { data } = await supabase

@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Dumbbell, Utensils, ChevronDown, ChevronUp, Trash2, Upload } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
 import { GenerationProgress } from "./GenerationProgress";
+import { getSessionUser } from '@/lib/getUser';
 
 interface TeamWorkoutPlanSectionProps {
   teamId: string;
@@ -113,7 +114,7 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
       // Reset progress
       setGenerationProgress({ currentBatch: 0, totalBatches: 0 });
       
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       // Create the workout plan

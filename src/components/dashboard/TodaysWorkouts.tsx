@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Activity, Dumbbell, Sparkles, CalendarCheck, Flower2, AlertTriangle, Calendar } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
+import { getSessionUser } from '@/lib/getUser';
 
 interface TodaysWorkoutsProps {
   profile: any;
@@ -51,7 +52,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
   const { data: latestPlan } = useQuery({
     queryKey: ["latest-workout-plan"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
 
       const { data } = await supabase

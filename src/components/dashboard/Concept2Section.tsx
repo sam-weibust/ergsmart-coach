@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, Link } from "lucide-react";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
+import { getSessionUser } from '@/lib/getUser';
 
 export default function Concept2Section() {
   const { toast } = useToast();
@@ -15,7 +16,7 @@ export default function Concept2Section() {
 
   const checkC2 = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { data } = await (supabase as any)
         .from("concept2_tokens")
@@ -46,7 +47,7 @@ export default function Concept2Section() {
   const connectC2 = async () => {
     setIsConnectingC2(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) { setIsConnectingC2(false); return; }
 
       // Safari requires window.open() to be called synchronously within a user gesture.
@@ -79,7 +80,7 @@ export default function Concept2Section() {
   const syncC2 = async () => {
     setIsSyncingC2(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const res = await c2Sync({ user_id: user.id });
       const data = await res.json();
@@ -95,7 +96,7 @@ export default function Concept2Section() {
 
   const disconnectC2 = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       await c2Disconnect({ user_id: user.id });
       setC2Connected(false);

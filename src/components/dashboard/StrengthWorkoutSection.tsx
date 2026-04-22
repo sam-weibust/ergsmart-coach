@@ -45,7 +45,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) {
@@ -108,7 +108,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) {
@@ -166,7 +166,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) {

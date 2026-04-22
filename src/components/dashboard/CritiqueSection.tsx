@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 interface Category {
   name: string;
@@ -65,7 +66,7 @@ const CritiqueSection = () => {
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { data } = await supabase
         .from("technique_analyses" as any)
@@ -167,7 +168,7 @@ const CritiqueSection = () => {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!session?.access_token || !user?.id) throw new Error("Not logged in");
 
       // ── Stage 1: Extract frames (0–35%) ────────────────────────────────────

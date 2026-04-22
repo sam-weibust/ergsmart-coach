@@ -8,6 +8,7 @@ import { FollowedAthletes } from "./FollowedAthletes";
 import { RecommendedAthletes } from "./RecommendedAthletes";
 import { ContactHistorySection } from "./ContactHistorySection";
 import { CoachProgramProfile } from "./CoachProgramProfile";
+import { getSessionUser } from '@/lib/getUser';
 
 const TABS = [
   { id: "discover", label: "Discover", icon: Search },
@@ -30,7 +31,7 @@ export function CoachesHub({ initialTab }: Props) {
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });

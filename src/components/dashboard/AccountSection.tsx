@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { getSessionUser } from '@/lib/getUser';
 
 export function AccountSection() {
   const { toast } = useToast();
@@ -69,7 +70,7 @@ export function AccountSection() {
   const deleteAccount = async () => {
     setDeleteLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       // Delete profile data first
       await supabase.from("profiles").delete().eq("id", user.id);

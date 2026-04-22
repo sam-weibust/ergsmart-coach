@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, Camera, Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getSessionUser } from '@/lib/getUser';
 
 const CATEGORIES = [
   { value: "U16", label: "Under 16" },
@@ -66,7 +67,7 @@ export const SubmitVerifiedTime = () => {
     mutationFn: async () => {
       setIsUploading(true);
       
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       if (!screenshot) throw new Error("Screenshot required");

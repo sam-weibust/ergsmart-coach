@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Loader2 } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 type PreferenceKey =
   | "friend_request"
@@ -70,7 +71,7 @@ export const EmailNotificationSettings = () => {
   const { data: prefs, isLoading } = useQuery({
     queryKey: ["email-notification-prefs"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
 
       const { data } = await supabase
@@ -85,7 +86,7 @@ export const EmailNotificationSettings = () => {
 
   const updatePref = useMutation({
     mutationFn: async ({ key, value }: { key: PreferenceKey; value: boolean }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data: existing } = await supabase

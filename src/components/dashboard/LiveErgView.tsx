@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Bluetooth, Heart, Loader2, AlertTriangle, Save } from "lucide-react";
 import ForceCurveCanvas from "./ForceCurveCanvas";
+import { getSessionUser } from '@/lib/getUser';
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
 const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
@@ -202,7 +203,7 @@ export default function LiveErgView() {
   const saveWorkout = async (d: Partial<LiveData>, pts: StrokePoint[]) => {
     if (!d.distance || !d.elapsedTime) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const dist    = Math.round(d.distance);

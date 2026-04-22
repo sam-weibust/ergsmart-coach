@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Zap, Trophy, Calendar, TrendingUp, Flame, Target } from "lucide-react";
 import { toast } from "sonner";
 import { startOfWeek, format } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 function getWeekStart(): string {
   const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -30,7 +31,7 @@ const WeeklyChallengeSection = () => {
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });

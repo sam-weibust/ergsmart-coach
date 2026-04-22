@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Bot, User, Loader2, Sparkles, Trash2, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { getSessionUser } from '@/lib/getUser';
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -24,7 +25,7 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
 
   useEffect(() => {
     const loadHistory = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) { setHistoryLoaded(true); return; }
 
       const { data } = await supabase
@@ -52,13 +53,13 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
   }, [messages, collapsed]);
 
   const persistMessage = useCallback(async (role: "user" | "assistant", content: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
     await supabase.from("chat_messages").insert({ user_id: user.id, role, content });
   }, []);
 
   const clearHistory = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
     await supabase.from("chat_messages").delete().eq("user_id", user.id);
     const newMessages: Message[] = greeting ? [{ role: "assistant", content: greeting }] : [];
@@ -88,7 +89,7 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) throw new Error("Not logged in");

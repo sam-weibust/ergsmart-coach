@@ -16,6 +16,7 @@ import {
   Globe, Instagram, Twitter, Youtube, Users, MapPin, School,
   Link2, ExternalLink
 } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -41,7 +42,7 @@ export const PublicProfileSection = () => {
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });
@@ -49,7 +50,7 @@ export const PublicProfileSection = () => {
   const { data: baseProfile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       return data;
@@ -59,7 +60,7 @@ export const PublicProfileSection = () => {
   const { data: ap, isLoading } = useQuery({
     queryKey: ["athlete-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("athlete_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -69,7 +70,7 @@ export const PublicProfileSection = () => {
   const { data: followersCount } = useQuery({
     queryKey: ["followers-count"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return 0;
       const { count } = await supabase.from("profile_follows").select("*", { count: "exact", head: true }).eq("following_id", user.id);
       return count || 0;
@@ -92,7 +93,7 @@ export const PublicProfileSection = () => {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase.from("athlete_profiles").upsert({
         user_id: user.id,

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, TrendingUp } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 interface PercentileRankBadgeProps {
   leaderboard: any[];
@@ -11,7 +12,7 @@ export const PercentileRankBadge = ({ leaderboard }: PercentileRankBadgeProps) =
   const { data: userId } = useQuery({
     queryKey: ["current-user-id"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user?.id || null;
     },
   });

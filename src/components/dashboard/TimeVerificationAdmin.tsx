@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle, XCircle, Eye, Clock, User, ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 const formatInterval = (interval: string | null): string => {
   if (!interval) return "-";
@@ -59,7 +60,7 @@ export const TimeVerificationAdmin = () => {
 
   const verifyMutation = useMutation({
     mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const updateData: any = {

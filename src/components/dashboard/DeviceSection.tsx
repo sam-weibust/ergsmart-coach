@@ -16,6 +16,7 @@ import {
   BleDevice, PM5StreamData, parseHRMeasurement, HR_SERVICE, HR_MEASUREMENT,
 } from "@/lib/ble";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
+import { getSessionUser } from '@/lib/getUser';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ const DeviceSection = () => {
   // ── Load C2 connection status ─────────────────────────────────────────────
   const checkC2 = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { data } = await (supabase as any)
         .from("concept2_tokens")
@@ -117,7 +118,7 @@ const DeviceSection = () => {
       autoSavedRef.current = true;
       (async () => {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = await getSessionUser();
           if (!user) return;
           const dist = Math.round(ergData.distance!);
           const dur = formatDuration(ergData.elapsedTime!);
@@ -258,7 +259,7 @@ const DeviceSection = () => {
   const connectC2 = async () => {
     setIsConnectingC2(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) { setIsConnectingC2(false); return; }
       const res = await c2Connect({ user_id: user.id });
       const data = await res.json();
@@ -273,7 +274,7 @@ const DeviceSection = () => {
   const syncC2 = async () => {
     setIsSyncingC2(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const res = await c2Sync({ user_id: user.id });
       const data = await res.json();
@@ -289,7 +290,7 @@ const DeviceSection = () => {
 
   const disconnectC2 = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       await c2Disconnect({ user_id: user.id });
       setC2Connected(false);

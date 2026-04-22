@@ -17,6 +17,7 @@ import { CalendarHeatmap } from "@/components/dashboard/CalendarHeatmap";
 import { useToast } from "@/hooks/use-toast";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
+import { getSessionUser } from '@/lib/getUser';
 
 const fmtSplit = (s: string | null) => {
   if (!s) return "—";
@@ -66,7 +67,7 @@ export default function AthleteProfile() {
   const [c2ImportedCount, setC2ImportedCount] = useState<number | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    supabase.auth.getSession().then(({ data: { session } }) => setCurrentUser(session?.user ?? null));
   }, []);
 
   const { data: profileData, isLoading } = useQuery({
@@ -173,7 +174,7 @@ export default function AthleteProfile() {
   useEffect(() => {
     if (!profileData?.base?.id) return;
     const record = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       const viewerType = user
         ? ((user as any).user_metadata?.user_type === "coach" ? "coach" : "athlete")
         : "anonymous";

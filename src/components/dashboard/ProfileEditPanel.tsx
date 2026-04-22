@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Camera, User, Save } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
 const lbsToKg = (lbs: number) => lbs / 2.20462;
@@ -82,7 +83,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       return data;
@@ -93,7 +94,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const { data: userGoals } = useQuery({
     queryKey: ["user-goals-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("user_goals").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -104,7 +105,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const { data: ap } = useQuery({
     queryKey: ["athlete-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("athlete_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -152,7 +153,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const weightKg = weightLbs ? lbsToKg(parseFloat(weightLbs)) : null;
@@ -208,7 +209,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   });
 
   const uploadAvatar = async (file: File) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
     setUploading(true);
     try {

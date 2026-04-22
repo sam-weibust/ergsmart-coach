@@ -17,6 +17,7 @@ import ForceCurvePostWorkout from "./ForceCurvePostWorkout";
 import { RacePaceBoat } from "./RacePaceBoat";
 import { WorkoutAnnotations } from "./WorkoutAnnotations";
 import { ShareWorkoutButton } from "./WorkoutShareCard";
+import { getSessionUser } from '@/lib/getUser';
 
 interface HistorySectionProps {
   profile: any;
@@ -94,7 +95,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const { data: coachInfo } = useQuery({
     queryKey: ["coach-check", profile?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return { isCoach: false, coachId: null };
       const { data: teams } = await supabase
         .from("teams")
@@ -134,7 +135,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
 
   const deleteWorkout = async (workout: any) => {
     if (workout.external_id) {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (user) {
         await supabase.from("deleted_c2_workouts").upsert(
           { user_id: user.id, external_id: workout.external_id },
@@ -150,7 +151,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const deleteAllWorkouts = async () => {
     setDeletingAll(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       await supabase.from("deleted_c2_workouts").delete().eq("user_id", user.id);
       await supabase.from("erg_workouts").delete().eq("user_id", user.id);

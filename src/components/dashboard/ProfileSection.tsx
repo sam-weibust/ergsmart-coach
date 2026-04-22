@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, User } from "lucide-react";
 import { NotificationSettings } from "./NotificationSettings";
 import { Timer } from "lucide-react";
+import { getSessionUser } from '@/lib/getUser';
 
 // Imperial conversion helpers
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462);
@@ -48,7 +49,7 @@ export const ProfileSection = () => {
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
@@ -65,7 +66,7 @@ export const ProfileSection = () => {
   const { data: userGoals } = useQuery({
     queryKey: ["user-goals-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase
         .from("user_goals")
@@ -121,7 +122,7 @@ export const ProfileSection = () => {
 
   const updateProfile = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const weightKg = weightLbs ? lbsToKg(parseFloat(weightLbs)) : null;

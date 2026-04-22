@@ -13,6 +13,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import CustomMealLogger from "./CustomMealLogger";
+import { getSessionUser } from '@/lib/getUser';
 
 interface MealPlanTabProps {
   profile: any;
@@ -34,7 +35,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
   const { data: savedMeals, isLoading: mealsLoading } = useQuery({
     queryKey: ["saved-meal-plans"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       const { data, error } = await supabase
         .from("meal_plans")
@@ -190,7 +191,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
 
   const deleteDayMeals = async (date: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { error } = await supabase
         .from("meal_plans")

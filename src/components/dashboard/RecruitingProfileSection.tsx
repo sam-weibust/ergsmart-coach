@@ -14,6 +14,7 @@ import {
   GraduationCap, Loader2, Download, Link2, ExternalLink, Eye, Youtube
 } from "lucide-react";
 import jsPDF from "jspdf";
+import { getSessionUser } from '@/lib/getUser';
 
 const fmtSplit = (s: string | null) => {
   if (!s) return "—";
@@ -44,13 +45,13 @@ export const RecruitingProfileSection = () => {
 
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
+    queryFn: async () => { const user = await getSessionUser(); return user; },
   });
 
   const { data: baseProfile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       return data;
@@ -60,7 +61,7 @@ export const RecruitingProfileSection = () => {
   const { data: ap, isLoading } = useQuery({
     queryKey: ["athlete-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("athlete_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -70,7 +71,7 @@ export const RecruitingProfileSection = () => {
   const { data: goals } = useQuery({
     queryKey: ["user-goals-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("user_goals").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -80,7 +81,7 @@ export const RecruitingProfileSection = () => {
   const { data: bestErg } = useQuery({
     queryKey: ["best-erg"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("erg_workouts").select("*").eq("user_id", user.id).order("workout_date", { ascending: false }).limit(20);
       if (!data) return null;
@@ -103,7 +104,7 @@ export const RecruitingProfileSection = () => {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase.from("athlete_profiles").upsert({
         user_id: user.id,

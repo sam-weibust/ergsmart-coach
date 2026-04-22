@@ -104,6 +104,7 @@ import Concept2Section from "@/components/dashboard/Concept2Section";
 import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
+import { getSessionUser } from '@/lib/getUser';
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -341,32 +342,33 @@ const Dashboard = () => {
   const { containerRef, pulling, refreshing, progress, threshold } = usePullToRefresh(handleRefresh);
 
   useEffect(() => {
-    checkUser();
+    // Use getSession() (reads localStorage cache, no network call) so the
+    // dashboard unblocks immediately on page load / navigation after login.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { navigate("/auth"); return; }
+      setLoading(false);
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
         navigate("/auth");
+        queryClient.clear();
+      }
+      // On SIGNED_IN / INITIAL_SESSION: ensure loading is cleared and queries
+      // are refetched so stale-while-revalidate data is fresh after login.
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
+        setLoading(false);
+        queryClient.invalidateQueries();
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  const checkUser = async () => {
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) { navigate("/auth"); return; }
-      setLoading(false);
-    } catch (error) {
-      console.error("Auth error:", error);
-      navigate("/auth");
-    }
-  };
+  }, [navigate, queryClient]);
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       return data;
@@ -382,7 +384,7 @@ const Dashboard = () => {
   const { data: coachTeams } = useQuery({
     queryKey: ["coach-teams"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("teams").select("id").eq("coach_id", user.id);
       return data || [];
@@ -399,7 +401,7 @@ const Dashboard = () => {
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("team_members").select("team_id").eq("user_id", user.id);
       return data || [];

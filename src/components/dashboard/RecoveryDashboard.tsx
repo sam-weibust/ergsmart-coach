@@ -18,6 +18,7 @@ import {
   ResponsiveContainer, ReferenceLine, Legend, ScatterChart, Scatter
 } from "recharts";
 import { format, subDays, parseISO, differenceInDays } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 interface RecoveryDashboardProps {
   profile: any;
@@ -170,7 +171,7 @@ function WeightTab({ profile }: { profile: any }) {
   const { data: entries = [] } = useQuery({
     queryKey: ["weight-entries"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("weight_entries").select("*")
@@ -185,7 +186,7 @@ function WeightTab({ profile }: { profile: any }) {
     if (!weight || isNaN(parseFloat(weight))) return;
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { error } = await supabase.from("weight_entries").insert({
         user_id: user.id, date: today(), weight: parseFloat(weight), unit,
@@ -327,7 +328,7 @@ function WaterTab({ profile }: { profile: any }) {
   const { data: entries = [] } = useQuery({
     queryKey: ["water-entries"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("water_entries").select("*")
@@ -341,7 +342,7 @@ function WaterTab({ profile }: { profile: any }) {
   const logWater = useCallback(async (ml: number) => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { error } = await supabase.from("water_entries").insert({
         user_id: user.id, date: today(), amount_ml: ml,
@@ -463,7 +464,7 @@ function SleepTab({ profile }: { profile: any }) {
   const { data: entries = [] } = useQuery({
     queryKey: ["sleep-entries"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("sleep_entries").select("*")
@@ -478,7 +479,7 @@ function SleepTab({ profile }: { profile: any }) {
     if (!form.duration || isNaN(parseFloat(form.duration))) return;
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const payload: any = {
         user_id: user.id, date: today(),
@@ -621,7 +622,7 @@ function InsightsTab({ profile }: { profile: any }) {
   const { data: cachedInsight } = useQuery({
     queryKey: ["ai-insights"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("ai_insights")
         .select("*").eq("user_id", user.id).eq("insight_type", "daily").maybeSingle();
@@ -632,7 +633,7 @@ function InsightsTab({ profile }: { profile: any }) {
   const refreshInsight = async () => {
     setRefreshing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const { data, error } = await supabase.functions.invoke("generate-insights", {
         body: { user_id: user.id },
@@ -649,7 +650,7 @@ function InsightsTab({ profile }: { profile: any }) {
   const { data: sleepEntries = [] } = useQuery({
     queryKey: ["sleep-entries"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("sleep_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(30);
       return data || [];
@@ -659,7 +660,7 @@ function InsightsTab({ profile }: { profile: any }) {
   const { data: workouts = [] } = useQuery({
     queryKey: ["workouts-for-correlation"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("erg_workouts").select("workout_date,avg_watts,avg_split").eq("user_id", user.id).order("workout_date", { ascending: false }).limit(30);
       return data || [];
@@ -669,7 +670,7 @@ function InsightsTab({ profile }: { profile: any }) {
   const { data: waterEntries = [] } = useQuery({
     queryKey: ["water-entries"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("water_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(30);
       return data || [];
@@ -800,7 +801,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
   const { data: recoveryData, isLoading: scoreLoading } = useQuery({
     queryKey: ["recovery-score"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const t = today();
       const sevenAgo = nDaysAgo(7);

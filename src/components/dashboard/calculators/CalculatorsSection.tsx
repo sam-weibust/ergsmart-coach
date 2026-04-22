@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getSessionUser } from '@/lib/getUser';
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -2301,9 +2302,7 @@ export function CalculatorsSection({
   const { data: prefillData } = useQuery<PrefillData>({
     queryKey: ["calculators-prefill", profile?.id],
     queryFn: async (): Promise<PrefillData> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return {};
 
       const [vtRes, ergRes] = await Promise.all([

@@ -166,7 +166,7 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
     setFeedback(null);
 
     try {
-      const user_id = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
+      const user_id = profile?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
 
       if (!user_id) {
         toast.error("You must be logged in to log a workout.");

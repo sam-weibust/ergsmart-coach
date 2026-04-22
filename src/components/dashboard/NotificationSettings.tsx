@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, BellOff, Loader2 } from "lucide-react";
 import { EmailNotificationSettings } from "./EmailNotificationSettings";
+import { getSessionUser } from '@/lib/getUser';
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -39,7 +40,7 @@ export const NotificationSettings = () => {
   const { data: subscription } = useQuery({
     queryKey: ["push-subscription"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
 
       const { data } = await supabase
@@ -70,7 +71,7 @@ export const NotificationSettings = () => {
       // 3. Store the subscription in the database
 
       // For now, we'll just show in-app notifications
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       // Store a placeholder subscription to indicate enabled
@@ -101,7 +102,7 @@ export const NotificationSettings = () => {
 
   const disablePush = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase

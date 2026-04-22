@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Medal, TrendingUp, Users, Award, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 function secondsToSplit(s: number): string {
   const min = Math.floor(s / 60);
@@ -54,7 +55,7 @@ const CombineSection = () => {
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });
@@ -62,7 +63,7 @@ const CombineSection = () => {
   const { data: myEntry } = useQuery({
     queryKey: ["my-combine-entry"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await (supabase as any).from("combine_entries").select("*").eq("user_id", user.id).maybeSingle();
       return data;

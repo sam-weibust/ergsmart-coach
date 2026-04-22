@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Zap, ChevronRight, Trophy } from "lucide-react";
 import { startOfWeek, format } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 interface Props {
   onNavigate: (tab: string) => void;
@@ -27,7 +28,7 @@ const WeeklyChallengeWidget = ({ onNavigate }: Props) => {
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       return user;
     },
   });

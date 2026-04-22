@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Users, Trophy, TrendingUp, ArrowUp, ArrowDown, Minus, Eye, EyeOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getSessionUser } from '@/lib/getUser';
 
 interface ComparisonSectionProps {
   profile: any;
@@ -43,7 +44,7 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
   const { data: friends } = useQuery({
     queryKey: ["friends-for-comparison"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       // Fetch both directions
@@ -76,7 +77,7 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
   const { data: teams } = useQuery({
     queryKey: ["teams-for-comparison"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       const { data } = await supabase
@@ -93,7 +94,7 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
   const { data: comparisonData, isLoading } = useQuery({
     queryKey: ["comparison-data", comparisonType, selectedTeamId, dateRange, profile?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
 
       const startDate = new Date();

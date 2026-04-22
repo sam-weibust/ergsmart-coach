@@ -15,6 +15,7 @@ import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
 import { c2Sync } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 interface DashboardHomeProps {
   profile: any;
@@ -87,7 +88,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: ap } = useQuery({
     queryKey: ["athlete-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("athlete_profiles").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -98,7 +99,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: userGoals } = useQuery({
     queryKey: ["user-goals"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("user_goals").select("*").eq("user_id", user.id).maybeSingle();
       return data;
@@ -109,7 +110,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: recentWorkouts = [] } = useQuery({
     queryKey: ["recent-workouts-dashboard"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("erg_workouts")
@@ -125,7 +126,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: workoutDates = [] } = useQuery({
     queryKey: ["workout-dates-streak"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("erg_workouts")
@@ -180,7 +181,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: recentMessages = [] } = useQuery({
     queryKey: ["recent-team-messages-dashboard"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       // Get user's teams first
       const { data: memberships } = await supabase
@@ -204,7 +205,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: todayPlan } = useQuery({
     queryKey: ["today-plan-dashboard"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const today = new Date().toISOString().split("T")[0];
       const { data } = await supabase
@@ -222,7 +223,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: weeklyChallenge } = useQuery({
     queryKey: ["weekly-challenge-dashboard"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const weekStart = format(new Date(), "yyyy-'W'II");
       const monday = new Date();
@@ -241,7 +242,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
   const { data: recoveryScore } = useQuery({
     queryKey: ["recovery-score-home"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const t = new Date().toISOString().split("T")[0];
       const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
@@ -266,13 +267,12 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       const score = Math.round(sleepComp * 0.5 + hydComp * 0.5);
       return { score, weightLogged: (weightRes.data || []).length > 0 };
     },
-    enabled: !loading,
   });
 
   const handleSyncC2 = async () => {
     setSyncingC2(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
       const res = await c2Sync({ user_id: user.id });
       const data = await res.json();

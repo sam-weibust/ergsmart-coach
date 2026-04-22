@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, Loader2, Download, Image, FileText } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
+import { getSessionUser } from '@/lib/getUser';
 
 const parseCSV = (text: string): string[][] => {
   const lines = text.split("\n").filter(line => line.trim());
@@ -173,7 +174,7 @@ export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps 
   
   const uploadPlan = useMutation({
     mutationFn: async (file: File) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       
       const fileExt = file.name.split('.').pop()?.toLowerCase();

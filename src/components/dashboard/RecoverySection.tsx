@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, HeartPulse, Plus, Trash2 } from "lucide-react";
 import { format, subDays, startOfWeek, addDays } from "date-fns";
+import { getSessionUser } from '@/lib/getUser';
 
 interface RecoverySectionProps {
   profile: any;
@@ -43,7 +44,7 @@ const RecoverySection = ({ profile }: RecoverySectionProps) => {
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ["recovery-logs"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase
         .from("recovery_logs")

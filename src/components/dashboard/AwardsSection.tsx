@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Trophy, Flame, Target, Dumbbell, Timer, Users, Calendar, Zap, Award, Star, Medal } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StreakFreeze } from "./StreakFreeze";
+import { getSessionUser } from '@/lib/getUser';
 
 interface AwardsSectionProps {
   profile: any;
@@ -78,7 +79,7 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
   const { data: streakFreezes } = useQuery({
     queryKey: ["streak-freezes-for-calc", profile?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       const { data } = await supabase.from("streak_freezes").select("freeze_date").eq("user_id", user.id);
       return (data || []).map((f: any) => f.freeze_date);
@@ -89,7 +90,7 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["achievement-stats", profile?.id, streakFreezes],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
 
       const { data: ergWorkouts } = await supabase

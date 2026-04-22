@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GitCompare, Sparkles, User, TrendingUp, Zap, Activity } from "lucide-react";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 function secondsToSplit(s: number | null): string {
   if (!s) return "—";
@@ -37,7 +38,7 @@ const AthleteComparisonSection = () => {
   const { data: teamAthletes } = useQuery({
     queryKey: ["coach-team-athletes"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
       // Get teams the coach owns/manages
       const { data: teams } = await supabase

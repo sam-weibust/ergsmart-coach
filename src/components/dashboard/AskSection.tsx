@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Bot, User, Loader2, Sparkles, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { getSessionUser } from '@/lib/getUser';
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -27,7 +28,7 @@ const AskSection = () => {
   // Load chat history
   useEffect(() => {
     const loadHistory = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const { data } = await supabase
@@ -61,7 +62,7 @@ const AskSection = () => {
 
   const persistMessage = useCallback(
     async (role: "user" | "assistant", content: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       await supabase
@@ -72,7 +73,7 @@ const AskSection = () => {
   );
 
   const clearHistory = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
 
     await supabase.from("chat_messages").delete().eq("user_id", user.id);
@@ -96,7 +97,7 @@ const AskSection = () => {
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { getSessionUser } from '@/lib/getUser';
 
 interface Props {
   navTo: (section: string, sub?: string) => void;
@@ -137,7 +138,7 @@ export function DashboardCommunityFeed({ navTo }: Props) {
 
   const submitPost = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
       const title = newTitle.trim();
       const content = newContent.trim();

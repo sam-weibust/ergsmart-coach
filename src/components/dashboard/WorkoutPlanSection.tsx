@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getSessionUser } from '@/lib/getUser';
 import {
   useMutation,
   useQuery,
@@ -1048,9 +1049,7 @@ export const WorkoutPlanSection = () => {
   const { data: profile } = useQuery<Profile | null>({
     queryKey: ["profile"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
@@ -1067,9 +1066,7 @@ export const WorkoutPlanSection = () => {
   useQuery<UserGoals | null>({
     queryKey: ["user-goals"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
@@ -1090,9 +1087,7 @@ export const WorkoutPlanSection = () => {
   } = useQuery<WorkoutPlan[]>({
     queryKey: ["workout-plans"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
@@ -1109,9 +1104,7 @@ export const WorkoutPlanSection = () => {
   const { data: friends } = useQuery<Friend[]>({
     queryKey: ["friends-for-sharing"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       const { data } = await supabase
@@ -1129,9 +1122,7 @@ export const WorkoutPlanSection = () => {
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["teams-for-sharing"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return [];
 
       const { data } = await supabase
@@ -1186,9 +1177,7 @@ export const WorkoutPlanSection = () => {
         );
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data: freshGoals } = await supabase
@@ -1247,9 +1236,7 @@ export const WorkoutPlanSection = () => {
         totalBatches: 0,
       });
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return;
 
       const { error } = await supabase
@@ -1313,9 +1300,7 @@ export const WorkoutPlanSection = () => {
       userId?: string;
       teamId?: string;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase

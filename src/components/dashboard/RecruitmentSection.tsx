@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { getSessionUser } from '@/lib/getUser';
 import { supabase } from "@/integrations/supabase/client";
 import RecruitEmailSection from "./RecruitEmailSection";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -145,9 +146,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   const { data: freshProfile } = useQuery({
     queryKey: ["profile-recruit-fresh"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase
         .from("profiles")
@@ -304,7 +303,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     try {
       const [{ data: { session } }, { data: { user } }] = await Promise.all([
         supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
       ]);
 
       if (!session?.access_token || !user?.id) {
