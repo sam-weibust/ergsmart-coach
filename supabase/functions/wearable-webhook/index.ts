@@ -1,219 +1,160 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  verifyWebhookSignature, utcToLocalDate, sleepDate, localHHMM,
+  type OWWebhookPayload, type OWSleepSession, type OWDailySummary, type OWWorkout,
+} from "../_shared/openWearables.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function verifyTerraSignature(body: string, sig: string, secret: string): Promise<boolean> {
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
-    );
-    const sigBytes = new Uint8Array(atob(sig).split("").map(c => c.charCodeAt(0)));
-    return crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(body));
-  } catch { return false; }
-}
-
-/** Convert a UTC ISO timestamp to YYYY-MM-DD in a given IANA timezone. */
-function utcToLocalDate(isoString: string, timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
-      .format(new Date(isoString));
-  } catch {
-    return isoString.split("T")[0];
-  }
-}
-
-/** "Previous night" rule: sleep ending before 14:00 local time belongs to the previous calendar date. */
-function sleepDate(sleepEndIso: string, timezone: string): string {
-  const endHour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "2-digit", hour12: false })
-      .format(new Date(sleepEndIso))
-  );
-  if (endHour < 14) {
-    // Woke before 2pm — belongs to "today" (start date is yesterday)
-    const d = new Date(sleepEndIso);
-    d.setDate(d.getDate() - 1);
-    return utcToLocalDate(d.toISOString(), timezone);
-  }
-  return utcToLocalDate(sleepEndIso, timezone);
-}
-
 // ── Event handlers ────────────────────────────────────────────────────────────
 
-async function handleUserAuth(supabase: any, payload: any) {
-  const { user, type } = payload;
-  if (!user?.reference_id) return;
+async function handleConnectionCreated(supabase: any, payload: OWWebhookPayload) {
+  const { reference_id, open_wearables_user_id, provider } = payload;
+  if (!reference_id) return;
 
   const { error } = await supabase.from("wearable_connections").upsert({
-    user_id: user.reference_id,
-    provider: user.provider?.toLowerCase() || "unknown",
-    terra_user_id: user.user_id,
+    user_id: reference_id,
+    provider: provider.toLowerCase(),
+    open_wearables_user_id,
     is_active: true,
     connected_at: new Date().toISOString(),
     error_message: null,
   }, { onConflict: "user_id,provider" });
 
-  if (error) console.error("[webhook] user_auth upsert error:", error);
-  else console.log("[webhook] user_auth: connected", user.provider, "for", user.reference_id);
+  if (error) console.error("[webhook] connection.created upsert error:", error);
+  else console.log("[webhook] connected", provider, "for", reference_id);
 }
 
-async function handleSleep(supabase: any, payload: any, userTimezone: string) {
-  const { user, data } = payload;
-  if (!user?.reference_id || !Array.isArray(data)) return;
+async function handleConnectionError(supabase: any, payload: OWWebhookPayload) {
+  const { reference_id, provider, data } = payload;
+  if (!reference_id) return;
 
-  for (const entry of data) {
-    const sleepEndIso = entry.sleep_end_utc || entry.end_time;
-    const sleepStartIso = entry.sleep_start_utc || entry.start_time;
-    if (!sleepEndIso) continue;
+  await supabase.from("wearable_connections")
+    .update({ is_active: false, error_message: (data as any).message || "Connection error" })
+    .eq("user_id", reference_id)
+    .eq("provider", provider.toLowerCase());
+}
 
-    const date = sleepDate(sleepEndIso, userTimezone);
+async function handleSleepUpdated(supabase: any, payload: OWWebhookPayload, tz: string) {
+  const { reference_id, provider, data } = payload;
+  if (!reference_id) return;
 
-    // Duration in hours from seconds
-    const durationSec = entry.sleep_durations_data?.sleep_efficiency != null
-      ? entry.sleep_durations_data?.asleep_duration_in_seconds
-      : entry.duration_in_seconds;
-    if (!durationSec) continue;
-    const durationHours = parseFloat((durationSec / 3600).toFixed(2));
+  const s = data as OWSleepSession;
+  if (!s.end_time || !s.duration_seconds) return;
 
-    // Quality score 1-10 from sleep efficiency (0-1) or sleep score (0-100)
-    let qualityScore: number | null = null;
-    const efficiency = entry.sleep_durations_data?.sleep_efficiency;
-    const sleepScore = entry.sleep_score;
-    if (sleepScore != null) qualityScore = Math.round(Math.min(10, Math.max(1, sleepScore / 10)));
-    else if (efficiency != null) qualityScore = Math.round(Math.min(10, Math.max(1, efficiency * 10)));
+  const date = sleepDate(s.end_time, tz);
+  const durationHours = parseFloat((s.duration_seconds / 3600).toFixed(2));
 
-    // Bedtime / wake time as local HH:MM
-    const bedtime = sleepStartIso
-      ? new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(sleepStartIso))
-      : null;
-    const wakeTime = sleepEndIso
-      ? new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(sleepEndIso))
-      : null;
+  // Quality 1-10: prefer sleep_score/10, fall back to efficiency*10
+  let qualityScore: number | null = null;
+  if (s.sleep_score != null) qualityScore = Math.round(Math.min(10, Math.max(1, s.sleep_score / 10)));
+  else if (s.efficiency != null) qualityScore = Math.round(Math.min(10, Math.max(1, s.efficiency * 10)));
 
-    const wearableTs = new Date().toISOString();
+  const bedtime = s.start_time ? localHHMM(s.start_time, tz) : null;
+  const wakeTime = localHHMM(s.end_time, tz);
+  const wearableTs = new Date().toISOString();
 
-    // Fetch existing row — never overwrite a more recent manual entry
-    const { data: existing } = await supabase.from("sleep_entries")
-      .select("id, source, wearable_updated_at")
-      .eq("user_id", user.reference_id)
-      .eq("date", date)
-      .maybeSingle();
+  const { data: existing } = await supabase.from("sleep_entries")
+    .select("id, source, wearable_updated_at")
+    .eq("user_id", reference_id)
+    .eq("date", date)
+    .maybeSingle();
 
-    if (existing) {
-      if (existing.source === "manual") {
-        // Manual entry exists — only update metadata, not core fields
-        console.log("[webhook] sleep: skipping manual entry for", date);
-        continue;
-      }
-      // Update existing wearable entry if newer
-      const { error } = await supabase.from("sleep_entries").update({
-        duration_hours: durationHours,
-        quality_score: qualityScore,
-        bedtime,
-        wake_time: wakeTime,
-        source: "wearable",
-        provider: user.provider?.toLowerCase(),
-        wearable_updated_at: wearableTs,
-      }).eq("id", existing.id);
-      if (error) console.error("[webhook] sleep update error:", error);
-    } else {
-      const { error } = await supabase.from("sleep_entries").insert({
-        user_id: user.reference_id,
-        date,
-        duration_hours: durationHours,
-        quality_score: qualityScore,
-        bedtime,
-        wake_time: wakeTime,
-        source: "wearable",
-        provider: user.provider?.toLowerCase(),
-        wearable_updated_at: wearableTs,
-      });
-      if (error) console.error("[webhook] sleep insert error:", error);
-      else console.log("[webhook] sleep inserted for", date);
-    }
+  if (existing?.source === "manual") {
+    console.log("[webhook] sleep: skipping manual entry for", date);
+    return;
   }
-}
 
-async function handleDaily(supabase: any, payload: any, userTimezone: string) {
-  const { user, data } = payload;
-  if (!user?.reference_id || !Array.isArray(data)) return;
+  const row = {
+    duration_hours: durationHours, quality_score: qualityScore,
+    bedtime, wake_time: wakeTime,
+    source: "wearable", provider: provider.toLowerCase(), wearable_updated_at: wearableTs,
+  };
 
-  for (const entry of data) {
-    const dateIso = entry.date || entry.metadata?.start_time;
-    if (!dateIso) continue;
-    const date = utcToLocalDate(dateIso, userTimezone);
+  if (existing) {
+    await supabase.from("sleep_entries").update(row).eq("id", existing.id);
+  } else {
+    await supabase.from("sleep_entries").insert({ user_id: reference_id, date, ...row });
+    console.log("[webhook] sleep inserted for", date);
+  }
 
-    const hrv = entry.heart_rate_data?.summary?.hrv_rmssd_data?.avg
-      ?? entry.heart_rate_data?.summary?.hrv_sdnn_data?.avg
-      ?? null;
-    const restingHr = entry.heart_rate_data?.summary?.resting_hr_bpm
-      ?? entry.heart_rate_data?.resting_hr
-      ?? null;
-    const readiness = entry.readiness_data?.score
-      ?? entry.wellness_data?.recovery_score
-      ?? null;
-    const steps = entry.active_durations_data?.steps ?? null;
-    const activeCal = entry.calories_data?.total_burned_calories ?? entry.calories_data?.active_calories ?? null;
-    const strain = entry.strain_data?.strain_level ?? null;
-
-    const wearableTs = new Date().toISOString();
-
-    // Merge: only overwrite if wearable data is newer or no row exists
-    const { data: existing } = await supabase.from("recovery_metrics")
-      .select("id, wearable_updated_at")
-      .eq("user_id", user.reference_id)
-      .eq("date", date)
-      .maybeSingle();
-
-    const row: Record<string, any> = {
-      user_id: user.reference_id,
-      date,
-      provider: user.provider?.toLowerCase(),
-      source: "wearable",
-      wearable_updated_at: wearableTs,
-      updated_at: wearableTs,
+  // If the sleep payload also includes HRV/RHR, push to recovery_metrics
+  if (s.hrv_rmssd != null || s.resting_hr != null) {
+    const metricsRow: Record<string, any> = {
+      user_id: reference_id, date, provider: provider.toLowerCase(),
+      source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
     };
-    if (hrv !== null) row.hrv = hrv;
-    if (restingHr !== null) row.resting_hr = restingHr;
-    if (readiness !== null) row.recovery_score_input = readiness;
-    if (steps !== null) row.steps = steps;
-    if (activeCal !== null) row.active_calories = activeCal;
-    if (strain !== null) row.strain = strain;
-
-    if (existing) {
-      const { error } = await supabase.from("recovery_metrics").update(row).eq("id", existing.id);
-      if (error) console.error("[webhook] daily update error:", error);
-    } else {
-      const { error } = await supabase.from("recovery_metrics").insert(row);
-      if (error) console.error("[webhook] daily insert error:", error);
-    }
-
-    // Also update wearable last_sync_at
-    await supabase.from("wearable_connections").update({ last_sync_at: wearableTs })
-      .eq("user_id", user.reference_id)
-      .eq("provider", user.provider?.toLowerCase());
+    if (s.hrv_rmssd != null) metricsRow.hrv = s.hrv_rmssd;
+    if (s.resting_hr != null) metricsRow.resting_hr = s.resting_hr;
+    await supabase.from("recovery_metrics")
+      .upsert(metricsRow, { onConflict: "user_id,date" });
   }
+
+  // Update last_sync_at
+  await supabase.from("wearable_connections")
+    .update({ last_sync_at: wearableTs })
+    .eq("user_id", reference_id)
+    .eq("provider", provider.toLowerCase());
 }
 
-async function handleActivity(supabase: any, payload: any, userTimezone: string) {
-  const { user, data } = payload;
-  if (!user?.reference_id || !Array.isArray(data)) return;
-  // Activity/workout data is informational — update recovery_metrics strain only
-  for (const entry of data) {
-    const dateIso = entry.active_durations_data?.activity_datetime || entry.metadata?.start_time;
-    if (!dateIso) continue;
-    const date = utcToLocalDate(dateIso, userTimezone);
-    const strain = entry.strain_data?.strain_level ?? null;
-    if (strain === null) continue;
+async function handleDailyUpdated(supabase: any, payload: OWWebhookPayload, tz: string) {
+  const { reference_id, provider, data } = payload;
+  if (!reference_id) return;
+
+  const d = data as OWDailySummary;
+  // d.date is YYYY-MM-DD UTC — convert to user local
+  const date = d.date ? utcToLocalDate(d.date + "T12:00:00Z", tz) : utcToLocalDate(payload.timestamp, tz);
+  const wearableTs = new Date().toISOString();
+
+  const row: Record<string, any> = {
+    user_id: reference_id, date,
+    provider: provider.toLowerCase(), source: "wearable",
+    wearable_updated_at: wearableTs, updated_at: wearableTs,
+  };
+  if (d.hrv_rmssd != null) row.hrv = d.hrv_rmssd;
+  if (d.resting_hr != null) row.resting_hr = d.resting_hr;
+  if (d.readiness_score != null) row.recovery_score_input = d.readiness_score;
+  if (d.steps != null) row.steps = d.steps;
+  if (d.active_calories != null) row.active_calories = d.active_calories;
+  if (d.strain != null) row.strain = d.strain;
+
+  await supabase.from("recovery_metrics")
+    .upsert(row, { onConflict: "user_id,date" });
+
+  await supabase.from("wearable_connections")
+    .update({ last_sync_at: wearableTs })
+    .eq("user_id", reference_id)
+    .eq("provider", provider.toLowerCase());
+}
+
+async function handleWorkoutCreated(supabase: any, payload: OWWebhookPayload, tz: string) {
+  const { reference_id, provider, data } = payload;
+  if (!reference_id) return;
+
+  const w = data as OWWorkout;
+  if (!w.workout_id || !w.start_time) return;
+
+  const date = utcToLocalDate(w.start_time, tz);
+  const wearableTs = new Date().toISOString();
+
+  // Update recovery_metrics strain if provided
+  if (w.strain != null) {
     await supabase.from("recovery_metrics")
-      .upsert({ user_id: user.reference_id, date, strain, provider: user.provider?.toLowerCase(), updated_at: new Date().toISOString() },
-        { onConflict: "user_id,date" });
+      .upsert({
+        user_id: reference_id, date, strain: w.strain,
+        provider: provider.toLowerCase(), source: "wearable",
+        wearable_updated_at: wearableTs, updated_at: wearableTs,
+      }, { onConflict: "user_id,date" });
   }
+
+  await supabase.from("wearable_connections")
+    .update({ last_sync_at: wearableTs })
+    .eq("user_id", reference_id)
+    .eq("provider", provider.toLowerCase());
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -222,53 +163,59 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const WEBHOOK_SECRET = Deno.env.get("TERRA_WEBHOOK_SECRET");
+    const OW_SECRET = Deno.env.get("OPEN_WEARABLES_WEBHOOK_SECRET");
     const rawBody = await req.text();
 
-    // Verify signature if secret is configured
-    if (WEBHOOK_SECRET) {
-      const sig = req.headers.get("terra-signature") || req.headers.get("x-terra-signature") || "";
-      const valid = await verifyTerraSignature(rawBody, sig, WEBHOOK_SECRET);
+    // Verify signature when secret is configured
+    if (OW_SECRET) {
+      const sigHeader = req.headers.get("x-open-wearables-signature") || "";
+      const valid = await verifyWebhookSignature(rawBody, sigHeader, OW_SECRET);
       if (!valid) {
-        console.error("[webhook] invalid signature");
+        console.error("[webhook] invalid Open Wearables signature");
         return new Response(JSON.stringify({ error: "Invalid signature" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
 
-    const payload = JSON.parse(rawBody);
-    const eventType: string = payload.type || "";
-    console.log("[webhook] event:", eventType, "user:", payload.user?.reference_id);
+    const payload: OWWebhookPayload = JSON.parse(rawBody);
+    console.log("[webhook] event:", payload.event, "provider:", payload.provider, "user:", payload.reference_id);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Resolve user timezone from profile
-    let userTimezone = "UTC";
-    if (payload.user?.reference_id) {
+    // Resolve user timezone
+    let tz = "UTC";
+    if (payload.reference_id) {
       const { data: profile } = await supabase.from("profiles")
-        .select("timezone").eq("id", payload.user.reference_id).maybeSingle();
-      if (profile?.timezone) userTimezone = profile.timezone;
+        .select("timezone").eq("id", payload.reference_id).maybeSingle();
+      if (profile?.timezone) tz = profile.timezone;
     }
 
-    switch (eventType) {
-      case "user_auth":
-        await handleUserAuth(supabase, payload);
+    switch (payload.event) {
+      case "connection.created":
+        await handleConnectionCreated(supabase, payload);
         break;
-      case "sleep":
-        await handleSleep(supabase, payload, userTimezone);
+      case "connection.error":
+      case "connection.revoked":
+        await handleConnectionError(supabase, payload);
         break;
-      case "daily":
-        await handleDaily(supabase, payload, userTimezone);
+      case "sleep.updated":
+      case "sleep.created":
+        await handleSleepUpdated(supabase, payload, tz);
         break;
-      case "activity":
-        await handleActivity(supabase, payload, userTimezone);
+      case "daily.updated":
+      case "daily.created":
+        await handleDailyUpdated(supabase, payload, tz);
+        break;
+      case "workout.created":
+      case "workout.updated":
+        await handleWorkoutCreated(supabase, payload, tz);
         break;
       default:
-        console.log("[webhook] unhandled event type:", eventType);
+        console.log("[webhook] unhandled event:", payload.event);
     }
 
     return new Response(JSON.stringify({ received: true }), {

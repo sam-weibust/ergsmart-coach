@@ -1,42 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  fetchSleep, fetchDaily, fetchWorkouts,
+  utcToLocalDate, sleepDate, localHHMM,
+} from "../_shared/openWearables.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// AES-GCM decryption
-async function getKey(): Promise<CryptoKey> {
-  const raw = Deno.env.get("TOKEN_ENCRYPTION_KEY") || "default-insecure-key-replace-me";
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
-  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt", "decrypt"]);
-}
-
-async function decryptToken(enc: string): Promise<string> {
-  const key = await getKey();
-  const buf = new Uint8Array(atob(enc).split("").map(c => c.charCodeAt(0)));
-  const iv = buf.slice(0, 12);
-  const data = buf.slice(12);
-  const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-  return new TextDecoder().decode(dec);
-}
-
-function utcToLocalDate(isoString: string, timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
-      .format(new Date(isoString));
-  } catch { return isoString.split("T")[0]; }
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const TERRA_API_KEY = Deno.env.get("TERRA_API_KEY");
-    const TERRA_DEV_ID = Deno.env.get("TERRA_DEV_ID");
-
-    if (!TERRA_API_KEY || !TERRA_DEV_ID) {
+    if (!Deno.env.get("OPEN_WEARABLES_API_KEY")) {
       return new Response(JSON.stringify({ error: "Wearable integration not configured" }), {
         status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -52,7 +30,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Fetch active connections
     const { data: connections } = await supabase.from("wearable_connections")
       .select("*").eq("user_id", user_id).eq("is_active", true);
 
@@ -62,10 +39,9 @@ serve(async (req) => {
       });
     }
 
-    // Resolve user timezone
     const { data: profile } = await supabase.from("profiles")
       .select("timezone").eq("id", user_id).maybeSingle();
-    const userTimezone = profile?.timezone || "UTC";
+    const tz = profile?.timezone || "UTC";
 
     const now = new Date();
     const startDate = new Date(now.getTime() - days * 86400000).toISOString().split("T")[0];
@@ -74,106 +50,99 @@ serve(async (req) => {
     const errors: string[] = [];
 
     for (const conn of connections) {
-      if (!conn.terra_user_id) continue;
-      const baseHeaders = {
-        "dev-id": TERRA_DEV_ID,
-        "x-api-key": TERRA_API_KEY,
-      };
+      const owUserId: string = conn.open_wearables_user_id;
+      if (!owUserId) continue;
 
       try {
-        // Fetch sleep data
-        const sleepRes = await fetch(
-          `https://api.tryterra.ai/v2/sleep?user_id=${conn.terra_user_id}&start_date=${startDate}&end_date=${endDate}&to_webhook=false`,
-          { headers: baseHeaders }
-        );
-        if (sleepRes.ok) {
-          const sleepData = await sleepRes.json();
-          if (sleepData.data?.length) {
-            // Re-use webhook handler logic inline
-            for (const entry of sleepData.data) {
-              const sleepEndIso = entry.sleep_end_utc;
-              if (!sleepEndIso) continue;
-              const durationSec = entry.sleep_durations_data?.asleep_duration_in_seconds;
-              if (!durationSec) continue;
-              const durationHours = parseFloat((durationSec / 3600).toFixed(2));
+        const wearableTs = new Date().toISOString();
 
-              // Previous-night rule
-              const endHour = parseInt(
-                new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, hour: "2-digit", hour12: false })
-                  .format(new Date(sleepEndIso))
-              );
-              const entryDate = endHour < 14
-                ? utcToLocalDate(new Date(new Date(sleepEndIso).getTime() - 86400000).toISOString(), userTimezone)
-                : utcToLocalDate(sleepEndIso, userTimezone);
+        // ── Sleep ──────────────────────────────────────────────────────────────
+        const sleepSessions = await fetchSleep(owUserId, startDate, endDate);
+        for (const s of sleepSessions) {
+          if (!s.end_time || !s.duration_seconds) continue;
 
-              const efficiency = entry.sleep_durations_data?.sleep_efficiency;
-              const sleepScore = entry.sleep_score;
-              let qualityScore: number | null = null;
-              if (sleepScore != null) qualityScore = Math.round(Math.min(10, Math.max(1, sleepScore / 10)));
-              else if (efficiency != null) qualityScore = Math.round(Math.min(10, Math.max(1, efficiency * 10)));
+          const date = sleepDate(s.end_time, tz);
+          const durationHours = parseFloat((s.duration_seconds / 3600).toFixed(2));
 
-              const { data: existing } = await supabase.from("sleep_entries")
-                .select("id, source").eq("user_id", user_id).eq("date", entryDate).maybeSingle();
+          let qualityScore: number | null = null;
+          if (s.sleep_score != null) qualityScore = Math.round(Math.min(10, Math.max(1, s.sleep_score / 10)));
+          else if (s.efficiency != null) qualityScore = Math.round(Math.min(10, Math.max(1, s.efficiency * 10)));
 
-              if (!existing) {
-                await supabase.from("sleep_entries").insert({
-                  user_id, date: entryDate, duration_hours: durationHours,
-                  quality_score: qualityScore, source: "wearable",
-                  provider: conn.provider, wearable_updated_at: new Date().toISOString(),
-                });
-              } else if (existing.source !== "manual") {
-                await supabase.from("sleep_entries").update({
-                  duration_hours: durationHours, quality_score: qualityScore,
-                  source: "wearable", provider: conn.provider,
-                  wearable_updated_at: new Date().toISOString(),
-                }).eq("id", existing.id);
-              }
-            }
+          const bedtime = s.start_time ? localHHMM(s.start_time, tz) : null;
+          const wakeTime = localHHMM(s.end_time, tz);
+
+          const { data: existing } = await supabase.from("sleep_entries")
+            .select("id, source").eq("user_id", user_id).eq("date", date).maybeSingle();
+
+          if (!existing) {
+            await supabase.from("sleep_entries").insert({
+              user_id, date, duration_hours: durationHours, quality_score: qualityScore,
+              bedtime, wake_time: wakeTime,
+              source: "wearable", provider: conn.provider, wearable_updated_at: wearableTs,
+            });
+          } else if (existing.source !== "manual") {
+            await supabase.from("sleep_entries").update({
+              duration_hours: durationHours, quality_score: qualityScore,
+              bedtime, wake_time: wakeTime,
+              source: "wearable", provider: conn.provider, wearable_updated_at: wearableTs,
+            }).eq("id", existing.id);
           }
-        }
 
-        // Fetch daily summaries (HRV, RHR, steps)
-        const dailyRes = await fetch(
-          `https://api.tryterra.ai/v2/daily?user_id=${conn.terra_user_id}&start_date=${startDate}&end_date=${endDate}&to_webhook=false`,
-          { headers: baseHeaders }
-        );
-        if (dailyRes.ok) {
-          const dailyData = await dailyRes.json();
-          for (const entry of (dailyData.data || [])) {
-            const dateIso = entry.date || entry.metadata?.start_time;
-            if (!dateIso) continue;
-            const date = utcToLocalDate(dateIso, userTimezone);
-
-            const hrv = entry.heart_rate_data?.summary?.hrv_rmssd_data?.avg ?? null;
-            const restingHr = entry.heart_rate_data?.summary?.resting_hr_bpm ?? null;
-            const readiness = entry.readiness_data?.score ?? null;
-            const steps = entry.active_durations_data?.steps ?? null;
-            const activeCal = entry.calories_data?.total_burned_calories ?? null;
-
-            const row: Record<string, any> = {
-              user_id, date, provider: conn.provider,
-              source: "wearable", wearable_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          // Push HRV/RHR from sleep payload if present
+          if (s.hrv_rmssd != null || s.resting_hr != null) {
+            const mRow: Record<string, any> = {
+              user_id, date, provider: conn.provider, source: "wearable",
+              wearable_updated_at: wearableTs, updated_at: wearableTs,
             };
-            if (hrv !== null) row.hrv = hrv;
-            if (restingHr !== null) row.resting_hr = restingHr;
-            if (readiness !== null) row.recovery_score_input = readiness;
-            if (steps !== null) row.steps = steps;
-            if (activeCal !== null) row.active_calories = activeCal;
-
+            if (s.hrv_rmssd != null) mRow.hrv = s.hrv_rmssd;
+            if (s.resting_hr != null) mRow.resting_hr = s.resting_hr;
             await supabase.from("recovery_metrics")
-              .upsert(row, { onConflict: "user_id,date" });
+              .upsert(mRow, { onConflict: "user_id,date" });
           }
         }
 
-        // Update last_sync_at
-        await supabase.from("wearable_connections").update({ last_sync_at: new Date().toISOString() })
-          .eq("id", conn.id);
+        // ── Daily summaries ────────────────────────────────────────────────────
+        const dailySummaries = await fetchDaily(owUserId, startDate, endDate);
+        for (const d of dailySummaries) {
+          const date = d.date ? utcToLocalDate(d.date + "T12:00:00Z", tz) : null;
+          if (!date) continue;
+
+          const row: Record<string, any> = {
+            user_id, date, provider: conn.provider,
+            source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
+          };
+          if (d.hrv_rmssd != null) row.hrv = d.hrv_rmssd;
+          if (d.resting_hr != null) row.resting_hr = d.resting_hr;
+          if (d.readiness_score != null) row.recovery_score_input = d.readiness_score;
+          if (d.steps != null) row.steps = d.steps;
+          if (d.active_calories != null) row.active_calories = d.active_calories;
+          if (d.strain != null) row.strain = d.strain;
+
+          await supabase.from("recovery_metrics")
+            .upsert(row, { onConflict: "user_id,date" });
+        }
+
+        // ── Workouts ───────────────────────────────────────────────────────────
+        const workouts = await fetchWorkouts(owUserId, startDate, endDate);
+        for (const w of workouts) {
+          if (!w.workout_id || !w.start_time) continue;
+          if (w.strain == null) continue;
+          const date = utcToLocalDate(w.start_time, tz);
+          await supabase.from("recovery_metrics")
+            .upsert({
+              user_id, date, strain: w.strain, provider: conn.provider,
+              source: "wearable", wearable_updated_at: wearableTs, updated_at: wearableTs,
+            }, { onConflict: "user_id,date" });
+        }
+
+        await supabase.from("wearable_connections")
+          .update({ last_sync_at: wearableTs, error_message: null }).eq("id", conn.id);
 
         synced.push(conn.provider);
+        console.log("[wearable-sync] synced", conn.provider);
       } catch (providerErr) {
         console.error(`[wearable-sync] ${conn.provider} error:`, providerErr);
         errors.push(conn.provider);
-        // Mark as errored but don't deactivate — token refresh may fix it
         await supabase.from("wearable_connections")
           .update({ error_message: providerErr instanceof Error ? providerErr.message : "Sync failed" })
           .eq("id", conn.id);

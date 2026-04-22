@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import { format, subDays, parseISO, differenceInDays } from "date-fns";
 import { getSessionUser } from '@/lib/getUser';
+import { connectWearable, syncWearables, getConnections, providerLabel } from '@/lib/openWearablesService';
 
 interface RecoveryDashboardProps {
   profile: any;
@@ -80,11 +81,6 @@ const CHART_COLORS = {
 
 // ── Wearable Card ─────────────────────────────────────────────────────────────
 
-const PROVIDER_LABELS: Record<string, string> = {
-  garmin: "Garmin", whoop: "WHOOP", oura: "Oura Ring",
-  polar: "Polar", fitbit: "Fitbit", apple: "Apple Health",
-};
-
 function WearableCard({ userId }: { userId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -93,25 +89,16 @@ function WearableCard({ userId }: { userId: string }) {
 
   const { data: connections = [] } = useQuery({
     queryKey: ["wearable-connections", userId],
-    queryFn: async () => {
-      const { data } = await supabase.from("wearable_connections")
-        .select("*").eq("user_id", userId).order("connected_at", { ascending: false });
-      return data || [];
-    },
+    queryFn: () => getConnections(userId),
   });
 
-  const activeConnections = connections.filter((c: any) => c.is_active);
+  const activeConnections = connections.filter(c => c.is_active);
   const hasActive = activeConnections.length > 0;
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("wearable-connect", {
-        body: { user_id: userId },
-      });
-      if (error) throw error;
-      if (data?.url) window.open(data.url, "_blank", "width=600,height=700");
-      else throw new Error("No widget URL returned");
+      await connectWearable(userId);
     } catch (e: any) {
       toast({ title: "Connect failed", description: e.message, variant: "destructive" });
     } finally { setConnecting(false); }
@@ -120,10 +107,7 @@ function WearableCard({ userId }: { userId: string }) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { error } = await supabase.functions.invoke("wearable-sync", {
-        body: { user_id: userId, days: 7 },
-      });
-      if (error) throw error;
+      await syncWearables(userId, 7);
       queryClient.invalidateQueries({ queryKey: ["recovery-score"] });
       queryClient.invalidateQueries({ queryKey: ["sleep-entries"] });
       queryClient.invalidateQueries({ queryKey: ["wearable-connections", userId] });
@@ -157,15 +141,15 @@ function WearableCard({ userId }: { userId: string }) {
 
         {hasActive ? (
           <div className="space-y-2">
-            {activeConnections.map((c: any) => (
+            {activeConnections.map(c => (
               <div key={c.id} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   {c.error_message
                     ? <WifiOff className="h-3.5 w-3.5 text-red-500" />
                     : <Wifi className="h-3.5 w-3.5 text-green-500" />}
-                  <span className="font-medium">{PROVIDER_LABELS[c.provider] || c.provider}</span>
+                  <span className="font-medium">{providerLabel(c.provider)}</span>
                   {c.error_message && (
-                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Disconnected</Badge>
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1">Reconnect needed</Badge>
                   )}
                 </div>
                 <div className="text-right">
@@ -185,7 +169,7 @@ function WearableCard({ userId }: { userId: string }) {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Connect Garmin, WHOOP, Oura, Polar, or Fitbit to auto-import sleep, HRV, and recovery data.
+            Connect Garmin, WHOOP, Oura, Apple Health, Strava, Polar, or Fitbit via Open Wearables to auto-import sleep, HRV, and recovery data.
           </p>
         )}
       </CardContent>
