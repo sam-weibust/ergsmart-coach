@@ -244,23 +244,115 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
       });
     }
 
-    // Extract the outermost JSON object, tolerating any preamble/fences from the model
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-      console.error("No JSON object found in response:", text);
-      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const cleaned = text.slice(start, end + 1);
+    // ---------------------------
+    // EXTRACT + PARSE JSON (with repair pass on failure)
+    // ---------------------------
+    const tryParseJson = (raw: string): object | null => {
+      const s = raw.indexOf("{");
+      const e = raw.lastIndexOf("}");
+      if (s === -1 || e === -1 || e <= s) return null;
+      try {
+        return JSON.parse(raw.slice(s, e + 1));
+      } catch {
+        return null;
+      }
+    };
 
-    let parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (e) {
-      console.error("JSON parse error:", cleaned);
+    let parsed = tryParseJson(text);
+
+    if (!parsed) {
+      // First parse failed — send through strict JSON repair pass
+      console.warn("First parse failed, attempting repair pass");
+
+      const repairSystemPrompt = `You are a strict JSON‑only generator for RowSync's training‑plan API.
+Your ONLY job is to take a natural‑language training plan and output a fully valid JSON object that can be parsed by Supabase Edge Functions without errors.
+
+RULES:
+- Output MUST be valid JSON.
+- NO comments, no trailing commas, no explanations, no markdown.
+- Never wrap JSON in code fences.
+- Never include text before or after the JSON.
+- All strings must be double‑quoted.
+- All null values must be literal null.
+- All numbers must be numbers, not strings.
+- If the input contains invalid JSON fragments, rewrite them into valid JSON.
+- If the input contains extra text, ignore it and produce clean JSON only.
+- If the input contains durations like "45 min", convert them to strings.
+- If the input contains distances like "10500", convert them to strings unless explicitly numeric.
+- Ensure arrays and objects are properly closed.
+- Ensure every week, day, and ergWorkout object is valid.
+
+EXPECTED OUTPUT SHAPE:
+{
+  "duration": "string",
+  "total_weeks": number,
+  "plan": [
+    {
+      "week": number,
+      "phase": "string",
+      "days": [
+        {
+          "day": number,
+          "type": "string",
+          "warmup": "string",
+          "workout": "string",
+          "rest": "string",
+          "breakup": "string",
+          "rates": "string",
+          "cooldown": "string",
+          "ergWorkout": {
+            "zone": "string",
+            "description": "string",
+            "distance": "string",
+            "duration": "string",
+            "targetSplit": "string",
+            "rate": "string",
+            "warmup": "string",
+            "cooldown": "string",
+            "restPeriods": "string"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+When given ANY training plan text — even if messy, partial, or malformed —
+you MUST return a fully valid JSON object matching the schema above.
+If something is missing, fill it with an empty string or null.
+Your output must ALWAYS be valid JSON.`;
+
+      const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 16000,
+          stream: false,
+          system: repairSystemPrompt,
+          messages: [{ role: "user", content: text }],
+        }),
+      });
+
+      if (repairResponse.ok) {
+        const repairResult = await repairResponse.json();
+        const repairText = repairResult?.content?.[0]?.text ?? "";
+        parsed = tryParseJson(repairText);
+        if (parsed) {
+          console.log("Repair pass succeeded");
+        } else {
+          console.error("Repair pass also failed:", repairText);
+        }
+      } else {
+        console.error("Repair pass HTTP error:", repairResponse.status);
+      }
+    }
+
+    if (!parsed) {
       return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
