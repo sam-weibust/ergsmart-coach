@@ -284,8 +284,9 @@ const LandingPage = () => {
         justifyContent: "space-between", height: "64px", position: "sticky", top: 0, zIndex: 100,
         borderBottom: "1px solid rgba(255,255,255,0.07)",
       }}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <img src={logoFull} alt="CrewSync" style={{ height: "36px", width: "auto", objectFit: "contain" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <img src={logoIcon} alt="CrewSync" style={{ height: "36px", width: "36px", objectFit: "contain", borderRadius: "8px" }} />
+          <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.3px" }}>CrewSync</span>
         </div>
         <div className="nav-links-row" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
           {["Features", "For Coaches", "Competition", "Pricing"].map((link) => (
@@ -304,7 +305,7 @@ const LandingPage = () => {
       }}>
         <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(45,107,228,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", maxWidth: "800px", animation: "fadeInUp 0.7s ease both" }}>
-          <img src={logoIcon} alt="CrewSync" style={{ height: "80px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px" }} />
+          <img src={logoFull} alt="CrewSync" style={{ height: "120px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px" }} />
           <br />
           <span style={{ display: "inline-block", backgroundColor: "rgba(45,107,228,0.15)", border: "1px solid rgba(45,107,228,0.35)", color: "#7ba7f0", fontSize: "13px", fontWeight: 600, padding: "6px 16px", borderRadius: "100px", marginBottom: "28px", letterSpacing: "0.03em" }}>
             Built for competitive rowers
@@ -557,8 +558,9 @@ const LandingPage = () => {
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "32px", marginBottom: "36px" }}>
             <div>
-              <div style={{ marginBottom: "10px" }}>
-                <img src={logoFull} alt="CrewSync" style={{ height: "32px", width: "auto", objectFit: "contain" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <img src={logoIcon} alt="CrewSync" style={{ height: "32px", width: "32px", objectFit: "contain", borderRadius: "6px" }} />
+                <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px" }}>CrewSync</span>
               </div>
               <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px", margin: 0 }}>Built for rowers who want more.</p>
             </div>
