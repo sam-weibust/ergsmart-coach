@@ -305,8 +305,7 @@ const LandingPage = () => {
       }}>
         <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(45,107,228,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", maxWidth: "800px", animation: "fadeInUp 0.7s ease both" }}>
-          <img src={logoFull} alt="CrewSync" style={{ height: "120px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px" }} />
-          <br />
+          <img src={logoFull} alt="CrewSync" style={{ height: "120px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px", display: "block", margin: "0 auto 28px" }} />
           <span style={{ display: "inline-block", backgroundColor: "rgba(45,107,228,0.15)", border: "1px solid rgba(45,107,228,0.35)", color: "#7ba7f0", fontSize: "13px", fontWeight: 600, padding: "6px 16px", borderRadius: "100px", marginBottom: "28px", letterSpacing: "0.03em" }}>
             Built for competitive rowers
           </span>
