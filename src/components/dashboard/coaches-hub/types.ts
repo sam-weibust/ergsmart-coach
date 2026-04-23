@@ -22,6 +22,17 @@ export interface AthleteProfile {
     experience_level: string | null;
     username: string | null;
   } | null;
+  academics?: {
+    psat_score: number | null;
+    sat_score: number | null;
+    act_score: number | null;
+    gpa: number | null;
+    gpa_weighted: boolean | null;
+    class_rank_numerator: number | null;
+    class_rank_denominator: number | null;
+    intended_major: string | null;
+    academic_interests: string | null;
+  } | null;
   best_2k?: ErgScore | null;
   combine_score?: number | null;
   relevance_score?: number | null;
@@ -76,4 +87,6 @@ export interface RecruitFilters {
   weightMaxKg: string;
   hasCombineScore: boolean;
   searchQuery: string;
+  minGpa: string;
+  minSat: string;
 }

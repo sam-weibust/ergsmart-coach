@@ -37,6 +37,8 @@ export function RecruitFilterPanel({ filters, onChange }: Props) {
       weightMaxKg: "",
       hasCombineScore: false,
       searchQuery: "",
+      minGpa: "",
+      minSat: "",
     });
 
   return (
@@ -139,6 +141,36 @@ export function RecruitFilterPanel({ filters, onChange }: Props) {
       <div>
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Location</Label>
         <Input placeholder="City, State, or Region" value={filters.location} onChange={(e) => set("location", e.target.value)} className="h-8 text-xs" />
+      </div>
+
+      {/* Min GPA */}
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Min GPA</Label>
+        <Input
+          placeholder="3.5"
+          type="number"
+          step="0.1"
+          min="0"
+          max="5"
+          value={filters.minGpa}
+          onChange={(e) => set("minGpa", e.target.value)}
+          className="h-8 text-xs"
+        />
+      </div>
+
+      {/* Min SAT */}
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Min SAT</Label>
+        <Input
+          placeholder="1200"
+          type="number"
+          step="10"
+          min="400"
+          max="1600"
+          value={filters.minSat}
+          onChange={(e) => set("minSat", e.target.value)}
+          className="h-8 text-xs"
+        />
       </div>
 
       {/* Has Combine Score */}

@@ -88,13 +88,14 @@ export default function AthleteProfile() {
 
       if (!baseProfile) return null;
 
-      const [apRes, ergRes, strengthRes, followersRes, followingRes, combineRes] = await Promise.all([
+      const [apRes, ergRes, strengthRes, followersRes, followingRes, combineRes, academicsRes] = await Promise.all([
         supabase.from("athlete_profiles").select("*").eq("user_id", baseProfile.id).maybeSingle(),
         supabase.from("erg_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(20),
         supabase.from("strength_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(10),
         supabase.from("profile_follows").select("id").eq("following_id", baseProfile.id),
         supabase.from("profile_follows").select("id").eq("follower_id", baseProfile.id),
         (supabase as any).from("combine_entries").select("combine_score, two_k_seconds, six_k_seconds, two_k_watts").eq("user_id", baseProfile.id).maybeSingle(),
+        supabase.from("athlete_academics").select("*").eq("user_id", baseProfile.id).maybeSingle(),
       ]);
 
       const ap = apRes.data;
@@ -124,6 +125,7 @@ export default function AthleteProfile() {
         followers: (followersRes.data || []).length,
         following: (followingRes.data || []).length,
         combine: combineRes.data || null,
+        academics: academicsRes.data || null,
       };
     },
   });
@@ -242,7 +244,7 @@ export default function AthleteProfile() {
     );
   }
 
-  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine } = profileData;
+  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine, academics } = profileData;
   const watts = wattFromSplit(bestErg?.avg_split);
   const wkg = watts && base.weight ? (parseFloat(watts) / base.weight).toFixed(2) : null;
   const socialLinks = ap.social_links || {};
@@ -577,16 +579,42 @@ export default function AthleteProfile() {
                         <p className="font-semibold">{ap.division_interest}</p>
                       </div>
                     )}
-                    {ap.intended_major && (
+                    {(academics?.intended_major || ap.intended_major) && (
                       <div>
                         <p className="text-xs text-muted-foreground">Intended Major</p>
-                        <p className="font-semibold">{ap.intended_major}</p>
+                        <p className="font-semibold">{academics?.intended_major || ap.intended_major}</p>
                       </div>
                     )}
-                    {ap.gpa && (
+                    {(academics?.gpa || ap.gpa) && (
                       <div>
                         <p className="text-xs text-muted-foreground">GPA</p>
-                        <p className="font-semibold">{ap.gpa}</p>
+                        <p className="font-semibold">
+                          {academics?.gpa ? `${Number(academics.gpa).toFixed(2)}${academics.gpa_weighted ? " (W)" : ""}` : ap.gpa}
+                        </p>
+                      </div>
+                    )}
+                    {academics?.sat_score && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">SAT</p>
+                        <p className="font-semibold">{academics.sat_score} / 1600</p>
+                      </div>
+                    )}
+                    {academics?.act_score && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">ACT</p>
+                        <p className="font-semibold">{academics.act_score} / 36</p>
+                      </div>
+                    )}
+                    {academics?.psat_score && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">PSAT</p>
+                        <p className="font-semibold">{academics.psat_score} / 1520</p>
+                      </div>
+                    )}
+                    {academics?.class_rank_numerator && academics?.class_rank_denominator && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Class Rank</p>
+                        <p className="font-semibold">{academics.class_rank_numerator} of {academics.class_rank_denominator}</p>
                       </div>
                     )}
                     {ap.contact_email && (
@@ -598,6 +626,12 @@ export default function AthleteProfile() {
                       </div>
                     )}
                   </div>
+                  {academics?.academic_interests && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Academic Interests</p>
+                      <p className="text-sm">{academics.academic_interests}</p>
+                    </div>
+                  )}
                   {ap.highlight_video_url && (
                     <a
                       href={ap.highlight_video_url}

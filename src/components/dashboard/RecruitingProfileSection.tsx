@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   GraduationCap, Loader2, Download, Link2, ExternalLink, Eye, Youtube
@@ -43,6 +42,16 @@ export const RecruitingProfileSection = () => {
   const [gpa, setGpa] = useState("");
   const [highlightVideoUrl, setHighlightVideoUrl] = useState("");
 
+  // Academic state
+  const [psatScore, setPsatScore] = useState("");
+  const [satScore, setSatScore] = useState("");
+  const [actScore, setActScore] = useState("");
+  const [acadGpa, setAcadGpa] = useState("");
+  const [gpaWeighted, setGpaWeighted] = useState(false);
+  const [classRankNum, setClassRankNum] = useState("");
+  const [classRankDen, setClassRankDen] = useState("");
+  const [academicInterests, setAcademicInterests] = useState("");
+
   const { data: currentUser } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => { const user = await getSessionUser(); return user; },
@@ -64,6 +73,16 @@ export const RecruitingProfileSection = () => {
       const user = await getSessionUser();
       if (!user) return null;
       const { data } = await supabase.from("athlete_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: academics, isLoading: academicsLoading } = useQuery({
+    queryKey: ["athlete-academics"],
+    queryFn: async () => {
+      const user = await getSessionUser();
+      if (!user) return null;
+      const { data } = await supabase.from("athlete_academics").select("*").eq("user_id", user.id).maybeSingle();
       return data;
     },
   });
@@ -102,23 +121,55 @@ export const RecruitingProfileSection = () => {
     setHighlightVideoUrl(ap.highlight_video_url || "");
   }, [ap]);
 
+  useEffect(() => {
+    if (!academics) return;
+    setPsatScore(academics.psat_score != null ? String(academics.psat_score) : "");
+    setSatScore(academics.sat_score != null ? String(academics.sat_score) : "");
+    setActScore(academics.act_score != null ? String(academics.act_score) : "");
+    setAcadGpa(academics.gpa != null ? String(academics.gpa) : "");
+    setGpaWeighted(academics.gpa_weighted || false);
+    setClassRankNum(academics.class_rank_numerator != null ? String(academics.class_rank_numerator) : "");
+    setClassRankDen(academics.class_rank_denominator != null ? String(academics.class_rank_denominator) : "");
+    setIntendedMajor(prev => academics.intended_major || prev);
+    setAcademicInterests(academics.academic_interests || "");
+  }, [academics]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("athlete_profiles").upsert({
-        user_id: user.id,
-        is_recruiting: isRecruiting,
-        intended_major: intendedMajor,
-        division_interest: divisionInterest,
-        gpa: gpa ? parseFloat(gpa) : null,
-        highlight_video_url: highlightVideoUrl,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
-      if (error) throw error;
+      const effectiveGpa = acadGpa || gpa;
+      const effectiveMajor = intendedMajor;
+      const [profileErr, acadErr] = await Promise.all([
+        supabase.from("athlete_profiles").upsert({
+          user_id: user.id,
+          is_recruiting: isRecruiting,
+          intended_major: effectiveMajor,
+          division_interest: divisionInterest,
+          gpa: effectiveGpa ? parseFloat(effectiveGpa) : null,
+          highlight_video_url: highlightVideoUrl,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" }).then(r => r.error),
+        supabase.from("athlete_academics").upsert({
+          user_id: user.id,
+          psat_score: psatScore ? parseInt(psatScore) : null,
+          sat_score: satScore ? parseInt(satScore) : null,
+          act_score: actScore ? parseInt(actScore) : null,
+          gpa: acadGpa ? parseFloat(acadGpa) : null,
+          gpa_weighted: gpaWeighted,
+          class_rank_numerator: classRankNum ? parseInt(classRankNum) : null,
+          class_rank_denominator: classRankDen ? parseInt(classRankDen) : null,
+          intended_major: effectiveMajor,
+          academic_interests: academicInterests || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" }).then(r => r.error),
+      ]);
+      if (profileErr) throw profileErr;
+      if (acadErr) throw acadErr;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["athlete-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["athlete-academics"] });
       toast({ title: "Recruiting profile saved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -130,30 +181,17 @@ export const RecruitingProfileSection = () => {
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 20;
 
-    // Header bar
-    doc.setFillColor(37, 99, 235); // blue-600
+    doc.setFillColor(37, 99, 235);
     doc.rect(0, 0, pageW, 45, "F");
-
-    // Name
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.text(name, margin, 20);
-
     doc.setFontSize(11);
     doc.setFont("helvetica", "normal");
-    const tagline = [
-      ap?.school || "",
-      ap?.grad_year ? `Class of ${ap.grad_year}` : "",
-      ap?.location || "",
-    ].filter(Boolean).join(" · ");
+    const tagline = [ap?.school || "", ap?.grad_year ? `Class of ${ap.grad_year}` : "", ap?.location || ""].filter(Boolean).join(" · ");
     doc.text(tagline, margin, 30);
-
-    if (ap?.contact_email) {
-      doc.text(ap.contact_email, margin, 38);
-    }
-
-    // Reset text color
+    if (ap?.contact_email) doc.text(ap.contact_email, margin, 38);
     doc.setTextColor(30, 30, 30);
 
     let y = 55;
@@ -180,7 +218,6 @@ export const RecruitingProfileSection = () => {
       y += 6;
     };
 
-    // AI Summary
     if (ap?.ai_summary) {
       sectionTitle("Athlete Summary");
       doc.setFontSize(10);
@@ -190,13 +227,10 @@ export const RecruitingProfileSection = () => {
       y += lines.length * 5 + 6;
     }
 
-    // Physical & Academic
     sectionTitle("Profile");
     row("Height", cmToDisplay(baseProfile?.height));
     row("Weight", baseProfile?.weight ? Math.round(baseProfile.weight * 2.205) + " lbs" : "—");
-    row("GPA", gpa || "—");
     row("Division Interest", divisionInterest || "—");
-    row("Intended Major", intendedMajor || "—");
     row("Club Team", ap?.club_team || "—");
     y += 2;
 
@@ -207,7 +241,21 @@ export const RecruitingProfileSection = () => {
     if (goals?.goal_2k_time) row("2K Goal", goals.goal_2k_time);
     y += 2;
 
-    // Personal Statement
+    // Academics
+    const effectiveGpa = acadGpa || gpa;
+    const hasSomeAcademics = effectiveGpa || satScore || actScore || psatScore || intendedMajor || academicInterests || classRankNum;
+    if (hasSomeAcademics) {
+      sectionTitle("Academics");
+      if (effectiveGpa) row("GPA", `${effectiveGpa}${gpaWeighted ? " (weighted)" : " (unweighted)"} / 4.0`);
+      if (satScore) row("SAT", `${satScore} / 1600`);
+      if (actScore) row("ACT", `${actScore} / 36`);
+      if (psatScore) row("PSAT", `${psatScore} / 1520`);
+      if (classRankNum && classRankDen) row("Class Rank", `${classRankNum} of ${classRankDen}`);
+      if (intendedMajor) row("Intended Major", intendedMajor);
+      if (academicInterests) row("Academic Interests", academicInterests);
+      y += 2;
+    }
+
     if (ap?.personal_statement) {
       sectionTitle("Personal Statement");
       doc.setFontSize(10);
@@ -216,7 +264,6 @@ export const RecruitingProfileSection = () => {
       y += lines.length * 5 + 6;
     }
 
-    // Personal Facts
     const facts = ap?.personal_facts || [];
     if (facts.length > 0) {
       sectionTitle("Facts");
@@ -224,12 +271,10 @@ export const RecruitingProfileSection = () => {
       y += 2;
     }
 
-    // Footer
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     const profileUrl = baseProfile?.username ? `${window.location.origin}/athlete/${baseProfile.username}` : "";
     doc.text(`Generated by CrewSync · ${new Date().toLocaleDateString()}${profileUrl ? " · " + profileUrl : ""}`, margin, doc.internal.pageSize.getHeight() - 10);
-
     doc.save(`${name.replace(/\s+/g, "_")}_Recruiting_Profile.pdf`);
     toast({ title: "PDF exported!" });
   };
@@ -241,7 +286,7 @@ export const RecruitingProfileSection = () => {
     toast({ title: "Recruiting link copied!" });
   };
 
-  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (isLoading || academicsLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
   return (
     <div className="space-y-6">
@@ -268,7 +313,7 @@ export const RecruitingProfileSection = () => {
         </CardContent>
       </Card>
 
-      {/* Recruiting Fields */}
+      {/* Recruiting Details */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recruiting Details</CardTitle>
@@ -292,18 +337,68 @@ export const RecruitingProfileSection = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>GPA</Label>
-              <Input type="number" step="0.01" min="0" max="4" placeholder="3.75" value={gpa} onChange={(e) => setGpa(e.target.value)} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Intended Major</Label>
-              <Input placeholder="Biology, Economics, Engineering..." value={intendedMajor} onChange={(e) => setIntendedMajor(e.target.value)} />
-            </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label className="flex items-center gap-1.5"><Youtube className="h-3.5 w-3.5 text-red-500" />Highlight Video URL</Label>
               <Input placeholder="https://youtube.com/watch?v=..." value={highlightVideoUrl} onChange={(e) => setHighlightVideoUrl(e.target.value)} />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Academics */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-primary" />
+            Academics
+          </CardTitle>
+          <CardDescription>All fields optional — shown on your profile and PDF</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label>PSAT <span className="text-muted-foreground font-normal">/ 1520</span></Label>
+              <Input type="number" min="320" max="1520" step="10" placeholder="1200" value={psatScore} onChange={(e) => setPsatScore(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>SAT <span className="text-muted-foreground font-normal">/ 1600</span></Label>
+              <Input type="number" min="400" max="1600" step="10" placeholder="1350" value={satScore} onChange={(e) => setSatScore(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>ACT <span className="text-muted-foreground font-normal">/ 36</span></Label>
+              <Input type="number" min="1" max="36" placeholder="30" value={actScore} onChange={(e) => setActScore(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>GPA <span className="text-muted-foreground font-normal">/ 4.0</span></Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{gpaWeighted ? "Weighted" : "Unweighted"}</span>
+                  <Switch checked={gpaWeighted} onCheckedChange={setGpaWeighted} />
+                </div>
+              </div>
+              <Input type="number" step="0.01" min="0" max="5" placeholder="3.75" value={acadGpa} onChange={(e) => setAcadGpa(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Class Rank <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min="1" placeholder="12" value={classRankNum} onChange={(e) => setClassRankNum(e.target.value)} />
+                <span className="text-muted-foreground text-sm shrink-0">of</span>
+                <Input type="number" min="1" placeholder="350" value={classRankDen} onChange={(e) => setClassRankDen(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Intended Major</Label>
+            <Input placeholder="Biology, Economics, Engineering..." value={intendedMajor} onChange={(e) => setIntendedMajor(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Academic Interests</Label>
+            <Input placeholder="Research, pre-med, entrepreneurship, environmental science..." value={academicInterests} onChange={(e) => setAcademicInterests(e.target.value)} />
           </div>
         </CardContent>
       </Card>

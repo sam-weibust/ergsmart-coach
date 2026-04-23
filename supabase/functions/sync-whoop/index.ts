@@ -66,23 +66,23 @@ async function refreshToken(
 
 async function whoopGet(path: string, token: string, silent404 = false, logRaw = false): Promise<any> {
   const url = `${WHOOP_BASE}${path}`;
-  console.log("[sync-whoop] whoopGet:", url);
+  const maskedToken = token ? `${token.substring(0, 10)}...` : "MISSING";
+  console.log("[sync-whoop] whoopGet URL:", url);
+  console.log("[sync-whoop] whoopGet auth header: Bearer", maskedToken);
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
+  const body = await res.text();
   console.log("[sync-whoop] whoopGet status:", res.status, "for", path);
+  console.log("[sync-whoop] whoopGet response body:", body.slice(0, 1000));
   if (!res.ok) {
     if (res.status === 404 && silent404) {
-      console.log("[sync-whoop] whoopGet 404 (not available on this plan), skipping:", path);
+      console.log("[sync-whoop] whoopGet 404 silent, skipping:", path);
       return null;
     }
-    const body = await res.text();
-    console.error("[sync-whoop] whoopGet error body:", body);
     throw new Error(`Whoop API ${path} failed: ${res.status} ${body}`);
   }
-  const text = await res.text();
-  console.log("[sync-whoop] whoopGet raw (first 500):", text.slice(0, 500));
-  const json = JSON.parse(text);
+  const json = JSON.parse(body);
   console.log("[sync-whoop] whoopGet records count:", json?.records?.length ?? json?.data?.length ?? "no records/data field", "for", path);
   return json;
 }
@@ -124,10 +124,13 @@ serve(async (req) => {
       .from("whoop_connections")
       .select("*")
       .eq("user_id", user_id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (connErr) console.error("[sync-whoop] whoop_connections query error:", connErr.message);
-    console.log("[sync-whoop] connection found:", !!conn, "expires_at:", conn?.expires_at ?? "n/a", "has_access_token:", !!conn?.access_token, "has_refresh_token:", !!conn?.refresh_token);
+    console.log("[sync-whoop] connection found:", !!conn, "expires_at:", conn?.expires_at ?? "n/a", "updated_at:", conn?.updated_at ?? "n/a", "has_refresh_token:", !!conn?.refresh_token);
+    console.log("[sync-whoop] token prefix (first 10):", conn?.access_token?.substring(0, 10) ?? "NONE");
 
     if (!conn) {
       return new Response(JSON.stringify({ error: "No Whoop connection found" }), {
@@ -160,6 +163,8 @@ serve(async (req) => {
       console.log("[sync-whoop] token is valid, using existing access token");
     }
 
+    console.log("[sync-whoop] USING TOKEN prefix (first 10):", token?.substring(0, 10) ?? "NONE");
+
     const end = new Date();
     const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
     const startStr = start.toISOString();
@@ -167,12 +172,14 @@ serve(async (req) => {
     console.log("[sync-whoop] fetching data for range:", startStr, "to", endStr);
 
     console.log("[sync-whoop] calling Whoop API endpoints in parallel...");
-    const [recoveryData, sleepData, cycleData, workoutData] = await Promise.allSettled([
+    const [recoveryData, sleepData, cycleData, workoutData, bodyData] = await Promise.allSettled([
       whoopGet(`/v1/recovery?limit=25`, token),
       whoopGet(`/v1/activity/sleep?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/cycle?start=${startStr}&end=${endStr}&limit=25`, token),
       whoopGet(`/v1/activity/workout?start=${startStr}&end=${endStr}&limit=25`, token, true),
+      whoopGet(`/v1/user/measurement/body`, token, true),
     ]);
+    console.log("[sync-whoop] body measurement:", bodyData.status, bodyData.status === "fulfilled" ? JSON.stringify(bodyData.value).slice(0, 300) : String(bodyData.reason));
 
     console.log("[sync-whoop] recovery:", recoveryData.status, recoveryData.status === "rejected" ? recoveryData.reason : `records=${recoveryData.value?.records?.length ?? 0} data=${recoveryData.value?.data?.length ?? 0}`);
     console.log("[sync-whoop] sleep:", sleepData.status, sleepData.status === "rejected" ? sleepData.reason : `records=${sleepData.value?.records?.length ?? 0}`);

@@ -64,8 +64,11 @@ export function AthleteRecruitCard({ athlete, onClick }: Props) {
         </div>
 
         <div className="grid grid-cols-3 gap-2 text-center">
-          <StatCell label="Height" value={cmToFtIn(athlete.profiles?.height)} />
-          <StatCell label="Weight" value={kgToLbs(athlete.profiles?.weight)} />
+          <StatCell label="GPA" value={
+            athlete.academics?.gpa != null ? `${Number(athlete.academics.gpa).toFixed(2)}${athlete.academics.gpa_weighted ? "W" : ""}` :
+            athlete.gpa != null ? Number(athlete.gpa).toFixed(2) : "—"
+          } />
+          <StatCell label="SAT" value={athlete.academics?.sat_score != null ? String(athlete.academics.sat_score) : "—"} />
           <StatCell label="Division" value={athlete.division_interest ?? "—"} />
         </div>
 

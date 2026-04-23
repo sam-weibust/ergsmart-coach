@@ -39,15 +39,15 @@ function TrendIcon({ current, avg }: { current: number | null; avg: number | nul
 
 function CircleScore({ score, color }: { score: number | null; color: string }) {
   const s = score ?? 0;
-  const r = 28;
+  const r = 24;
   const circ = 2 * Math.PI * r;
   const dash = (s / 100) * circ;
   return (
-    <svg width="80" height="80" viewBox="0 0 80 80" className="-rotate-90">
-      <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="6" />
+    <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90 shrink-0">
+      <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="5" />
       <circle
-        cx="40" cy="40" r={r} fill="none"
-        stroke={color} strokeWidth="6"
+        cx="32" cy="32" r={r} fill="none"
+        stroke={color} strokeWidth="5"
         strokeDasharray={`${dash} ${circ - dash}`}
         strokeLinecap="round"
         style={{ transition: "stroke-dasharray 0.6s ease" }}
@@ -192,13 +192,13 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
       <CardContent className="space-y-5">
 
         {/* ── Stat grid ── */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
           {/* Recovery Score */}
           <div className="rounded-xl border p-4 flex items-center gap-3" style={{ borderColor: rColor + "40", background: rColor + "08" }}>
-            <div className="relative flex items-center justify-center shrink-0">
+            <div className="relative flex items-center justify-center shrink-0" style={{ width: 64, height: 64 }}>
               <CircleScore score={recovScore} color={rColor} />
-              <span className="absolute text-lg font-bold" style={{ color: rColor }}>
+              <span className="absolute text-base font-bold" style={{ color: rColor }}>
                 {recovScore ?? "—"}
               </span>
             </div>
@@ -273,38 +273,37 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
 
         {/* ── 7-day combo chart ── */}
         {chartData.length >= 2 && (
-          <div>
+          <div className="overflow-x-hidden">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">7-Day Trend</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={chartData} margin={{ top: 8, right: 48, left: 8, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData} margin={{ top: 8, right: 44, left: 4, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
                   tickLine={false}
                   axisLine={false}
+                  interval="preserveStartEnd"
                 />
                 <YAxis
                   yAxisId="recovery"
                   orientation="left"
                   domain={[0, 100]}
-                  ticks={[0, 33, 67, 100]}
+                  ticks={[0, 50, 100]}
                   tick={{ fontSize: 10, fill: "#10b981" }}
                   tickLine={false}
                   axisLine={false}
-                  label={{ value: "Recovery", angle: -90, position: "insideLeft", offset: 12, style: { fontSize: 10, fill: "#10b981" } }}
-                  width={52}
+                  width={28}
                 />
                 <YAxis
                   yAxisId="strain"
                   orientation="right"
                   domain={[0, 21]}
-                  ticks={[0, 7, 14, 21]}
+                  ticks={[0, 10, 21]}
                   tick={{ fontSize: 10, fill: "#2d6be4" }}
                   tickLine={false}
                   axisLine={false}
-                  label={{ value: "Strain", angle: 90, position: "insideRight", offset: 12, style: { fontSize: 10, fill: "#2d6be4" } }}
-                  width={44}
+                  width={28}
                 />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}

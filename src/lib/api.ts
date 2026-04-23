@@ -10,10 +10,12 @@ const API_KEY =
 async function callFunction(name, body) {
   const { data: { session } } = await supabase.auth.getSession();
 
-  const res = await fetch(`${BASE_URL}/${name}`, {
+  const res = await fetch(`${BASE_URL}/${name}?_t=${Date.now()}`, {
     method: "POST",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
       apikey: API_KEY,
       Authorization: `Bearer ${session?.access_token ?? ""}`,
     },

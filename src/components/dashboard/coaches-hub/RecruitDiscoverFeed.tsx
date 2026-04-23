@@ -22,6 +22,8 @@ const DEFAULT_FILTERS: RecruitFilters = {
   weightMaxKg: "",
   hasCombineScore: false,
   searchQuery: "",
+  minGpa: "",
+  minSat: "",
 };
 
 function parseMmSs(val: string): number | null {
@@ -88,6 +90,15 @@ export function RecruitDiscoverFeed({ coachId, coachProfile }: Props) {
         }
       }
 
+      // Fetch academics
+      const { data: academics } = await supabase
+        .from("athlete_academics")
+        .select("user_id, psat_score, sat_score, act_score, gpa, gpa_weighted, class_rank_numerator, class_rank_denominator, intended_major, academic_interests")
+        .in("user_id", userIds);
+
+      const academicsByUser: Record<string, any> = {};
+      for (const a of academics ?? []) academicsByUser[a.user_id] = a;
+
       // Fetch combine scores
       const { data: combines } = await supabase
         .from("combine_entries")
@@ -116,6 +127,7 @@ export function RecruitDiscoverFeed({ coachId, coachProfile }: Props) {
       return aps.map((a: any): AthleteProfile => ({
         ...a,
         best_2k: bestScores[a.user_id] ?? null,
+        academics: academicsByUser[a.user_id] ?? null,
         combine_score: combineByUser[a.user_id]?.virtual_combine_score ?? null,
         relevance_score: scoresByUser[a.user_id]?.score ?? null,
         relevance_reasoning: scoresByUser[a.user_id]?.reasoning ?? null,
@@ -176,6 +188,16 @@ export function RecruitDiscoverFeed({ coachId, coachProfile }: Props) {
           const schoolMatch = a.school?.toLowerCase().includes(q);
           if (!nameMatch && !schoolMatch) return false;
         }
+        if (filters.minGpa) {
+          const minGpa = parseFloat(filters.minGpa);
+          const gpa = a.academics?.gpa ?? a.gpa ?? null;
+          if (!gpa || gpa < minGpa) return false;
+        }
+        if (filters.minSat) {
+          const minSat = parseInt(filters.minSat);
+          const sat = a.academics?.sat_score ?? null;
+          if (!sat || sat < minSat) return false;
+        }
         return true;
       })
       .sort((a, b) => {
@@ -193,6 +215,8 @@ export function RecruitDiscoverFeed({ coachId, coachProfile }: Props) {
     !!filters.heightMinCm || !!filters.heightMaxCm,
     !!filters.weightMinKg || !!filters.weightMaxKg,
     filters.hasCombineScore,
+    !!filters.minGpa,
+    !!filters.minSat,
   ].filter(Boolean).length;
 
   return (
