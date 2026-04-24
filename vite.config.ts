@@ -16,13 +16,13 @@ export default defineConfig(() => ({
       filename: "sw.js",
       strategies: "injectManifest",
       srcDir: "public",
-      manifest: false, // we manage manifest.json ourselves
+      manifest: false,
       injectManifest: {
         swSrc: "public/sw.js",
         swDest: "dist/sw.js",
         globDirectory: "dist",
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       devOptions: {
         enabled: false,
@@ -32,6 +32,35 @@ export default defineConfig(() => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "recharts": ["recharts"],
+          "supabase": ["@supabase/supabase-js"],
+          "ui": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-select",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-toast",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-accordion",
+            "@radix-ui/react-avatar",
+            "@radix-ui/react-checkbox",
+            "@radix-ui/react-label",
+            "@radix-ui/react-progress",
+            "@radix-ui/react-slider",
+            "@radix-ui/react-switch",
+          ],
+          "query": ["@tanstack/react-query"],
+          "date": ["date-fns"],
+          "router": ["react-router-dom"],
+        },
+      },
     },
   },
 }));
