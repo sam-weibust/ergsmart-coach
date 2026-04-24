@@ -103,9 +103,9 @@ export function AccountSection() {
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="newEmail" className="text-sm">New Email</Label>
-            <Input id="newEmail" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new@email.com" />
+            <Input id="newEmail" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new@email.com" className="min-h-[44px]" />
           </div>
-          <Button onClick={updateEmail} disabled={emailLoading || !newEmail} size="sm">
+          <Button onClick={updateEmail} disabled={emailLoading || !newEmail} className="w-full sm:w-auto min-h-[44px]">
             {emailLoading && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
             Update Email
           </Button>
@@ -123,13 +123,13 @@ export function AccountSection() {
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-sm">New Password</Label>
-            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" className="min-h-[44px]" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm">Confirm Password</Label>
-            <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+            <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="min-h-[44px]" />
           </div>
-          <Button onClick={updatePassword} disabled={passwordLoading || !newPassword} size="sm">
+          <Button onClick={updatePassword} disabled={passwordLoading || !newPassword} className="w-full sm:w-auto min-h-[44px]">
             {passwordLoading && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
             Update Password
           </Button>
@@ -147,7 +147,7 @@ export function AccountSection() {
         <CardContent>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">Delete Account</Button>
+              <Button variant="destructive" className="w-full sm:w-auto min-h-[44px]">Delete Account</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>

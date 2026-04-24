@@ -237,6 +237,7 @@ function SplitCalc({ prefill }: { prefill: PrefillData }) {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               className="font-mono"
+              inputMode="decimal"
             />
           </div>
           <div className="space-y-1">
@@ -262,7 +263,7 @@ function SplitCalc({ prefill }: { prefill: PrefillData }) {
                 placeholder="3000"
                 value={customDist}
                 onChange={(e) => setCustomDist(e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
           )}
@@ -298,7 +299,7 @@ function SplitCalc({ prefill }: { prefill: PrefillData }) {
               <h3 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
                 Projected Times at This Pace
               </h3>
-              <div className="rounded-xl border border-border overflow-hidden">
+              <div className="rounded-xl border border-border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
@@ -323,7 +324,7 @@ function SplitCalc({ prefill }: { prefill: PrefillData }) {
                 <h3 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wider">
                   500m Segment Breakdown
                 </h3>
-                <div className="rounded-xl border border-border overflow-hidden max-h-64 overflow-y-auto">
+                <div className="rounded-xl border border-border overflow-x-auto max-h-64 overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
@@ -492,7 +493,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="13500"
                 value={form.best_60min}
                 onChange={(e) => set("best_60min", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
           </div>
@@ -509,7 +510,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="60000"
                 value={form.weekly_volume}
                 onChange={(e) => set("weekly_volume", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
             <div className="space-y-1">
@@ -518,7 +519,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="12"
                 value={form.weeks_consistent}
                 onChange={(e) => set("weeks_consistent", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
             <div className="space-y-1">
@@ -563,7 +564,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="22"
                 value={form.age}
                 onChange={(e) => set("age", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
             <div className="space-y-1">
@@ -572,7 +573,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="80"
                 value={form.weight}
                 onChange={(e) => set("weight", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
             <div className="space-y-1">
@@ -581,7 +582,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
                 placeholder="185"
                 value={form.height}
                 onChange={(e) => set("height", e.target.value)}
-                type="number"
+                type="number" inputMode="numeric"
               />
             </div>
             <div className="space-y-1">
@@ -799,7 +800,7 @@ function WeightAdjCalc({ prefill }: { prefill: PrefillData }) {
               placeholder={unit === "kg" ? "82" : "181"}
               value={currWeight}
               onChange={(e) => setCurrWeight(e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
           <div className="space-y-1">
@@ -808,7 +809,7 @@ function WeightAdjCalc({ prefill }: { prefill: PrefillData }) {
               placeholder={unit === "kg" ? "78" : "172"}
               value={targWeight}
               onChange={(e) => setTargWeight(e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
           <div className="flex items-end">
@@ -1338,7 +1339,7 @@ function StrokeRateCalc({ prefill }: { prefill: PrefillData }) {
               placeholder="22"
               value={spm}
               onChange={(e) => setSpm(e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
           <div className="flex items-end">
@@ -1852,7 +1853,7 @@ function WkgRatio({ prefill }: { prefill: PrefillData }) {
               placeholder={unit === "kg" ? "82" : "181"}
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
           <div className="flex items-end">
@@ -2039,7 +2040,7 @@ function ImprovementTimeline({ prefill }: { prefill: PrefillData }) {
               placeholder="60000"
               value={form.weekly_volume}
               onChange={(e) => set("weekly_volume", e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
         </div>
@@ -2051,7 +2052,7 @@ function ImprovementTimeline({ prefill }: { prefill: PrefillData }) {
               placeholder="22"
               value={form.age}
               onChange={(e) => set("age", e.target.value)}
-              type="number"
+              type="number" inputMode="numeric"
             />
           </div>
           <div className="space-y-1">

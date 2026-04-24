@@ -96,30 +96,30 @@ export const MessageBoard = ({ teamId, friendId, currentUserId, title }: Message
 
   return (
     <Card className="flex flex-col h-[400px] md:h-[500px]">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 shrink-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <MessageCircle className="h-4 w-4" />
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-hidden p-3">
-        <ScrollArea className="flex-1 pr-2">
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-3 min-h-0">
+        <ScrollArea className="flex-1 pr-2 min-h-0">
           <div className="space-y-3">
             {messages?.map((msg: any) => {
-              const isOwn = teamId 
-                ? msg.user_id === currentUserId 
+              const isOwn = teamId
+                ? msg.user_id === currentUserId
                 : msg.sender_id === currentUserId;
-              const name = teamId 
-                ? msg.profile?.full_name || msg.profile?.username 
+              const name = teamId
+                ? msg.profile?.full_name || msg.profile?.username
                 : msg.sender?.full_name || msg.sender?.username;
-              
+
               return (
                 <div
                   key={msg.id}
                   className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2 ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                       isOwn
                         ? "bg-primary text-primary-foreground rounded-br-sm"
                         : "bg-muted rounded-bl-sm"
@@ -143,16 +143,18 @@ export const MessageBoard = ({ teamId, friendId, currentUserId, title }: Message
             )}
           </div>
         </ScrollArea>
-        <div className="flex gap-2 mt-3 pt-3 border-t">
+        <div className="flex gap-2 mt-3 pt-3 border-t shrink-0">
           <Input
             placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage.mutate()}
-            className="flex-1"
+            className="flex-1 min-h-[44px] text-base"
+            enterKeyHint="send"
           />
-          <Button 
-            size="icon" 
+          <Button
+            size="icon"
+            className="h-11 w-11 shrink-0"
             onClick={() => sendMessage.mutate()}
             disabled={!message.trim() || sendMessage.isPending}
           >

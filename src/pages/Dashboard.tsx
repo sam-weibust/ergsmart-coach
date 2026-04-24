@@ -777,8 +777,9 @@ const Dashboard = () => {
         >
           <PullToRefreshIndicator progress={progress} refreshing={refreshing} threshold={threshold} />
           <main
-            className="container mx-auto px-4 py-6 pb-24 md:pb-8 animate-fade-in"
+            className="container mx-auto px-4 py-6 md:pb-8 animate-fade-in"
             style={{
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5rem)",
               transform:
                 pulling || refreshing
                   ? `translateY(${Math.min(progress, threshold)}px)`
@@ -801,12 +802,12 @@ const Dashboard = () => {
             <button
               key={item.id}
               onClick={() => navTo(item.id)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors ${
                 activeSection === item.id ? "text-primary" : "text-muted-foreground"
               }`}
             >
               <item.icon className="h-5 w-5" />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-[11px] font-medium">{item.label}</span>
             </button>
           ))}
 
@@ -814,14 +815,14 @@ const Dashboard = () => {
           <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
             <SheetTrigger asChild>
               <button
-                className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
+                className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors ${
                   moreNavSections.some((s) => s.id === activeSection)
                     ? "text-primary"
                     : "text-muted-foreground"
                 }`}
               >
                 <MoreHorizontal className="h-5 w-5" />
-                <span className="text-[10px] font-medium">More</span>
+                <span className="text-[11px] font-medium">More</span>
               </button>
             </SheetTrigger>
             <SheetContent side="bottom" className="max-h-[85vh] flex flex-col">
@@ -833,7 +834,7 @@ const Dashboard = () => {
                   <div key={section.id}>
                     <button
                       onClick={() => navTo(section.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors font-semibold text-sm ${
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors font-semibold text-sm min-h-[44px] ${
                         activeSection === section.id
                           ? "bg-primary/10 text-primary"
                           : "text-foreground hover:bg-muted"
@@ -849,13 +850,13 @@ const Dashboard = () => {
                           <button
                             key={sub.id}
                             onClick={() => navTo(section.id, sub.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-left text-sm transition-colors ${
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm transition-colors min-h-[44px] ${
                               activeSub === sub.id
                                 ? "bg-primary/10 text-primary font-semibold"
                                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
                             }`}
                           >
-                            <sub.icon className="h-3.5 w-3.5 shrink-0" />
+                            <sub.icon className="h-4 w-4 shrink-0" />
                             {sub.label}
                           </button>
                         ))}

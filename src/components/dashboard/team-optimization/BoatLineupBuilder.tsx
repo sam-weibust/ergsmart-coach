@@ -39,15 +39,15 @@ function SortableSeat({ seat, athletes, onAthleteChange }: {
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2 p-2 rounded-lg border bg-card">
-      <button {...attributes} {...listeners} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 p-2.5 rounded-lg border bg-card min-h-[52px]">
+      <button {...attributes} {...listeners} className="cursor-grab touch-none text-muted-foreground hover:text-foreground p-1 min-w-[44px] min-h-[44px] flex items-center justify-center">
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="w-16 text-sm font-medium text-muted-foreground shrink-0">
         {seat.seat_number === 0 ? "Cox" : `Seat ${seat.seat_number}`}
       </div>
       <Select value={seat.user_id || "none"} onValueChange={v => onAthleteChange(seat.seat_number, v === "none" ? "" : v)}>
-        <SelectTrigger className="h-8 text-sm">
+        <SelectTrigger className="min-h-[44px] text-sm">
           <SelectValue placeholder="Unassigned" />
         </SelectTrigger>
         <SelectContent>

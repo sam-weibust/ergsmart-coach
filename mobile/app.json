@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "CrewSync",
+    "slug": "crewsync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1B3A6B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.crewsync.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "CrewSync uses Bluetooth to connect to your Concept2 PM5 rowing machine monitor.",
+        "NSBluetoothPeripheralUsageDescription": "CrewSync uses Bluetooth to connect to your Concept2 PM5 rowing machine monitor.",
+        "NSCameraUsageDescription": "CrewSync uses your camera to analyze your rowing technique.",
+        "NSPhotoLibraryUsageDescription": "CrewSync accesses your photo library to upload workout videos for technique analysis."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1B3A6B"
+      },
+      "package": "com.crewsync.app",
+      "versionCode": 1,
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image",
+        {
+          "photosPermission": "Allow CrewSync to access your photos."
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"],
+          "bluetoothAlwaysPermission": "Allow CrewSync to connect to your Concept2 PM5 rowing monitor."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "scheme": "crewsync",
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

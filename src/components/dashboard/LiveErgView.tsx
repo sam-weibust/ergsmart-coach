@@ -424,7 +424,7 @@ export default function LiveErgView() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col overflow-x-hidden">
       {/* ── Header bar ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <div className="flex items-center gap-3">
@@ -451,14 +451,14 @@ export default function LiveErgView() {
             </Button>
           )}
           {ergConnected ? (
-            <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-xs h-7 px-2" onClick={disconnectErg}>
+            <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-sm h-10 px-3 min-w-[44px]" onClick={disconnectErg}>
               Disconnect
             </Button>
           ) : (
-            <Button size="sm" className="h-8 text-xs" onClick={connectErg} disabled={connecting || !btSupported}>
+            <Button size="sm" className="h-10 text-sm px-4 min-w-[44px]" onClick={connectErg} disabled={connecting || !btSupported}>
               {connecting
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Connecting…</>
-                : <><Bluetooth className="h-3.5 w-3.5 mr-1" />Connect PM5</>}
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Connecting…</>
+                : <><Bluetooth className="h-4 w-4 mr-1.5" />Connect PM5</>}
             </Button>
           )}
         </div>
@@ -496,9 +496,9 @@ export default function LiveErgView() {
       {/* ── Big stat grid ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-gray-800 border-b border-gray-800 flex-shrink-0">
         {statBlocks.map(({ label, value, big }) => (
-          <div key={label} className={`flex flex-col items-center justify-center py-4 px-2 ${big ? "bg-gray-900 col-span-2 sm:col-span-1" : "bg-gray-950"}`}>
+          <div key={label} className={`flex flex-col items-center justify-center py-5 px-2 ${big ? "bg-gray-900 col-span-2 sm:col-span-1" : "bg-gray-950"}`}>
             <span className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">{label}</span>
-            <span className={`font-mono font-bold tabular-nums leading-none ${big ? "text-4xl text-green-400" : "text-2xl text-white"}`}>
+            <span className={`font-mono font-bold tabular-nums leading-none ${big ? "text-4xl sm:text-5xl text-green-400" : "text-2xl sm:text-3xl text-white"}`}>
               {value}
             </span>
           </div>

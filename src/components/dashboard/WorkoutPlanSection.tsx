@@ -1035,7 +1035,7 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
             "!bg-orange-100 !text-orange-800 dark:!bg-orange-900/40 dark:!text-orange-300 font-semibold hover:!bg-orange-200",
           rest: "!bg-purple-100 !text-purple-800 dark:!bg-purple-900/40 dark:!text-purple-300 font-semibold hover:!bg-purple-200",
         }}
-        className="rounded-md border w-fit"
+        className="rounded-md border w-full max-w-full overflow-x-auto"
       />
 
       {selectedDate && selectedWorkout && (

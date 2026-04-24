@@ -495,7 +495,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               onClick={() => navTo("training", "erg")}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+              className="flex items-center gap-2 px-3 py-3 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground min-h-[44px]"
             >
               <Activity className="h-4 w-4 text-primary shrink-0" />
               <span className="truncate">Log Workout</span>
@@ -503,21 +503,21 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
             <button
               onClick={handleSyncC2}
               disabled={syncingC2}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground disabled:opacity-60"
+              className="flex items-center gap-2 px-3 py-3 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground disabled:opacity-60 min-h-[44px]"
             >
               {syncingC2 ? <Loader2 className="h-4 w-4 text-primary shrink-0 animate-spin" /> : <RefreshCw className="h-4 w-4 text-primary shrink-0" />}
               <span className="truncate">Sync C2</span>
             </button>
             <button
               onClick={() => navTo("training", "plan")}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+              className="flex items-center gap-2 px-3 py-3 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground min-h-[44px]"
             >
               <Calendar className="h-4 w-4 text-primary shrink-0" />
               <span className="truncate">Training Plan</span>
             </button>
             <button
               onClick={() => navTo("competition", "leaderboard")}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+              className="flex items-center gap-2 px-3 py-3 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-sm font-medium text-foreground min-h-[44px]"
             >
               <Medal className="h-4 w-4 text-primary shrink-0" />
               <span className="truncate">Leaderboard</span>

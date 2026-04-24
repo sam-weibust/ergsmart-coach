@@ -167,24 +167,23 @@ export default function RegattaSearch({ profile }: { profile: any }) {
                 placeholder="Search regattas, athletes, clubs, locations..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                className="pl-9 pr-9"
+                className="pl-9 pr-9 min-h-[44px]"
               />
               {inputValue && (
                 <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground min-w-[44px] min-h-[44px] flex items-center justify-center"
                   onClick={() => { setInputValue(""); setQuery(""); }}
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="shrink-0">
+            <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className="shrink-0 min-h-[44px] px-4">
               Filters
             </Button>
             <Button
               variant="outline"
-              size="sm"
-              className="gap-1.5 shrink-0"
+              className="gap-1.5 shrink-0 min-h-[44px] px-3"
               onClick={() => syncFromCrewTimer.mutate()}
               disabled={syncFromCrewTimer.isPending}
             >
@@ -406,10 +405,10 @@ export default function RegattaSearch({ profile }: { profile: any }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full h-7 text-xs gap-1"
+                      className="w-full min-h-[44px] text-sm gap-1"
                       onClick={(e) => { e.stopPropagation(); setSelectedRegatta(r); }}
                     >
-                      <Trophy className="h-3 w-3" />
+                      <Trophy className="h-3.5 w-3.5" />
                       View Results
                     </Button>
                   </CardContent>

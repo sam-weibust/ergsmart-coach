@@ -189,10 +189,10 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
   return (
     <div className="space-y-6">
       {/* Date Range Filter */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 className="text-xl font-semibold">Performance Analytics</h2>
         <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32 min-h-[44px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
