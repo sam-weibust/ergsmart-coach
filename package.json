@@ -8,7 +8,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:ios": "vite build && npx cap sync ios && npx cap open ios",
+    "build:android": "vite build && npx cap sync android && npx cap open android"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.1.2",
@@ -96,6 +98,13 @@
     "to-ico": "^1.1.5",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-cacheable-response": "^7.4.0",
+    "workbox-expiration": "^7.4.0",
+    "workbox-precaching": "^7.4.0",
+    "workbox-routing": "^7.4.0",
+    "workbox-strategies": "^7.4.0",
+    "workbox-window": "^7.4.0"
   }
 }

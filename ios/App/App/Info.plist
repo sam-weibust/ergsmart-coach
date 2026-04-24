@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>CrewSync</string>
+	<string>CrewSync</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -19,11 +19,36 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whoop</string>
+		<string>concept2</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>CrewSync uses Bluetooth to connect to your Concept2 PM5 erg and heart rate monitor for live performance tracking.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>CrewSync uses Bluetooth to connect to your Concept2 PM5 erg and heart rate monitor.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CrewSync uses the camera to scan food barcodes for calorie tracking.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>CrewSync reads health and workout data to track your training load and recovery.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>CrewSync saves rowing workouts to Apple Health.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CrewSync uses your location to show nearby regattas and rowing clubs.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CrewSync uses the microphone for video technique analysis uploads.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>CrewSync saves workout cards and recruiting profile photos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CrewSync accesses your photo library to set your profile picture and upload technique videos.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -47,11 +72,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>CrewSync connects to Concept2 PM5 ergs and heart rate monitors via Bluetooth.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>CrewSync connects to Concept2 PM5 ergs and heart rate monitors via Bluetooth.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Bluetooth scanning requires location permission on iOS.</string>
 </dict>
 </plist>

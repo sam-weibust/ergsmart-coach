@@ -370,14 +370,16 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
   });
 
   // USDA food search
-  const { data: searchData, isLoading: isSearching } = useQuery({
+  const { data: searchData, isLoading: isSearching, error: searchError } = useQuery({
     queryKey: ["food-search", debouncedQuery],
     enabled: debouncedQuery.length >= 2,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("search-foods", {
         body: { query: debouncedQuery },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return (data?.results ?? []) as FoodResult[];
     },
   });
@@ -757,7 +759,10 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
                   <Loader2 className="h-4 w-4 animate-spin" />Searching USDA database...
                 </div>
               )}
-              {!isSearching && debouncedQuery.length >= 2 && searchResults.length === 0 && (
+              {searchError && !isSearching && (
+                <p className="text-sm text-red-500 py-2">Search failed: {(searchError as Error).message}. Check your connection and try again.</p>
+              )}
+              {!isSearching && !searchError && debouncedQuery.length >= 2 && searchResults.length === 0 && (
                 <p className="text-sm text-muted-foreground py-2">No results. Try a different term.</p>
               )}
               <div className="divide-y divide-border max-h-[400px] overflow-y-auto">

@@ -1,0 +1,24 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["TEAMID.com.crewsync.app"],
+        "components": [
+          { "/": "/athlete/*" },
+          { "/": "/team/*" },
+          { "/": "/regatta/*" },
+          { "/": "/auth/concept2/callback*" },
+          { "/": "/auth/whoop/callback*" },
+          { "/": "/join/*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.com.crewsync.app"]
+  },
+  "activitycontinuation": {
+    "apps": ["TEAMID.com.crewsync.app"]
+  }
+}

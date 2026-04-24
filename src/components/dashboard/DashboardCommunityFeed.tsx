@@ -101,7 +101,7 @@ export function DashboardCommunityFeed({ navTo }: Props) {
       const { data } = await (supabase as any)
         .from("verified_times")
         .select("id, user_id, time_achieved, profiles!verified_times_user_id_fkey(full_name, username)")
-        .eq("distance", "2K")
+        .eq("distance", 2000)
         .eq("verification_status", "verified")
         .order("time_achieved", { ascending: true })
         .limit(3);

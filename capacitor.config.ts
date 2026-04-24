@@ -60,8 +60,9 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    // Allow Supabase OAuth redirects back to the app
     allowNavigation: [
+      'crewsync.app',
+      '*.crewsync.app',
       'log.concept2.com',
       '*.supabase.co',
       '*.supabase.in',
@@ -77,15 +78,23 @@ const config: CapacitorConfig = {
       },
     },
     SplashScreen: {
-      launchShowDuration: 1500,
-      backgroundColor: '#ffffff',
+      launchShowDuration: 2000,
+      backgroundColor: '#0a1628',
+      splashFullScreen: true,
       showSpinner: false,
+    },
+    StatusBar: {
+      style: 'LIGHT',
+      backgroundColor: '#0a1628',
+    },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
     },
   },
   ios: {
     contentInset: 'always',
     scrollEnabled: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0a1628',
   },
   android: {
     backgroundColor: '#ffffff',

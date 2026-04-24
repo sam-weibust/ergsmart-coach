@@ -210,7 +210,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       const today = new Date().toISOString().split("T")[0];
       const { data } = await supabase
         .from("workout_plans")
-        .select("id, plan_content, created_at")
+        .select("id, workout_data, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -310,11 +310,11 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
 
   // Today's workout summary from plan
   let todaySessionSummary: string | null = null;
-  if (todayPlan?.plan_content) {
+  if (todayPlan?.workout_data) {
     try {
-      const content = typeof todayPlan.plan_content === "string"
-        ? JSON.parse(todayPlan.plan_content)
-        : todayPlan.plan_content;
+      const content = typeof todayPlan.workout_data === "string"
+        ? JSON.parse(todayPlan.workout_data)
+        : todayPlan.workout_data;
       const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
       if (content?.workouts || Array.isArray(content)) {
         const ws = content?.workouts || content;

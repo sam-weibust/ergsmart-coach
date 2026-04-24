@@ -39,7 +39,7 @@ export async function generateWorkout(
   userId: string,
   profileData: Record<string, unknown>
 ): Promise<ApiResponse<TrainingPlan>> {
-  return callEdgeFunction<TrainingPlan>('generate-workout-plan', {
+  return callEdgeFunction<TrainingPlan>('generate-workout', {
     user_id: userId,
     profile: profileData,
   });
