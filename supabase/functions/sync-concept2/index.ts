@@ -373,7 +373,73 @@ serve(async (req) => {
 
     console.log(`[sync-concept2] Detail: fetched=${detailFetched} errors=${detailErrors}`);
 
-    // ── Step 6: Update sync timestamps ───────────────────────────────────────
+    // ── Step 6: Upsert benchmark erg_scores from verified C2 workouts ────────
+    const BENCHMARK_MAP: Record<number, string> = {
+      2000: "2k", 5000: "5k", 6000: "6k", 10000: "10k",
+    };
+    const TOLERANCE = 15;
+    const SECS_IN_HOUR = 3600;
+
+    // Get user weight for w/kg calculation
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("weight_kg")
+      .eq("id", user_id)
+      .maybeSingle();
+    const weight_kg: number | null = (profileRow as any)?.weight_kg ?? null;
+
+    const benchmarkRows: any[] = [];
+    for (const w of workoutsToImport) {
+      const dist = w.distance != null ? Math.round(Number(w.distance)) : null;
+      const timeDecisecs = w.time != null ? Number(w.time) : null; // C2 time is in deciseconds
+      if (!dist || !timeDecisecs) continue;
+
+      const timeSecs = timeDecisecs / 10;
+      let testType: string | null = null;
+
+      // Check fixed distances
+      for (const [bd, tt] of Object.entries(BENCHMARK_MAP)) {
+        if (Math.abs(dist - Number(bd)) <= TOLERANCE) { testType = tt; break; }
+      }
+      // Check 60-minute piece (time ≈ 3600s ± 30s)
+      if (!testType && Math.abs(timeSecs - SECS_IN_HOUR) <= 30) testType = "60min";
+
+      if (!testType) continue;
+
+      const avgSplit = timeSecs > 0 && dist > 0 ? (timeSecs / dist) * 500 : null;
+      // splitToWatts: watts = 2.80/(split_500m_seconds^3)
+      const watts = avgSplit ? Math.round(2.80 / Math.pow(avgSplit / 500, 3)) : null;
+      const wattsPerKg = watts && weight_kg ? Math.round((watts / weight_kg) * 1000) / 1000 : null;
+
+      benchmarkRows.push({
+        user_id,
+        test_type: testType,
+        time_seconds: testType === "60min" ? null : Math.round(timeSecs),
+        total_meters: testType === "60min" ? dist : null,
+        avg_split_seconds: avgSplit,
+        watts,
+        watts_per_kg: wattsPerKg,
+        recorded_at: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
+        source: "concept2_sync",
+        is_verified: true,
+        to_leaderboard: true,
+        notes: w.comments || null,
+      });
+    }
+
+    if (benchmarkRows.length > 0) {
+      console.log(`[sync-concept2] Upserting ${benchmarkRows.length} benchmark erg_scores`);
+      // No unique constraint on (user_id, test_type, recorded_at) — insert only, duplicates will stack
+      // Use upsert keyed on (user_id, test_type, recorded_at) if constraint exists, else insert
+      const { error: ergScoreErr } = await supabase
+        .from("erg_scores")
+        .insert(benchmarkRows);
+      if (ergScoreErr) {
+        console.error("[sync-concept2] erg_scores insert error:", JSON.stringify(ergScoreErr));
+      }
+    }
+
+    // ── Step 7: Update sync timestamps ───────────────────────────────────────
     const nowIso = new Date().toISOString();
     await Promise.all([
       supabase.from("athlete_profiles").upsert(

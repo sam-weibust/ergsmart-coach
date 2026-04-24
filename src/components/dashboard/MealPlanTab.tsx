@@ -13,6 +13,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import CustomMealLogger from "./CustomMealLogger";
+import FoodDatabase from "./FoodDatabase";
 import { getSessionUser } from '@/lib/getUser';
 
 interface MealPlanTabProps {
@@ -215,7 +216,10 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Calorie Tracker */}
+      {/* Food database — search, log, charts */}
+      <FoodDatabase profile={profile} calorieTarget={calorieTarget} />
+
+      {/* Legacy calorie tracker summary */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-start">

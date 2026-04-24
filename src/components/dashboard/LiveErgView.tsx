@@ -230,6 +230,44 @@ export default function LiveErgView() {
         })(),
       });
 
+      // Save to erg_scores for leaderboard-eligible distances
+      const BENCHMARK_DISTANCES: Record<number, string> = {
+        2000: "2k", 5000: "5k", 6000: "6k", 10000: "10k",
+      };
+      const TOLERANCE = 15;
+      const matchedDist = Object.keys(BENCHMARK_DISTANCES).find(
+        bd => Math.abs(dist - parseInt(bd)) <= TOLERANCE
+      );
+      const is60min = Math.abs(d.elapsedTime / 100 - 3600) <= 30; // ±30s
+      const testType = is60min
+        ? "60min"
+        : matchedDist ? BENCHMARK_DISTANCES[parseInt(matchedDist)] : null;
+
+      if (testType) {
+        const timeSeconds = d.elapsedTime / 100;
+        const splitSecs = d.elapsedTime > 0 && d.distance > 0
+          ? (timeSeconds / dist) * 500 : null;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("weight_kg")
+          .eq("id", user.id)
+          .maybeSingle();
+        const wkg = avgWatts && profile?.weight_kg
+          ? avgWatts / profile.weight_kg : null;
+        await (supabase.from("erg_scores") as any).insert({
+          user_id: user.id,
+          test_type: testType,
+          time_seconds: testType === "60min" ? null : Math.round(timeSeconds),
+          total_meters: testType === "60min" ? dist : null,
+          avg_split_seconds: splitSecs,
+          watts: avgWatts,
+          watts_per_kg: wkg,
+          source: "live_erg",
+          is_verified: true,
+          to_leaderboard: true,
+        });
+      }
+
       setSaved(true);
       toast({ title: "Workout saved", description: `${dist}m in ${dur}` });
     } catch (e: any) {

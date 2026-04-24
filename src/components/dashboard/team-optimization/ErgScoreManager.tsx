@@ -121,6 +121,9 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
         watts_per_kg: wkg,
         notes: data.notes || null,
         created_by: profile.id,
+        source: "manual",
+        is_verified: false,
+        to_leaderboard: false,
       });
       if (error) throw error;
     },

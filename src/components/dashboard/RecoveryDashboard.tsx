@@ -902,11 +902,12 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes, whoopRecRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes, foodLogRes, whoopRecRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
+        (supabase.from("food_log") as any).select("calories,date").eq("user_id", user.id).gte("date", sevenAgo),
         supabase.from("whoop_recovery").select("recovery_score,hrv_rmssd,sleep_performance_percentage").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
@@ -914,6 +915,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const waterEntries = waterRes.data || [];
       const weightEntries = weightRes.data || [];
       const meals = mealsRes.data || [];
+      const foodLogEntries = foodLogRes.data || [];
       const whoopToday = whoopRecRes.data ?? null;
 
       // Sleep component (40 pts)
@@ -934,9 +936,10 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const todayWater = waterByDate[t] || 0;
       const hydrationComponent = Math.min(100, (todayWater / hydrationGoal) * 100);
 
-      // Calorie component
+      // Calorie component — combine meal_plans + food_log
       const mealsByDate: Record<string, number> = {};
       for (const m of meals) mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
+      for (const f of foodLogEntries) mealsByDate[f.date] = (mealsByDate[f.date] || 0) + (f.calories || 0);
       const w = profile?.weight;
       const h = profile?.height || 175;
       const a = profile?.age || 25;

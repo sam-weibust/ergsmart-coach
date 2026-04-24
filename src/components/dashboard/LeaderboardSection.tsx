@@ -1,67 +1,30 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Upload, ShieldCheck } from "lucide-react";
-import { GlobalLeaderboard } from "./GlobalLeaderboard";
-import { SubmitVerifiedTime } from "./SubmitVerifiedTime";
-import { TimeVerificationAdmin } from "./TimeVerificationAdmin";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { MySubmissions } from "./MySubmissions";
-import { getSessionUser } from '@/lib/getUser';
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Trophy, ExternalLink, ShieldCheck } from "lucide-react";
 
 export const LeaderboardSection = () => {
-  // Check if user is admin
-  const { data: isAdmin } = useQuery({
-    queryKey: ["is-admin"],
-    queryFn: async () => {
-      const user = await getSessionUser();
-      if (!user) return false;
-
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      return !!data;
-    },
-  });
-
+  const navigate = useNavigate();
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="leaderboard" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-flex">
-          <TabsTrigger value="leaderboard" className="gap-2">
-            <Trophy className="h-4 w-4" />
-            <span className="hidden sm:inline">Leaderboard</span>
-          </TabsTrigger>
-          <TabsTrigger value="submit" className="gap-2">
-            <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">Submit</span>
-          </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="verify" className="gap-2">
-              <ShieldCheck className="h-4 w-4" />
-              <span className="hidden sm:inline">Verify</span>
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="leaderboard" className="space-y-4">
-          <GlobalLeaderboard />
-        </TabsContent>
-
-        <TabsContent value="submit" className="space-y-4">
-          <SubmitVerifiedTime />
-          <MySubmissions />
-        </TabsContent>
-
-        {isAdmin && (
-          <TabsContent value="verify" className="space-y-4">
-            <TimeVerificationAdmin />
-          </TabsContent>
-        )}
-      </Tabs>
-    </div>
+    <Card className="shadow-card border-border">
+      <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+        <Trophy className="h-10 w-10 text-primary" />
+        <div>
+          <h2 className="text-xl font-bold">Global Leaderboard</h2>
+          <p className="text-muted-foreground mt-1 text-sm max-w-sm">
+            Verified erg scores from Concept2 Logbook sync and live PM5 sessions.
+            Manual entries are not eligible.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-full px-3 py-1">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          All times verified automatically
+        </div>
+        <Button onClick={() => navigate("/leaderboard")} className="gap-2">
+          <ExternalLink className="h-4 w-4" />
+          Open Leaderboard
+        </Button>
+      </CardContent>
+    </Card>
   );
 };
