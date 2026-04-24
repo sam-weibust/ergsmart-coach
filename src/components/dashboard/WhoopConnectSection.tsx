@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/config/supabase";
 import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 import { whoopConnect, whoopSync, whoopDisconnect } from "@/lib/api";
 import { getSessionUser } from "@/lib/getUser";
@@ -53,14 +55,33 @@ export default function WhoopConnectSection() {
     }
   };
 
+  const nativeFetch = async (fnName: string, body: object) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+
   const syncWhoop = async () => {
     setIsSyncing(true);
     try {
       const user = await getSessionUser();
       if (!user) return;
-      const res = await whoopSync({ user_id: user.id });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (Capacitor.isNativePlatform()) {
+        await nativeFetch("sync-whoop", { user_id: user.id });
+      } else {
+        const res = await whoopSync({ user_id: user.id });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+      }
       setLastSync(new Date().toISOString());
       toast({ title: "Whoop Synced", description: "Recovery, sleep, and strain data updated." });
     } catch (e: any) {
@@ -74,7 +95,11 @@ export default function WhoopConnectSection() {
     try {
       const user = await getSessionUser();
       if (!user) return;
-      await whoopDisconnect({ user_id: user.id });
+      if (Capacitor.isNativePlatform()) {
+        await nativeFetch("whoop-disconnect", { user_id: user.id });
+      } else {
+        await whoopDisconnect({ user_id: user.id });
+      }
       setConnected(false);
       setLastSync(null);
       toast({ title: "Whoop disconnected" });

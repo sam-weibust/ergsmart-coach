@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { getLocalDate } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { toast } from "sonner";
@@ -101,7 +102,7 @@ async function checkAndUpdatePR(userId: string, distanceM: number | null, splitS
       split_seconds: splitSec,
       watts,
       stroke_rate: strokeRate ? parseInt(strokeRate) : null,
-      set_at: new Date().toISOString().split("T")[0],
+      set_at: getLocalDate(),
       previous_time_seconds: prevBest,
       improvement_seconds: improvementSeconds,
     });
@@ -140,7 +141,7 @@ interface ErgWorkout {
 }
 
 const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDate();
 
   const [workout, setWorkout] = useState<ErgWorkout>({
     workout_type: "steady_state",

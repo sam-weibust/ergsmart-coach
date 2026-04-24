@@ -106,6 +106,7 @@ import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 import { getSessionUser } from '@/lib/getUser';
+import { getLocalDate } from "@/lib/dateUtils";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -360,6 +361,29 @@ const Dashboard = () => {
 
     return () => subscription.unsubscribe();
   }, [navigate, queryClient]);
+
+  // ── Midnight date-change detector ─────────────────────────────────────────
+  useEffect(() => {
+    let lastDate = getLocalDate();
+    const id = setInterval(() => {
+      const current = getLocalDate();
+      if (current === lastDate) return;
+      lastDate = current;
+      // Invalidate all time-sensitive queries so the new day's data loads
+      queryClient.invalidateQueries({ queryKey: ["recovery-score"] });
+      queryClient.invalidateQueries({ queryKey: ["recovery-score-home"] });
+      queryClient.invalidateQueries({ queryKey: ["today-plan-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-challenge-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["sleep-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["water-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["weight-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-insights"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-workouts-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["upcoming-regattas"] });
+      queryClient.invalidateQueries({ queryKey: ["workout-dates-streak"] });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [queryClient]);
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],

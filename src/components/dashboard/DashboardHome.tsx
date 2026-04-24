@@ -13,6 +13,7 @@ import {
 import { ProfileEditPanel } from "./ProfileEditPanel";
 import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
 import { c2Sync } from "@/lib/api";
+import { getLocalDate } from "@/lib/dateUtils";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { getSessionUser } from '@/lib/getUser';
@@ -207,7 +208,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
     queryFn: async () => {
       const user = await getSessionUser();
       if (!user) return null;
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalDate();
       const { data } = await supabase
         .from("workout_plans")
         .select("id, workout_data, created_at")
@@ -228,7 +229,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       const weekStart = format(new Date(), "yyyy-'W'II");
       const monday = new Date();
       monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-      const weekStartStr = monday.toISOString().split("T")[0];
+      const weekStartStr = getLocalDate(monday);
       const { data } = await (supabase as any)
         .from("weekly_challenges")
         .select("*")
@@ -244,7 +245,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
     queryFn: async () => {
       const user = await getSessionUser();
       if (!user) return null;
-      const t = new Date().toISOString().split("T")[0];
+      const t = getLocalDate();
       const [sleepRes, waterRes, weightRes, whoopRes] = await Promise.all([
         supabase.from("sleep_entries").select("duration_hours,quality_score,date").eq("user_id", user.id).order("date", { ascending: false }).limit(1),
         supabase.from("water_entries").select("amount_ml,date").eq("user_id", user.id).eq("date", t),

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Capacitor } from "@capacitor/core";
+import { BleClient } from "@capacitor-community/bluetooth-le";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -122,7 +124,17 @@ const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"]
 export default function LiveErgView() {
   const { toast } = useToast();
 
-  const [btSupported]  = useState(() => typeof navigator !== "undefined" && "bluetooth" in navigator);
+  // Assume supported; only set false if BleClient.initialize() actually fails on native,
+  // or if Web Bluetooth is absent on web. Never block on uncertain permission state.
+  const [btSupported, setBtSupported] = useState(true);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      BleClient.initialize().catch(() => setBtSupported(false));
+    } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
+      setBtSupported(false);
+    }
+  }, []);
   const [connecting,   setConnecting]   = useState(false);
   const [ergConnected, setErgConnected] = useState(false);
   const [hrConnected,  setHrConnected]  = useState(false);
@@ -650,13 +662,13 @@ export default function LiveErgView() {
         </div>
       )}
 
-      {/* ── Not supported ── */}
+      {/* ── Not supported (web browsers without Web Bluetooth) ── */}
       {!btSupported && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-950/95">
           <div className="text-center p-8">
             <AlertTriangle className="h-12 w-12 text-yellow-400 mx-auto mb-4" />
             <p className="text-lg font-semibold mb-2">Web Bluetooth not supported</p>
-            <p className="text-sm text-gray-400">Use Chrome or Edge on desktop, or Chrome on Android.</p>
+            <p className="text-sm text-gray-400">Use Chrome or Edge on desktop, or the CrewSync iOS app to connect your PM5.</p>
           </div>
         </div>
       )}

@@ -88,6 +88,46 @@ export function parseHRMeasurement(dv: DataView): number | null {
   } catch { return null; }
 }
 
+/**
+ * Normalize any value that comes from a BLE characteristic notification into
+ * a DataView. On iOS, @capacitor-community/bluetooth-le may deliver the value
+ * as a DataView, a base64 string, a Uint8Array, or an ArrayBuffer depending on
+ * the plugin version and iOS build. This handles all formats gracefully.
+ */
+export function toDataView(value: unknown): DataView {
+  if (value instanceof DataView) return value;
+
+  if (typeof value === 'string') {
+    // Base64-encoded bytes from some Capacitor plugin versions
+    console.log('[BLE] Received base64 string, first 20 chars:', value.slice(0, 20));
+    try {
+      const binary = atob(value);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new DataView(bytes.buffer);
+    } catch { return new DataView(new ArrayBuffer(0)); }
+  }
+
+  if (value instanceof Uint8Array) {
+    return new DataView(value.buffer, value.byteOffset, value.byteLength);
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return new DataView(value);
+  }
+
+  // Capacitor plugin object wrapping — check common property names
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (v['buffer'] instanceof ArrayBuffer) return new DataView(v['buffer'] as ArrayBuffer);
+    if (v['bytes']) return toDataView(v['bytes']);
+    if (v['data']) return toDataView(v['data']);
+  }
+
+  console.error('[BLE] Unknown characteristic value type:', typeof value, value);
+  return new DataView(new ArrayBuffer(0));
+}
+
 // ── Platform / browser detection ─────────────────────────────────────────────
 
 export function isNativePlatform(): boolean {
@@ -116,11 +156,25 @@ const webDevices = new Map<string, any>();
 let initialized = false;
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export async function initBle(): Promise<void> {
-  if (!isNativePlatform()) return; // Web Bluetooth needs no init
-  if (initialized) return;
-  await BleClient.initialize({ androidNeverForLocation: true });
-  initialized = true;
+export type BleInitStatus = 'ready' | 'permission_denied' | 'bluetooth_off' | 'error';
+
+export async function initBle(): Promise<BleInitStatus> {
+  if (!isNativePlatform()) return 'ready'; // Web Bluetooth needs no init
+  if (initialized) return 'ready';
+  try {
+    await BleClient.initialize({ androidNeverForLocation: true });
+    initialized = true;
+    return 'ready';
+  } catch (e: any) {
+    const msg = (e?.message ?? '').toLowerCase();
+    if (msg.includes('denied') || msg.includes('permission') || msg.includes('unauthorized')) {
+      return 'permission_denied';
+    }
+    if (msg.includes('off') || msg.includes('disabled') || msg.includes('powered') || msg.includes('unavailable')) {
+      return 'bluetooth_off';
+    }
+    return 'error';
+  }
 }
 
 // ── Scan / Discover ──────────────────────────────────────────────────────────
@@ -161,7 +215,12 @@ export async function listDevices(durationMs = 5000): Promise<BleDevice[]> {
   }
 
   // Native path ────────────────────────────────────────────────────────────
-  await initBle();
+  const status = await initBle();
+  if (status !== 'ready') {
+    if (status === 'permission_denied') throw new Error('PERMISSION_DENIED');
+    if (status === 'bluetooth_off') throw new Error('BLUETOOTH_OFF');
+    throw new Error('BLE_UNAVAILABLE');
+  }
   const map = new Map<string, BleDevice>();
 
   await BleClient.requestLEScan(
@@ -212,7 +271,8 @@ export async function connectToDevice(
   }
 
   // Native
-  await initBle();
+  const status = await initBle();
+  if (status !== 'ready') throw new Error(status === 'bluetooth_off' ? 'BLUETOOTH_OFF' : 'PERMISSION_DENIED');
   const disconnectHandler = () => {
     onDisconnect?.();
     const timer = setTimeout(async () => {
@@ -268,11 +328,13 @@ export async function startStreaming(
     return;
   }
 
-  // Native
+  // Native — normalize value to DataView regardless of what the plugin delivers
   const tryNotify = async (service: string, char: string, parser: (dv: DataView) => Partial<PM5StreamData>) => {
     try {
       await BleClient.startNotifications(deviceId, service, char, (value) => {
-        callback(parser(value));
+        const dv = toDataView(value);
+        console.log(`[BLE native] char ${char.slice(-4)} type=${typeof value} bytes=${dv.byteLength} [0]=${dv.byteLength > 0 ? dv.getUint8(0) : 'n/a'}`);
+        callback(parser(dv));
       });
     } catch {}
   };
@@ -283,7 +345,8 @@ export async function startStreaming(
 
   try {
     await BleClient.startNotifications(deviceId, HR_SERVICE, HR_MEASUREMENT, (value) => {
-      const hr = parseHRMeasurement(value);
+      const dv = toDataView(value);
+      const hr = parseHRMeasurement(dv);
       if (hr !== null) callback({ heartRate: hr });
     });
   } catch {}
@@ -309,7 +372,9 @@ export async function startNotification(
     });
     return;
   }
-  await BleClient.startNotifications(deviceId, serviceUUID, charUUID, callback);
+  await BleClient.startNotifications(deviceId, serviceUUID, charUUID, (value) => {
+    callback(toDataView(value));
+  });
 }
 
 // ── Disconnect ───────────────────────────────────────────────────────────────
@@ -330,14 +395,7 @@ export async function disconnectDevice(deviceId: string): Promise<void> {
 
 // ── Permissions ──────────────────────────────────────────────────────────────
 
-export async function requestPermissions(): Promise<boolean> {
-  if (!isNativePlatform()) return isWebBluetoothSupported();
-  try {
-    await initBle();
-    await BleClient.requestLEScan({ services: [] }, () => {});
-    await BleClient.stopLEScan();
-    return true;
-  } catch {
-    return false;
-  }
+export async function requestPermissions(): Promise<BleInitStatus> {
+  if (!isNativePlatform()) return isWebBluetoothSupported() ? 'ready' : 'error';
+  return initBle();
 }

@@ -87,8 +87,24 @@ async function whoopGet(path: string, token: string, silent404 = false, logRaw =
   return json;
 }
 
-function toDate(isoStr: string): string {
-  return isoStr.substring(0, 10);
+/**
+ * Convert an ISO timestamp to a local-date string (YYYY-MM-DD).
+ * If a Whoop timezone_offset is provided (e.g. "-07:00"), it is applied so
+ * that a workout at 11 PM local time is stored as that local date, not the
+ * next UTC day.
+ */
+function toDate(isoStr: string, timezoneOffset?: string | null): string {
+  if (!timezoneOffset) return isoStr.substring(0, 10);
+  // Parse "+HH:MM" or "-HH:MM"
+  const m = timezoneOffset.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!m) return isoStr.substring(0, 10);
+  const sign = m[1] === "+" ? 1 : -1;
+  const offsetMs = sign * (parseInt(m[2]) * 60 + parseInt(m[3])) * 60_000;
+  const local = new Date(new Date(isoStr).getTime() + offsetMs);
+  const y = local.getUTCFullYear();
+  const mo = String(local.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(local.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${d}`;
 }
 
 serve(async (req) => {
@@ -212,7 +228,7 @@ serve(async (req) => {
         // Date may be in created_at, updated_at, or cycle.start
         const dateStr = rec.created_at ?? rec.updated_at ?? rec.date ?? null;
         if (!dateStr) { console.log("[sync-whoop] skipping recovery record with no date:", JSON.stringify(rec).slice(0, 200)); continue; }
-        const date = toDate(dateStr);
+        const date = toDate(dateStr, rec.timezone_offset ?? null);
         // score fields: score.recovery_score OR recovery_score at top level
         const score = rec.score ?? rec;
         const recoveryScore = isUnscorable ? null : (score.recovery_score ?? null);
@@ -308,8 +324,8 @@ serve(async (req) => {
       console.log("[sync-whoop] processing", records.length, "cycle records");
       for (const rec of records) {
         if (rec.score_state === "UNSCORABLE") { console.log("[sync-whoop] skipping UNSCORABLE cycle_id:", rec.id); continue; }
-        const date = toDate(rec.start);
-        console.log("[sync-whoop] upserting whoop_strain for date:", date, "cycle_id:", rec.id, "strain:", rec.score?.strain);
+        const date = toDate(rec.start, rec.timezone_offset ?? null);
+        console.log("[sync-whoop] upserting whoop_strain for date:", date, "cycle_id:", rec.id, "strain:", rec.score?.strain, "tz:", rec.timezone_offset ?? "none");
         const { error: strainErr } = await supabase.from("whoop_strain").upsert({
           user_id,
           whoop_cycle_id: rec.id,
@@ -339,7 +355,8 @@ serve(async (req) => {
         const sportId = rec.sport_id ?? -1;
         const sportName = SPORT_NAMES[sportId] ?? `Sport ${sportId}`;
         const zones = rec.score?.zone_duration ?? {};
-        console.log("[sync-whoop] upserting whoop_workouts workout_id:", rec.id, "sport:", sportName, "strain:", rec.score?.strain);
+        const workoutTz = rec.timezone_offset ?? null;
+        console.log("[sync-whoop] upserting whoop_workouts workout_id:", rec.id, "sport:", sportName, "strain:", rec.score?.strain, "tz:", workoutTz ?? "none");
 
         const { error: wkErr } = await supabase.from("whoop_workouts").upsert({
           user_id,
@@ -364,7 +381,7 @@ serve(async (req) => {
         if (ROWING_SPORT_IDS.has(sportId) && rec.start && rec.end) {
           const durationMs = new Date(rec.end).getTime() - new Date(rec.start).getTime();
           const durationMin = Math.round(durationMs / 60000);
-          const workoutDate = toDate(rec.start);
+          const workoutDate = toDate(rec.start, workoutTz);
           const calories = rec.score?.kilojoule ? Math.round(rec.score.kilojoule / 4.184) : null;
           console.log("[sync-whoop] rowing workout detected, checking for existing erg_workout on date:", workoutDate);
 

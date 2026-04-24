@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import { BleClient } from "@capacitor-community/bluetooth-le";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,7 +109,15 @@ const DISTANCES = [500, 1000, 2000];
 // ── Main Component ───────────────────────────────────────────────
 export default function RaceSection() {
   const { toast } = useToast();
-  const btSupported = typeof navigator !== "undefined" && "bluetooth" in navigator;
+  const [btSupported, setBtSupported] = useState(true);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      BleClient.initialize().catch(() => setBtSupported(false));
+    } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
+      setBtSupported(false);
+    }
+  }, []);
 
   // Auth
   const [myUserId, setMyUserId]   = useState<string | null>(null);

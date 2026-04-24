@@ -1,14 +1,15 @@
 /// <reference types="vite/client" />
 
 import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_URL, SUPABASE_ANON_KEY as API_KEY } from "@/config/supabase";
 
-const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const API_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ??
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const BASE_URL = `${SUPABASE_URL}/functions/v1`;
 
 async function callFunction(name, body) {
   const { data: { session } } = await supabase.auth.getSession();
+  // Fall back to anon key when no user session — Supabase Edge Functions require
+  // a valid JWT in Authorization (either user token or anon key).
+  const bearerToken = session?.access_token ?? API_KEY;
 
   const res = await fetch(`${BASE_URL}/${name}?_t=${Date.now()}`, {
     method: "POST",
@@ -17,7 +18,7 @@ async function callFunction(name, body) {
       "Content-Type": "application/json",
       "Cache-Control": "no-cache",
       apikey: API_KEY,
-      Authorization: `Bearer ${session?.access_token ?? ""}`,
+      Authorization: `Bearer ${bearerToken}`,
     },
     body: JSON.stringify(body),
   });

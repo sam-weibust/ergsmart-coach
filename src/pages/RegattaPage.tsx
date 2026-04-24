@@ -219,7 +219,10 @@ export default function RegattaPage() {
               <Badge variant="outline" className="capitalize">{r.event_type.replace("_", " ")}</Badge>
             )}
             {r.level && <Badge variant="secondary">{r.level}</Badge>}
-            {r.status && <Badge variant={r.status === "completed" ? "secondary" : "default"}>{r.status}</Badge>}
+            {r.event_date && (() => {
+              const effectiveStatus = new Date(r.event_date + "T12:00:00") < new Date() ? "completed" : "upcoming";
+              return <Badge variant={effectiveStatus === "completed" ? "secondary" : "default"}>{effectiveStatus}</Badge>;
+            })()}
             {r.host_club && <span className="text-sm text-muted-foreground">{r.host_club}</span>}
           </div>
 
@@ -243,10 +246,25 @@ export default function RegattaPage() {
           <div className="flex justify-center py-10"><Loader2 className="animate-spin h-6 w-6" /></div>
         ) : races.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              <Trophy className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Results not yet available</p>
-              <p className="text-sm mt-1">Check back after the event</p>
+            <CardContent className="py-12 text-center text-muted-foreground space-y-3">
+              <Trophy className="h-10 w-10 mx-auto opacity-30" />
+              <div>
+                <p className="font-medium">Results not yet imported</p>
+                <p className="text-sm mt-1 opacity-70">Check back soon or use the button below to try loading results</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  if (!id) return;
+                  await supabase.functions.invoke("fetch-crewtimer", {
+                    body: { action: "fetch_results", regatta_id: id },
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["regatta-races-public", id] });
+                }}
+              >
+                Load Results
+              </Button>
             </CardContent>
           </Card>
         ) : (

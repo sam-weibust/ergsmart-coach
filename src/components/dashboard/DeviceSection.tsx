@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/config/supabase";
 import {
   Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle,
   Loader2, Zap, Timer, Gauge, RotateCcw, Link, RefreshCw,
@@ -13,7 +14,7 @@ import {
 import {
   initBle, listDevices, connectToDevice, startStreaming, disconnectDevice,
   startNotification, isNativePlatform, isWebBluetoothSupported,
-  BleDevice, PM5StreamData, parseHRMeasurement, HR_SERVICE, HR_MEASUREMENT,
+  BleDevice, BleInitStatus, PM5StreamData, parseHRMeasurement, HR_SERVICE, HR_MEASUREMENT,
 } from "@/lib/ble";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import { getSessionUser } from '@/lib/getUser';
@@ -64,6 +65,15 @@ const DeviceSection = () => {
   const [hrConnecting, setHrConnecting] = useState(false);
   const [hrDeviceId, setHrDeviceId] = useState<string | null>(null);
   const [heartRate, setHeartRate] = useState<number | null>(null);
+
+  // ── BLE permission / status state ─────────────────────────────────────────
+  const [bleStatus, setBleStatus] = useState<BleInitStatus | 'unknown'>('unknown');
+
+  // On native, initialize BLE early to trigger permission dialog
+  useEffect(() => {
+    if (!isNativePlatform()) return;
+    initBle().then(setBleStatus);
+  }, []);
 
   // ── Scanner state ─────────────────────────────────────────────────────────
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -151,8 +161,25 @@ const DeviceSection = () => {
     setScanning(true);
     setFoundDevices([]);
     try {
-      await initBle();
-      if (!isNativePlatform()) {
+      if (isNativePlatform()) {
+        const status = await initBle();
+        setBleStatus(status);
+        if (status === 'permission_denied') {
+          toast({ title: "Bluetooth permission denied", description: "Go to Settings → CrewSync → enable Bluetooth to connect your PM5.", variant: "destructive" });
+          return;
+        }
+        if (status === 'bluetooth_off') {
+          toast({ title: "Bluetooth is off", description: "Turn on Bluetooth in Settings to connect your PM5.", variant: "destructive" });
+          return;
+        }
+        if (status !== 'ready') {
+          toast({ title: "Bluetooth unavailable", description: "Could not initialize Bluetooth.", variant: "destructive" });
+          return;
+        }
+        const devices = await listDevices(5000);
+        setFoundDevices(devices);
+        if (devices.length === 0) toast({ title: "No devices found", description: "Make sure your device is on and in range." });
+      } else {
         // Web: requestDevice opens the browser's native picker.
         // After selection, close our dialog and connect directly.
         const devices = await listDevices(5000);
@@ -164,15 +191,16 @@ const DeviceSection = () => {
             await connectHR(devices[0].deviceId, devices[0].name);
           }
         }
-      } else {
-        const devices = await listDevices(5000);
-        setFoundDevices(devices);
-        if (devices.length === 0) toast({ title: "No devices found", description: "Make sure your device is on and in range." });
       }
     } catch (e: any) {
-      // Ignore user-cancelled picker
       const msg: string = e?.message || "";
-      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("chooser")) {
+      if (msg === 'PERMISSION_DENIED') {
+        setBleStatus('permission_denied');
+        toast({ title: "Bluetooth permission denied", description: "Go to Settings → CrewSync → enable Bluetooth to connect your PM5.", variant: "destructive" });
+      } else if (msg === 'BLUETOOTH_OFF') {
+        setBleStatus('bluetooth_off');
+        toast({ title: "Bluetooth is off", description: "Turn on Bluetooth in Settings to connect your PM5.", variant: "destructive" });
+      } else if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("chooser")) {
         toast({ title: "Scan failed", description: msg, variant: "destructive" });
       }
     } finally {
@@ -271,14 +299,34 @@ const DeviceSection = () => {
     }
   };
 
+  const nativeFetch = async (fnName: string, body: object) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+
   const syncC2 = async () => {
     setIsSyncingC2(true);
     try {
       const user = await getSessionUser();
       if (!user) return;
-      const res = await c2Sync({ user_id: user.id });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      let data;
+      if (isNativePlatform()) {
+        data = await nativeFetch("sync-concept2", { user_id: user.id });
+      } else {
+        const res = await c2Sync({ user_id: user.id });
+        data = await res.json();
+        if (data.error) throw new Error(data.error);
+      }
       toast({ title: "Sync Complete", description: `${data.imported ?? 0} workouts synced` });
       checkC2();
     } catch (e: any) {
@@ -292,7 +340,11 @@ const DeviceSection = () => {
     try {
       const user = await getSessionUser();
       if (!user) return;
-      await c2Disconnect({ user_id: user.id });
+      if (isNativePlatform()) {
+        await nativeFetch("c2-disconnect", { user_id: user.id });
+      } else {
+        await c2Disconnect({ user_id: user.id });
+      }
       setC2Connected(false);
       setC2LastSync(null);
       toast({ title: "Concept2 disconnected" });
@@ -305,6 +357,7 @@ const DeviceSection = () => {
   const isRowing = ergData.workoutState === 2;
 
   const webBtUnsupported = !isNativePlatform() && !isWebBluetoothSupported();
+  const btScanDisabled = webBtUnsupported || bleStatus === 'permission_denied' || bleStatus === 'bluetooth_off';
 
   return (
     <div className="space-y-6">
@@ -318,6 +371,28 @@ const DeviceSection = () => {
             <p className="mt-0.5 text-yellow-600 dark:text-yellow-500">
               Safari and Firefox do not support Web Bluetooth. To connect your PM5 or heart rate monitor, please open this page in <strong>Chrome</strong> or <strong>Edge</strong>.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* iOS Bluetooth off warning */}
+      {bleStatus === 'bluetooth_off' && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-400">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Bluetooth is off</p>
+            <p className="mt-0.5 text-yellow-600 dark:text-yellow-500">Turn on Bluetooth in Settings to connect your PM5.</p>
+          </div>
+        </div>
+      )}
+
+      {/* iOS Bluetooth permission denied warning */}
+      {bleStatus === 'permission_denied' && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-400">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Bluetooth permission denied</p>
+            <p className="mt-0.5 text-red-600 dark:text-red-500">Go to <strong>Settings → CrewSync</strong> and enable Bluetooth to connect your PM5.</p>
           </div>
         </div>
       )}
@@ -345,8 +420,8 @@ const DeviceSection = () => {
             {ergConnected ? (
               <Button variant="outline" size="sm" onClick={disconnectErg}>Disconnect</Button>
             ) : (
-              <Button size="sm" onClick={() => openScanner("erg")} disabled={ergConnecting || webBtUnsupported}>
-                {ergConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Scan className="h-4 w-4 mr-2" />Scan for PM5</>}
+              <Button size="sm" onClick={() => openScanner("erg")} disabled={ergConnecting || btScanDisabled}>
+                {ergConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Scan className="h-4 w-4 mr-2" />Connect PM5</>}
               </Button>
             )}
           </div>
@@ -407,7 +482,7 @@ const DeviceSection = () => {
             {hrConnected ? (
               <Button variant="outline" size="sm" onClick={disconnectHR}>Disconnect</Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => openScanner("hr")} disabled={hrConnecting || webBtUnsupported}>
+              <Button size="sm" variant="outline" onClick={() => openScanner("hr")} disabled={hrConnecting || btScanDisabled}>
                 {hrConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Bluetooth className="h-4 w-4 mr-2" />Connect HR Monitor</>}
               </Button>
             )}

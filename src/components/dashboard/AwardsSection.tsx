@@ -7,6 +7,7 @@ import { Trophy, Flame, Target, Dumbbell, Timer, Users, Calendar, Zap, Award, St
 import { Skeleton } from "@/components/ui/skeleton";
 import { StreakFreeze } from "./StreakFreeze";
 import { getSessionUser } from '@/lib/getUser';
+import { getLocalDate } from "@/lib/dateUtils";
 
 interface AwardsSectionProps {
   profile: any;
@@ -132,7 +133,7 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
       const allDatesAndFreezes = new Set([...Array.from(workoutDays), ...Array.from(freezeSet)]);
       const allDates = Array.from(allDatesAndFreezes).sort().reverse();
       let currentStreak = 0;
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDate();
       const today = new Date(todayStr + 'T00:00:00Z');
 
       for (let i = 0; i < allDates.length; i++) {

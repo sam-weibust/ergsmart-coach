@@ -144,7 +144,7 @@ serve(async (req) => {
     const basicRows = workoutsToImport.map((w: any) => ({
       user_id,
       external_id: `c2_${w.id}`,
-      workout_date: w.date ? w.date.substring(0, 10) : new Date().toISOString().substring(0, 10),
+      workout_date: w.date ? w.date.substring(0, 10) : new Date().toLocaleDateString("en-CA"),
       workout_type: w.workout_type ?? w.type ?? "unknown",
       distance: w.distance != null ? Math.round(Number(w.distance)) : null,
       duration: w.time != null ? decisecondsToPgInterval(Number(w.time)) : null,

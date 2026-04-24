@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Calendar, MapPin, Trophy, Search, Users, Flag } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Calendar, MapPin, Trophy, Search, Users, Flag, Download } from "lucide-react";
 
 interface Regatta {
   id: string;
@@ -27,7 +29,28 @@ function formatDate(d: string | null) {
 
 export default function RecentRegattas({ profile }: { profile: any }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [filter, setFilter] = useState("");
+  const [fetchingId, setFetchingId] = useState<string | null>(null);
+
+  const fetchResults = useMutation({
+    mutationFn: async (regattaId: string) => {
+      setFetchingId(regattaId);
+      const { data, error } = await supabase.functions.invoke("fetch-crewtimer", {
+        body: { action: "fetch_results", regatta_id: regattaId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recent-race-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-entry-counts"] });
+      toast({ title: "Results loaded" });
+    },
+    onError: (e: Error) => toast({ title: "Failed to load results", description: e.message, variant: "destructive" }),
+    onSettled: () => setFetchingId(null),
+  });
 
   const today = new Date().toISOString().split("T")[0];
   const sixMonthsAgo = new Date(Date.now() - 180 * 86400000).toISOString().split("T")[0];
@@ -179,21 +202,37 @@ export default function RecentRegattas({ profile }: { profile: any }) {
                   {r.host_club && (
                     <p className="text-xs text-muted-foreground truncate">{r.host_club}</p>
                   )}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
-                    {races > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Flag className="h-3 w-3" />
-                        {races} race{races !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {entries > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {entries} entries
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {races > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Flag className="h-3 w-3" />
+                          {races} race{races !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {entries > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {entries} entries
+                        </span>
+                      )}
+                      {races === 0 && entries === 0 && (
+                        <span className="text-muted-foreground/60 italic text-xs">Results not yet imported</span>
+                      )}
+                    </div>
                     {races === 0 && entries === 0 && (
-                      <span className="text-muted-foreground/60 italic">No results stored</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-xs gap-1 shrink-0"
+                        onClick={(e) => { e.stopPropagation(); fetchResults.mutate(r.id); }}
+                        disabled={fetchingId === r.id}
+                      >
+                        {fetchingId === r.id
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <Download className="h-3 w-3" />}
+                        {fetchingId === r.id ? "Loading…" : "Fetch"}
+                      </Button>
                     )}
                   </div>
                 </CardContent>
