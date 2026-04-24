@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import logoIcon from "@/assets/crewsync-logo-icon.jpg";
 import logoFull from "@/assets/crewsync-logo-full.jpg";
 import { supabase } from "@/integrations/supabase/client";
+import { Capacitor } from "@capacitor/core";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -163,6 +164,18 @@ function LiveStatBar({ stats, loading }: { stats: Stats | null; loading: boolean
 const LandingPage = () => {
   const navigate = useNavigate();
   const { stats, loading } = useStats();
+
+  // On native iOS/Android skip the landing page entirely
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/auth", { replace: true });
+      }
+    });
+  }, [navigate]);
 
   const featureCards = [
     {
