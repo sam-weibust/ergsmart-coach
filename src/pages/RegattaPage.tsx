@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trophy, Calendar, MapPin, Users, Clock, Search } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Trophy, Calendar, MapPin, Users, Clock, Search, CheckCircle2 } from "lucide-react";
 
 interface Entry {
   id: string;
@@ -43,10 +44,19 @@ function placementBadge(p: number | null) {
 
 export default function RegattaPage() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterEvent, setFilterEvent] = useState("all");
   const [filterGender, setFilterGender] = useState("all");
   const [filterRound, setFilterRound] = useState("all");
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUser(data?.user ?? null));
+  }, []);
 
   const { data: regatta, isLoading: regattaLoading } = useQuery({
     queryKey: ["regatta-public", id],
@@ -70,6 +80,49 @@ export default function RegattaPage() {
       return (data || []) as Race[];
     },
     enabled: !!id,
+  });
+
+  const { data: claimed = [] } = useQuery<{ id: string; event_name: string; entry_id: string | null }[]>({
+    queryKey: ["claimed-results-public", id, currentUser?.id],
+    queryFn: async () => {
+      if (!currentUser?.id || !id) return [];
+      const { data } = await supabase
+        .from("claimed_results")
+        .select("id, event_name, entry_id")
+        .eq("regatta_id", id)
+        .eq("user_id", currentUser.id);
+      return (data || []) as any[];
+    },
+    enabled: !!currentUser?.id && !!id,
+  });
+
+  const claimEntry = useMutation({
+    mutationFn: async ({ entry, eventName }: { entry: Entry; eventName: string }) => {
+      if (!currentUser?.id) throw new Error("Not logged in");
+      const { error } = await supabase.from("claimed_results").upsert(
+        {
+          user_id: currentUser.id,
+          regatta_id: id,
+          entry_id: entry.id,
+          event_name: eventName,
+          placement: entry.placement,
+          finish_time: entry.finish_time,
+          crew: entry.athletes,
+        } as any,
+        { onConflict: "user_id,regatta_id,event_name" }
+      );
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast({ title: "Result claimed!", description: "Added to your regatta history." });
+      queryClient.invalidateQueries({ queryKey: ["claimed-results-public", id] });
+      queryClient.invalidateQueries({ queryKey: ["my-regattas"] });
+      setClaimingId(null);
+    },
+    onError: (e: Error) => {
+      toast({ title: "Claim failed", description: e.message, variant: "destructive" });
+      setClaimingId(null);
+    },
   });
 
   if (regattaLoading) {
@@ -117,16 +170,27 @@ export default function RegattaPage() {
 
   const totalEntries = races.reduce((sum, x) => sum + (x.entries?.length ?? 0), 0);
 
+  const claimedEntryIds = new Set(claimed.map((c) => c.entry_id).filter(Boolean));
+  const claimedEventNames = new Set(claimed.map((c) => c.event_name));
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-[#0a1628] text-white px-4 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="font-bold text-lg">CrewSync</Link>
-          <Link to="/auth">
-            <Button size="sm" variant="outline" className="text-white border-white/30 hover:bg-white/10">
-              Sign In
-            </Button>
-          </Link>
+          {currentUser ? (
+            <Link to="/dashboard">
+              <Button size="sm" variant="outline" className="text-white border-white/30 hover:bg-white/10">
+                Dashboard
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/auth">
+              <Button size="sm" variant="outline" className="text-white border-white/30 hover:bg-white/10">
+                Sign In to Claim Results
+              </Button>
+            </Link>
+          )}
         </div>
       </header>
 
@@ -138,9 +202,9 @@ export default function RegattaPage() {
             {r.event_date && (
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
-                {new Date(r.event_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                {new Date(r.event_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                 {r.end_date && r.end_date !== r.event_date &&
-                  ` – ${new Date(r.end_date).toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
+                  ` – ${new Date(r.end_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" })}`}
               </span>
             )}
             {(r.location || r.state) && (
@@ -158,6 +222,21 @@ export default function RegattaPage() {
             {r.status && <Badge variant={r.status === "completed" ? "secondary" : "default"}>{r.status}</Badge>}
             {r.host_club && <span className="text-sm text-muted-foreground">{r.host_club}</span>}
           </div>
+
+          {/* Claimed results summary */}
+          {claimed.length > 0 && (
+            <div className="mt-3 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
+              <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                Your Claimed Results ({claimed.length})
+              </p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {claimed.map((c) => (
+                  <Badge key={c.id} variant="secondary" className="text-xs">{c.event_name}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {racesLoading ? (
@@ -174,7 +253,7 @@ export default function RegattaPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-xl font-bold">
-                {totalEntries} Entries · {races.length} Races
+                {totalEntries} Entries · {races.length} Race{races.length !== 1 ? "s" : ""}
               </h2>
             </div>
 
@@ -241,45 +320,79 @@ export default function RegattaPage() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="space-y-0">
-                    {race.entries.map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between py-2.5 border-b last:border-0 text-sm gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="font-mono text-xs w-8 shrink-0 text-muted-foreground">
-                            {entry.placement ? `#${entry.placement}` : entry.lane ? `L${entry.lane}` : "—"}
-                          </span>
-                          <div className="min-w-0">
-                            <span className="font-medium block truncate">
-                              {entry.crew_name || entry.club || "Unknown"}
+                    {race.entries.map((entry) => {
+                      const isClaimed = claimedEntryIds.has(entry.id) || claimedEventNames.has(race.event_name || "");
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between py-2.5 border-b last:border-0 text-sm gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="font-mono text-xs w-8 shrink-0 text-muted-foreground">
+                              {entry.placement ? `#${entry.placement}` : entry.lane ? `L${entry.lane}` : "—"}
                             </span>
-                            {entry.club && entry.crew_name && entry.club !== entry.crew_name && (
-                              <span className="text-xs text-muted-foreground">{entry.club}</span>
-                            )}
-                            {entry.athletes?.length > 0 && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Users className="h-2.5 w-2.5" />
-                                {entry.athletes.join(", ")}
+                            <div className="min-w-0">
+                              <span className="font-medium block truncate">
+                                {entry.crew_name || entry.club || "Unknown"}
                               </span>
+                              {entry.club && entry.crew_name && entry.club !== entry.crew_name && (
+                                <span className="text-xs text-muted-foreground">{entry.club}</span>
+                              )}
+                              {entry.athletes?.length > 0 && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Users className="h-2.5 w-2.5" />
+                                  {entry.athletes.join(", ")}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {entry.finish_time && (
+                              <div className="text-right">
+                                <span className="font-mono text-xs flex items-center gap-1 text-muted-foreground">
+                                  <Clock className="h-2.5 w-2.5" />{entry.finish_time}
+                                </span>
+                                {entry.delta && entry.delta !== "+0:00.0" && (
+                                  <span className="text-[10px] text-muted-foreground/70 block">{entry.delta}</span>
+                                )}
+                                {entry.split && (
+                                  <span className="text-[10px] text-muted-foreground/70 block">{entry.split}/500m</span>
+                                )}
+                              </div>
+                            )}
+                            {placementBadge(entry.placement)}
+                            {currentUser ? (
+                              isClaimed ? (
+                                <Badge variant="secondary" className="text-xs h-6">
+                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />Claimed
+                                </Badge>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-xs px-2"
+                                  disabled={claimEntry.isPending && claimingId === entry.id}
+                                  onClick={() => {
+                                    setClaimingId(entry.id);
+                                    claimEntry.mutate({
+                                      entry,
+                                      eventName: race.event_name || race.race_name || "Unknown Event",
+                                    });
+                                  }}
+                                >
+                                  {claimEntry.isPending && claimingId === entry.id
+                                    ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                    : "Claim"}
+                                </Button>
+                              )
+                            ) : (
+                              <Link to="/auth">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-muted-foreground">
+                                  Sign in
+                                </Button>
+                              </Link>
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {entry.finish_time && (
-                            <div className="text-right">
-                              <span className="font-mono text-xs flex items-center gap-1 text-muted-foreground">
-                                <Clock className="h-2.5 w-2.5" />{entry.finish_time}
-                              </span>
-                              {entry.delta && entry.delta !== "+0:00.0" && (
-                                <span className="text-[10px] text-muted-foreground/70 block">{entry.delta}</span>
-                              )}
-                              {entry.split && (
-                                <span className="text-[10px] text-muted-foreground/70 block">{entry.split}/500m</span>
-                              )}
-                            </div>
-                          )}
-                          {placementBadge(entry.placement)}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

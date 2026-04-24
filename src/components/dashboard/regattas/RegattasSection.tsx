@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Search, Calendar, MapPin, Users, Loader2 } from "lucide-react";
+import { Trophy, Search, Calendar, Users, Clock } from "lucide-react";
 import RegattaSearch from "./RegattaSearch";
 import MyRegattas from "./MyRegattas";
 import UpcomingRegattas from "./UpcomingRegattas";
+import RecentRegattas from "./RecentRegattas";
 import { supabase } from "@/integrations/supabase/client";
 
 interface RegattasSectionProps {
@@ -14,10 +15,9 @@ interface RegattasSectionProps {
 }
 
 export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectionProps) {
-  const [activeTab, setActiveTab] = useState(initialTab ?? "search");
+  const [activeTab, setActiveTab] = useState(initialTab ?? "recent");
   const queryClient = useQueryClient();
 
-  // Auto-refresh CrewTimer cache on mount
   const { data: autoRefresh } = useQuery({
     queryKey: ["regattas-auto-refresh-ct"],
     queryFn: async () => {
@@ -33,8 +33,9 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
 
   useEffect(() => {
     if (autoRefresh?.refreshed) {
-      queryClient.invalidateQueries({ queryKey: ["regattas-search"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-regattas"] });
       queryClient.invalidateQueries({ queryKey: ["upcoming-regattas"] });
+      queryClient.invalidateQueries({ queryKey: ["regattas-search-ct"] });
     }
   }, [autoRefresh, queryClient]);
 
@@ -46,19 +47,23 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
           Regattas
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Find regattas, search athlete results, and track your racing history — powered by CrewTimer
+          Browse results, search athlete history, and track your racing — powered by CrewTimer
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full overflow-x-auto flex-shrink-0 justify-start gap-1 h-auto flex-wrap">
-          <TabsTrigger value="search" className="gap-1.5 text-xs sm:text-sm">
-            <Search className="h-3.5 w-3.5" />
-            Search
+          <TabsTrigger value="recent" className="gap-1.5 text-xs sm:text-sm">
+            <Clock className="h-3.5 w-3.5" />
+            Recent
           </TabsTrigger>
           <TabsTrigger value="upcoming" className="gap-1.5 text-xs sm:text-sm">
             <Calendar className="h-3.5 w-3.5" />
             Upcoming
+          </TabsTrigger>
+          <TabsTrigger value="search" className="gap-1.5 text-xs sm:text-sm">
+            <Search className="h-3.5 w-3.5" />
+            Search
           </TabsTrigger>
           <TabsTrigger value="my" className="gap-1.5 text-xs sm:text-sm">
             <Trophy className="h-3.5 w-3.5" />
@@ -72,12 +77,16 @@ export function RegattasSection({ profile, isCoach, initialTab }: RegattasSectio
           )}
         </TabsList>
 
-        <TabsContent value="search" className="mt-4">
-          <RegattaSearch profile={profile} />
+        <TabsContent value="recent" className="mt-4">
+          <RecentRegattas profile={profile} />
         </TabsContent>
 
         <TabsContent value="upcoming" className="mt-4">
           <UpcomingRegattas profile={profile} />
+        </TabsContent>
+
+        <TabsContent value="search" className="mt-4">
+          <RegattaSearch profile={profile} />
         </TabsContent>
 
         <TabsContent value="my" className="mt-4">
@@ -142,7 +151,7 @@ function TeamRegattas({ profile }: { profile: any }) {
     enabled: !!profile?.id,
   });
 
-  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin h-6 w-6" /></div>;
+  if (isLoading) return <div className="flex justify-center py-12"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>;
 
   if (!teamRegattaData?.length) {
     return (
@@ -166,7 +175,9 @@ function TeamRegattas({ profile }: { profile: any }) {
           {item.athletes.map((a, i) => (
             <div key={i} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
               <span className="font-medium">{a.name}</span>
-              <span className="text-muted-foreground text-xs">{a.event} {a.placement ? `· #${a.placement}` : ""} {a.finish_time ? `· ${a.finish_time}` : ""}</span>
+              <span className="text-muted-foreground text-xs">
+                {a.event} {a.placement ? `· #${a.placement}` : ""} {a.finish_time ? `· ${a.finish_time}` : ""}
+              </span>
             </div>
           ))}
         </div>
