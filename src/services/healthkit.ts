@@ -1,51 +1,42 @@
 /**
  * HealthKit service — iOS native only.
- * Wraps @perfood/capacitor-healthkit and exposes clean async functions.
- * All functions return null silently on web and Android.
  *
- * NOTE FOR DEVELOPER: HealthKit capability must be enabled manually in Xcode.
- * Open ios/App/App.xcworkspace → select the App target → Signing & Capabilities
- * → click "+" → add "HealthKit". Also enable "Background Delivery" checkbox.
+ * No compatible Capacitor 8 HealthKit npm package exists yet.
+ * This module uses Capacitor's native bridge to call a custom Swift plugin
+ * (HealthKitPlugin) registered in ios/App. On web/Android all calls return
+ * null/empty gracefully.
+ *
+ * NOTE FOR DEVELOPER:
+ * 1. Enable HealthKit capability in Xcode:
+ *    App target → Signing & Capabilities → "+" → HealthKit → enable Background Delivery
+ * 2. The Swift plugin at ios/App/App/HealthKitPlugin.swift must be added to the
+ *    Xcode project (it is already on disk — just drag it into the App group).
  */
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 
-// Lazy-import to avoid crashing on web/Android where the plugin is absent.
-let _plugin: any = null;
-async function getPlugin() {
-  if (_plugin) return _plugin;
-  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "ios") return null;
-  try {
-    const mod = await import("@perfood/capacitor-healthkit");
-    _plugin = mod.CapacitorHealthkit;
-    return _plugin;
-  } catch {
-    return null;
-  }
+// ── Native plugin interface ───────────────────────────────────────────────────
+
+interface HealthKitPlugin {
+  isAvailable(): Promise<{ available: boolean }>;
+  requestPermissions(options: { read: string[]; write: string[] }): Promise<{ granted: boolean }>;
+  queryWorkouts(options: { startDate: string; endDate: string; limit: number }): Promise<{ workouts: any[] }>;
+  queryQuantity(options: { type: string; startDate: string; endDate: string; limit: number }): Promise<{ samples: any[] }>;
+  querySleep(options: { startDate: string; endDate: string; limit: number }): Promise<{ samples: any[] }>;
 }
 
-// ── Sample name constants ────────────────────────────────────────────────────
+// Register only on iOS — resolves to a no-op web implementation everywhere else
+const HealthKit = registerPlugin<HealthKitPlugin>("HealthKit", {
+  web: () => ({
+    isAvailable: async () => ({ available: false }),
+    requestPermissions: async () => ({ granted: false }),
+    queryWorkouts: async () => ({ workouts: [] }),
+    queryQuantity: async () => ({ samples: [] }),
+    querySleep: async () => ({ samples: [] }),
+  }),
+});
 
-const S = {
-  STEPS:           "stepCount",
-  ACTIVE_ENERGY:   "activeEnergyBurned",
-  BASAL_ENERGY:    "basalEnergyBurned",
-  SLEEP:           "sleepAnalysis",
-  WORKOUT:         "workoutType",
-  WEIGHT:          "weight",
-  HEART_RATE:      "heartRate",
-  RESTING_HR:      "restingHeartRate",
-} as const;
-
-// ── Read / write permission lists ─────────────────────────────────────────────
-
-const READ_PERMS = [
-  S.HEART_RATE, S.RESTING_HR, S.STEPS,
-  S.ACTIVE_ENERGY, S.BASAL_ENERGY, S.SLEEP,
-  S.WORKOUT, S.WEIGHT,
-];
-
-// ── Date helpers ──────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function daysAgoISO(n: number): string {
   const d = new Date();
@@ -54,38 +45,37 @@ function daysAgoISO(n: number): string {
   return d.toISOString();
 }
 
-function nowISO() {
-  return new Date().toISOString();
-}
+const READ_PERMS = [
+  "HKQuantityTypeIdentifierHeartRate",
+  "HKQuantityTypeIdentifierRestingHeartRate",
+  "HKQuantityTypeIdentifierStepCount",
+  "HKQuantityTypeIdentifierActiveEnergyBurned",
+  "HKQuantityTypeIdentifierBasalEnergyBurned",
+  "HKQuantityTypeIdentifierBodyMass",
+  "HKCategoryTypeIdentifierSleepAnalysis",
+  "HKWorkoutTypeIdentifier",
+];
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Returns true only on iOS native with HealthKit available. */
 export async function isAvailable(): Promise<boolean> {
-  const plugin = await getPlugin();
-  if (!plugin) return false;
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "ios") return false;
   try {
-    await plugin.isAvailable();
-    return true;
+    const { available } = await HealthKit.isAvailable();
+    return available;
   } catch {
     return false;
   }
 }
 
-/**
- * Requests read permissions for all tracked data types.
- * On iOS the system shows the permission sheet — denials are silent (Apple design).
- */
 export async function requestPermissions(): Promise<boolean> {
-  const plugin = await getPlugin();
-  if (!plugin) return false;
+  if (!await isAvailable()) return false;
   try {
-    await plugin.requestAuthorization({
+    const { granted } = await HealthKit.requestPermissions({
       read: READ_PERMS,
-      write: [S.ACTIVE_ENERGY, S.WORKOUT],
-      all: [],
+      write: ["HKQuantityTypeIdentifierActiveEnergyBurned", "HKWorkoutTypeIdentifier"],
     });
-    return true;
+    return granted;
   } catch {
     return false;
   }
@@ -95,33 +85,30 @@ export interface HKWorkout {
   type: string;
   activityId: number;
   startDate: string;
-  duration: number;         // seconds
+  duration: number;
   distanceMeters: number;
   calories: number;
   heartRateAvg: number | null;
   heartRateMax: number | null;
 }
 
-/** Fetches workouts from HealthKit for the last N days. */
 export async function syncWorkouts(days: number): Promise<HKWorkout[]> {
-  const plugin = await getPlugin();
-  if (!plugin) return [];
+  if (!await isAvailable()) return [];
   try {
-    const res = await plugin.queryHKitSampleType({
-      sampleName: S.WORKOUT,
+    const { workouts } = await HealthKit.queryWorkouts({
       startDate: daysAgoISO(days),
-      endDate: nowISO(),
+      endDate: new Date().toISOString(),
       limit: 200,
     });
-    return (res.resultData ?? []).map((w: any) => ({
+    return (workouts ?? []).map((w: any) => ({
       type: w.workoutActivityName ?? "Unknown",
       activityId: w.workoutActivityId ?? 0,
       startDate: w.startDate,
       duration: Math.round(w.duration ?? 0),
-      distanceMeters: Math.round((w.totalDistance ?? 0) * 1000), // km → m
+      distanceMeters: Math.round((w.totalDistance ?? 0)),
       calories: Math.round(w.totalEnergyBurned ?? 0),
-      heartRateAvg: null,
-      heartRateMax: null,
+      heartRateAvg: w.heartRateAvg ?? null,
+      heartRateMax: w.heartRateMax ?? null,
     }));
   } catch {
     return [];
@@ -134,46 +121,28 @@ export interface HKHeartRate {
   heartRateAvg: number | null;
 }
 
-/** Fetches resting heart rate readings for the last N days. */
 export async function syncHeartRate(days: number): Promise<HKHeartRate[]> {
-  const plugin = await getPlugin();
-  if (!plugin) return [];
+  if (!await isAvailable()) return [];
   try {
     const [rhrRes, hrRes] = await Promise.all([
-      plugin.queryHKitSampleType({
-        sampleName: S.RESTING_HR,
-        startDate: daysAgoISO(days),
-        endDate: nowISO(),
-        limit: 500,
-      }),
-      plugin.queryHKitSampleType({
-        sampleName: S.HEART_RATE,
-        startDate: daysAgoISO(days),
-        endDate: nowISO(),
-        limit: 1000,
-      }),
+      HealthKit.queryQuantity({ type: "HKQuantityTypeIdentifierRestingHeartRate", startDate: daysAgoISO(days), endDate: new Date().toISOString(), limit: 500 }),
+      HealthKit.queryQuantity({ type: "HKQuantityTypeIdentifierHeartRate", startDate: daysAgoISO(days), endDate: new Date().toISOString(), limit: 2000 }),
     ]);
 
-    // Group average HR by date
     const hrByDate: Record<string, number[]> = {};
-    for (const h of (hrRes.resultData ?? [])) {
+    for (const h of (hrRes.samples ?? [])) {
       const d = h.startDate?.split("T")[0];
-      if (!d) continue;
-      if (!hrByDate[d]) hrByDate[d] = [];
-      hrByDate[d].push(h.value ?? 0);
+      if (d) { if (!hrByDate[d]) hrByDate[d] = []; hrByDate[d].push(h.value ?? 0); }
     }
 
-    // Build per-day map from resting HR
     const byDate: Record<string, HKHeartRate> = {};
-    for (const r of (rhrRes.resultData ?? [])) {
+    for (const r of (rhrRes.samples ?? [])) {
       const d = r.startDate?.split("T")[0];
       if (!d) continue;
       byDate[d] = {
         date: d,
         restingHeartRate: r.value ?? null,
-        heartRateAvg: hrByDate[d]
-          ? Math.round(hrByDate[d].reduce((a, b) => a + b, 0) / hrByDate[d].length)
-          : null,
+        heartRateAvg: hrByDate[d] ? Math.round(hrByDate[d].reduce((a, b) => a + b, 0) / hrByDate[d].length) : null,
       };
     }
     return Object.values(byDate);
@@ -182,45 +151,32 @@ export async function syncHeartRate(days: number): Promise<HKHeartRate[]> {
   }
 }
 
-export interface HKHRVEntry {
-  date: string;
-  hrv_ms: number | null;
-}
-
-/**
- * HRV is not exposed in @perfood/capacitor-healthkit v1.
- * Returns empty array — schema is ready for future plugin versions.
- */
-export async function syncHRV(_days: number): Promise<HKHRVEntry[]> {
-  return [];
-}
+export interface HKHRVEntry { date: string; hrv_ms: number | null; }
+export async function syncHRV(_days: number): Promise<HKHRVEntry[]> { return []; }
 
 export interface HKSleepEntry {
-  date: string;          // YYYY-MM-DD (night of)
+  date: string;
   durationHours: number;
   stages: { state: string; durationMinutes: number }[];
 }
 
-/** Fetches sleep analysis for the last N days. */
 export async function syncSleep(days: number): Promise<HKSleepEntry[]> {
-  const plugin = await getPlugin();
-  if (!plugin) return [];
+  if (!await isAvailable()) return [];
   try {
-    const res = await plugin.queryHKitSampleType({
-      sampleName: S.SLEEP,
+    const { samples } = await HealthKit.querySleep({
       startDate: daysAgoISO(days),
-      endDate: nowISO(),
+      endDate: new Date().toISOString(),
       limit: 500,
     });
 
-    // Group by night (use startDate's date as the key)
     const byDate: Record<string, { totalMin: number; stages: any[] }> = {};
-    for (const s of (res.resultData ?? [])) {
+    for (const s of (samples ?? [])) {
       const d = s.startDate?.split("T")[0];
       if (!d) continue;
       if (!byDate[d]) byDate[d] = { totalMin: 0, stages: [] };
-      byDate[d].totalMin += Math.round(s.duration / 60);
-      byDate[d].stages.push({ state: s.sleepState ?? "asleep", durationMinutes: Math.round(s.duration / 60) });
+      const min = Math.round((s.duration ?? 0) / 60);
+      byDate[d].totalMin += min;
+      byDate[d].stages.push({ state: s.value ?? "asleep", durationMinutes: min });
     }
 
     return Object.entries(byDate).map(([date, { totalMin, stages }]) => ({
@@ -233,69 +189,39 @@ export async function syncSleep(days: number): Promise<HKSleepEntry[]> {
   }
 }
 
-export interface HKWeightEntry {
-  date: string;
-  weightKg: number;
-}
+export interface HKWeightEntry { date: string; weightKg: number; }
 
-/** Fetches the most recent weight entry. */
 export async function syncWeight(): Promise<HKWeightEntry | null> {
-  const plugin = await getPlugin();
-  if (!plugin) return null;
+  if (!await isAvailable()) return null;
   try {
-    const res = await plugin.queryHKitSampleType({
-      sampleName: S.WEIGHT,
+    const { samples } = await HealthKit.queryQuantity({
+      type: "HKQuantityTypeIdentifierBodyMass",
       startDate: daysAgoISO(90),
-      endDate: nowISO(),
+      endDate: new Date().toISOString(),
       limit: 1,
     });
-    const latest = res.resultData?.[0];
+    const latest = samples?.[0];
     if (!latest) return null;
-    return {
-      date: latest.startDate?.split("T")[0] ?? new Date().toISOString().split("T")[0],
-      weightKg: Math.round(latest.value * 10) / 10,
-    };
+    return { date: latest.startDate?.split("T")[0] ?? new Date().toISOString().split("T")[0], weightKg: Math.round(latest.value * 10) / 10 };
   } catch {
     return null;
   }
 }
 
-export interface HKActivityDay {
-  date: string;
-  activeCalories: number;
-  basalCalories: number;
-}
+export interface HKActivityDay { date: string; activeCalories: number; basalCalories: number; }
 
-/** Fetches daily active and basal calorie data for the last N days. */
 export async function syncActivity(days: number): Promise<HKActivityDay[]> {
-  const plugin = await getPlugin();
-  if (!plugin) return [];
+  if (!await isAvailable()) return [];
   try {
     const [activeRes, basalRes] = await Promise.all([
-      plugin.queryHKitSampleType({
-        sampleName: S.ACTIVE_ENERGY,
-        startDate: daysAgoISO(days),
-        endDate: nowISO(),
-        limit: 1000,
-      }),
-      plugin.queryHKitSampleType({
-        sampleName: S.BASAL_ENERGY,
-        startDate: daysAgoISO(days),
-        endDate: nowISO(),
-        limit: 1000,
-      }),
+      HealthKit.queryQuantity({ type: "HKQuantityTypeIdentifierActiveEnergyBurned", startDate: daysAgoISO(days), endDate: new Date().toISOString(), limit: 1000 }),
+      HealthKit.queryQuantity({ type: "HKQuantityTypeIdentifierBasalEnergyBurned", startDate: daysAgoISO(days), endDate: new Date().toISOString(), limit: 1000 }),
     ]);
 
     const activeByDate: Record<string, number> = {};
-    for (const r of (activeRes.resultData ?? [])) {
-      const d = r.startDate?.split("T")[0];
-      if (d) activeByDate[d] = (activeByDate[d] ?? 0) + (r.value ?? 0);
-    }
+    for (const r of (activeRes.samples ?? [])) { const d = r.startDate?.split("T")[0]; if (d) activeByDate[d] = (activeByDate[d] ?? 0) + (r.value ?? 0); }
     const basalByDate: Record<string, number> = {};
-    for (const r of (basalRes.resultData ?? [])) {
-      const d = r.startDate?.split("T")[0];
-      if (d) basalByDate[d] = (basalByDate[d] ?? 0) + (r.value ?? 0);
-    }
+    for (const r of (basalRes.samples ?? [])) { const d = r.startDate?.split("T")[0]; if (d) basalByDate[d] = (basalByDate[d] ?? 0) + (r.value ?? 0); }
 
     const dates = new Set([...Object.keys(activeByDate), ...Object.keys(basalByDate)]);
     return Array.from(dates).map(date => ({
@@ -308,22 +234,11 @@ export async function syncActivity(days: number): Promise<HKActivityDay[]> {
   }
 }
 
-export interface RowingWorkoutToSave {
-  startDate: string;
-  durationSeconds: number;
-  distanceMeters: number;
-  calories: number;
-}
+export interface RowingWorkoutToSave { startDate: string; durationSeconds: number; distanceMeters: number; calories: number; }
 
-/**
- * Saves a rowing workout to Apple Health.
- * NOTE: @perfood/capacitor-healthkit v1 does not expose a write workout API.
- * This is a no-op stub — upgrade the plugin or add a custom native plugin to enable.
- */
 export async function saveWorkoutToHealth(_workout: RowingWorkoutToSave): Promise<boolean> {
+  // Write support requires native Swift implementation — stub for now
   if (!await isAvailable()) return false;
-  // Plugin write support requires native implementation.
-  // Log for now; implement via custom Capacitor plugin if needed.
-  console.log("[HealthKit] saveWorkoutToHealth: write not yet implemented in plugin");
+  console.log("[HealthKit] saveWorkoutToHealth: write not yet implemented");
   return false;
 }
