@@ -22,6 +22,7 @@ export default defineConfig(() => ({
         swDest: "dist/sw.js",
         globDirectory: "dist",
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB
       },
       devOptions: {
         enabled: false,

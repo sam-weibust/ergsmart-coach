@@ -902,13 +902,14 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes, foodLogRes, whoopRecRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes, foodLogRes, whoopRecRes, hkHrRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
         (supabase.from("food_log") as any).select("calories,date").eq("user_id", user.id).gte("date", sevenAgo),
         supabase.from("whoop_recovery").select("recovery_score,hrv_rmssd,sleep_performance_percentage").eq("user_id", user.id).eq("date", t).maybeSingle(),
+        (supabase.from("healthkit_heart_rate") as any).select("resting_heart_rate,hrv_ms,heart_rate_average").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
       const sleepEntries = sleepRes.data || [];
@@ -917,6 +918,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const meals = mealsRes.data || [];
       const foodLogEntries = foodLogRes.data || [];
       const whoopToday = whoopRecRes.data ?? null;
+      const hkHrToday = hkHrRes.data ?? null;
 
       // Sleep component (40 pts)
       const todaySleepEntry = sleepEntries.find(e => e.date === t);
@@ -966,9 +968,20 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      // Recovery score: if Whoop available use it as primary component (60%), else sleep 40%
+      // HealthKit heart rate as fallback when Whoop not connected
       const usingWhoop = whoopToday?.recovery_score != null;
-      const score: number | null = (usingWhoop || todaySleepEntry)
+      const usingHealthKit = !usingWhoop && (hkHrToday?.resting_heart_rate != null || hkHrToday?.hrv_ms != null);
+
+      // If HealthKit RHR available, use it to modulate sleep component
+      if (usingHealthKit && hkHrToday?.resting_heart_rate && !usingWhoop) {
+        // Lower RHR = better recovery; 50bpm = excellent, 70bpm = baseline
+        const rhrScore = Math.max(0, Math.min(100, 100 - (hkHrToday.resting_heart_rate - 50) * 2));
+        sleepComponent = todaySleepEntry
+          ? (sleepComponent * 0.6 + rhrScore * 0.4)
+          : rhrScore * 0.7;
+      }
+
+      const score: number | null = (usingWhoop || usingHealthKit || todaySleepEntry)
         ? usingWhoop
           ? sleepComponent * 0.6 + hydrationComponent * 0.2 + calorieComponent * 0.1 + weightComponent * 0.1
           : sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
@@ -976,14 +989,17 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
 
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
-      const todaySleep = !!todaySleepEntry || usingWhoop;
+      const todaySleep = !!todaySleepEntry || usingWhoop || usingHealthKit;
       const todayCalories = (mealsByDate[t] || 0) > 0;
       const checkInComplete = todaySleep && todayWaterLogged && todayWeight;
 
       return {
         score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
-        todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete, usingWhoop,
+        todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
+        usingWhoop, usingHealthKit,
         whoopHrv: whoopToday?.hrv_rmssd ?? null,
+        hkRhr: hkHrToday?.resting_heart_rate ?? null,
+        hkHrv: hkHrToday?.hrv_ms ?? null,
       };
     },
   });
@@ -1014,6 +1030,18 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
             Powered by Whoop
           </span>
           <span>— recovery score uses Whoop data (HRV, sleep, resting HR)</span>
+        </div>
+      )}
+      {recoveryData?.usingHealthKit && !recoveryData?.usingWhoop && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <span className="inline-flex items-center gap-1 text-[#FF3B30] font-medium">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline">
+              <rect width="24" height="24" rx="6" fill="#FF3B30" />
+              <path d="M12 18.5C12 18.5 5 13.5 5 9.5C5 7.567 6.567 6 8.5 6C9.668 6 10.703 6.591 11.333 7.5L12 8.5L12.667 7.5C13.297 6.591 14.332 6 15.5 6C17.433 6 19 7.567 19 9.5C19 13.5 12 18.5 12 18.5Z" fill="white"/>
+            </svg>
+            Apple Health
+          </span>
+          <span>— recovery uses resting HR{recoveryData.hkRhr ? ` (${recoveryData.hkRhr} bpm)` : ""}{recoveryData.hkHrv ? `, HRV ${recoveryData.hkHrv}ms` : ""}</span>
         </div>
       )}
 

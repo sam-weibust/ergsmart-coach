@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Bluetooth, Heart, Loader2, AlertTriangle, Save } from "lucide-react";
 import ForceCurveCanvas from "./ForceCurveCanvas";
 import { getSessionUser } from '@/lib/getUser';
+import { saveWorkoutToHealth } from "@/services/healthkit";
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
 const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
@@ -270,6 +271,17 @@ export default function LiveErgView() {
 
       setSaved(true);
       toast({ title: "Workout saved", description: `${dist}m in ${dur}` });
+
+      // Save to Apple Health on iOS (no-op on web/Android)
+      const savedToHealth = await saveWorkoutToHealth({
+        startDate: new Date(Date.now() - (d.elapsedTime / 100) * 1000).toISOString(),
+        durationSeconds: Math.round(d.elapsedTime / 100),
+        distanceMeters: dist,
+        calories: d.calories ?? Math.round((avgWatts ?? 0) * (d.elapsedTime / 100) * 0.00024 * 1000),
+      });
+      if (savedToHealth) {
+        toast({ title: "Saved to Apple Health", description: "Rowing workout recorded." });
+      }
     } catch (e: any) {
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
     }

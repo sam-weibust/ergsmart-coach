@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, User } from "lucide-react";
 import { NotificationSettings } from "./NotificationSettings";
+import HealthKitConnect from "./HealthKitConnect";
 import { Timer } from "lucide-react";
 import { getSessionUser } from '@/lib/getUser';
 
@@ -458,6 +459,8 @@ export const ProfileSection = () => {
           </form>
         </CardContent>
       </Card>
+
+      <HealthKitConnect />
 
       <NotificationSettings />
     </div>

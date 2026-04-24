@@ -38,9 +38,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>CrewSync uses the camera to scan food barcodes for calorie tracking.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>CrewSync reads health and workout data to track your training load and recovery.</string>
+	<string>CrewSync reads your health data including heart rate, workouts, sleep, and activity to help you track training load and recovery.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>CrewSync saves rowing workouts to Apple Health.</string>
+	<string>CrewSync saves your rowing workouts to Apple Health.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CrewSync uses your location to show nearby regattas and rowing clubs.</string>
 	<key>NSMicrophoneUsageDescription</key>
