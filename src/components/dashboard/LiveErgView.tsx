@@ -21,6 +21,7 @@ const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
 const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
 const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66";
 const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66";
+const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66";
 const C2_STROKE_DATA  = "ce060034-43e5-11e4-916c-0800200c9a66";
 const C2_FORCE_CURVE  = "ce060037-43e5-11e4-916c-0800200c9a66";
 const HR_SVC          = "heart_rate";
@@ -36,9 +37,10 @@ interface LiveData {
   calories: number;
   splitPace: number;     // centiseconds per 500 m
   power: number;         // watts
-  driveLength: number;   // cm
-  driveTime: number;     // centiseconds
-  recoveryTime: number;  // centiseconds
+  driveLength: number;   // centimetres (0.01m units from 0x0033)
+  driveTime: number;     // centiseconds (0.01s from 0x0033)
+  recoveryTime: number;  // centiseconds (0.01s from 0x0033)
+  strokeCount: number;   // accumulated strokes
 }
 
 interface StrokePoint {
@@ -48,67 +50,134 @@ interface StrokePoint {
   hr: number;
 }
 
+// ── Debug logger (first 5 per char) ────────────────────────────
+const _lev_dbg: Record<string, number> = {};
+function _lev_log(tag: string, dv: DataView, parsed: object) {
+  _lev_dbg[tag] = (_lev_dbg[tag] ?? 0) + 1;
+  if (_lev_dbg[tag] > 5) return;
+  const bytes = Array.from({ length: dv.byteLength }, (_, i) => dv.getUint8(i));
+  console.log(`[LiveErg ${tag}] #${_lev_dbg[tag]} raw:`, bytes, '| parsed:', parsed);
+}
+
 // ── Parsing helpers ────────────────────────────────────────────
+// 0x0031 – Rowing General Status (19 bytes)
+// 0-2: elapsed time (0.01s, 24-bit LE)
+// 3-5: distance (0.1m, 24-bit LE)
+// 6:   split pace (0.5s/500m) → ×50 = centiseconds
+// 7:   split power (watts)
+// 8:   stroke rate (spm)
+// 9:   heart rate (bpm)
+// 12:  workout state
 function parseGenStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 18) return {};
+  if (dv.byteLength < 13) return {};
   const elapsedTime  = dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16);
   const rawDist      = dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16);
   const distance     = rawDist / 10;
-  const workoutState = dv.getUint8(8);
-  const strokeRate   = dv.byteLength > 14 ? dv.getUint8(14) : 0;
-  const heartRate    = dv.byteLength > 17 ? dv.getUint8(17) : 0;
-  const calories     = dv.byteLength > 12 ? dv.getUint16(11, true) : 0;
-  return { elapsedTime, distance, workoutState, strokeRate, heartRate, calories };
+  const splitPace    = dv.getUint8(6) * 50;   // 0.5s → centiseconds
+  const strokeRate   = dv.getUint8(8);          // spm
+  const heartRate    = dv.getUint8(9);           // bpm from strap via PM5
+  const workoutState = dv.getUint8(12);
+  const parsed = { elapsedTime, distance, splitPace, strokeRate, heartRate, workoutState };
+  _lev_log('0031', dv, parsed);
+  return parsed;
 }
 
+// 0x0032 – Rowing Additional Status 1
+// 0:   stroke count (uint8)
+// 1-2: split pace (centiseconds/500m, uint16 LE)
+// 3-4: stroke power (watts, uint16 LE)
+// 5:   stroke calories/hour
+// 6-7: split avg pace (centiseconds/500m, uint16 LE)
+// 8:   split total calories
 function parseAddStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 4) return {};
-  const splitPace = dv.getUint16(0, true); // centiseconds / 500 m
-  const power     = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
-  console.log('[PM5 raw LiveErgView] splitPace (centiseconds/500m):', splitPace, '| power (watts):', power, '| byteLength:', dv.byteLength);
-  const paceSec = splitPace > 0 ? splitPace / 100 : 0;
-  const derivedPower = paceSec > 0 ? Math.round(2.80 / Math.pow(paceSec / 500, 3)) : power;
-  return { splitPace, power: derivedPower };
+  if (dv.byteLength < 5) return {};
+  const strokeCount = dv.getUint8(0);
+  const splitPace   = dv.getUint16(1, true);                          // centiseconds/500m
+  const power       = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0; // watts
+  const parsed = { strokeCount, splitPace, power };
+  _lev_log('0032', dv, parsed);
+  return parsed;
 }
 
+// 0x0033 – Rowing Additional Status 2 (drive/recovery metrics)
+// 0-1: elapsed time (0.01s)
+// 2-3: interval count
+// 4-5: drive length (0.01m = centimetres, uint16 LE)
+// 6:   drive time (0.01s = centiseconds, uint8)
+// 7-8: stroke recovery time (0.01s = centiseconds, uint16 LE)
+// 9-10: stroke count (uint16 LE)
+function parseAdd2Status(dv: DataView): Partial<LiveData> {
+  if (dv.byteLength < 9) return {};
+  const driveLength  = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;   // cm
+  const driveTime    = dv.byteLength >= 7 ? dv.getUint8(6) : 0;           // centiseconds
+  const recoveryTime = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;    // centiseconds
+  const parsed = { driveLength, driveTime, recoveryTime };
+  _lev_log('0033', dv, parsed);
+  return parsed;
+}
+
+// 0x0034 – Stroke Data (fallback if 0x0033 not supported)
+// 0:   drive length (cm, uint8)
+// 1:   drive time (centiseconds, uint8)
+// 2-3: recovery time (centiseconds, uint16 LE)
 function parseStrokeData(dv: DataView): Partial<LiveData> {
   if (dv.byteLength < 4) return {};
-  const driveLength   = dv.getUint8(0);                                       // cm
-  const driveTime     = dv.getUint8(1);                                       // centiseconds
-  const recoveryTime  = dv.byteLength >= 4 ? dv.getUint16(2, true) : 0;      // centiseconds
+  const driveLength  = dv.getUint8(0);
+  const driveTime    = dv.getUint8(1);
+  const recoveryTime = dv.getUint16(2, true);
+  _lev_log('0034', dv, { driveLength, driveTime, recoveryTime });
   return { driveLength, driveTime, recoveryTime };
 }
 
 // ── Formatters ─────────────────────────────────────────────────
+// mm:ss.t  e.g. 3:42.5
 function fmtTime(cs: number): string {
-  const s = Math.floor(cs / 100);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  const s      = Math.floor(cs / 100);
+  const tenths = Math.floor((cs % 100) / 10);
+  const h   = Math.floor(s / 3600);
+  const m   = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-  return `${m}:${String(sec).padStart(2,"0")}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}.${tenths}`;
+  return `${m}:${String(sec).padStart(2,"0")}.${tenths}`;
 }
 
+// mm:ss  e.g. 1:52
 function fmtPace(cs: number): string {
   if (!cs || cs <= 0 || cs > 100000) return "--:--";
-  const s = Math.floor(cs / 100);
-  const m = Math.floor(s / 60);
+  const s   = Math.floor(cs / 100);
+  const m   = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// 0.00s  e.g. 0.85s
 function fmtDriveTime(cs: number): string {
   if (!cs) return "--";
   return `${(cs / 100).toFixed(2)}s`;
 }
 
-function parseForceCurve(dv: DataView): number[] {
+// 0.00m  e.g. 1.23m
+function fmtDriveLength(cm: number): string {
+  if (!cm) return "--";
+  return `${(cm / 100).toFixed(2)}m`;
+}
+
+// Force curve: uint8 per point on native iOS, uint16/10 on web
+function parseForceCurve(dv: DataView, isNative: boolean): number[] {
   if (dv.byteLength < 2) return [];
   const count = Math.min(dv.getUint8(0), 32);
   const forces: number[] = [];
-  for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
-    forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1 N → N
+  if (isNative) {
+    for (let i = 0; i < count && 1 + i < dv.byteLength; i++) {
+      forces.push(dv.getUint8(1 + i) * 1.0); // arbitrary units
+    }
+  } else {
+    for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
+      forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1N → N
+    }
   }
+  _lev_log('0037', dv, { count, peak: Math.max(...forces, 0) });
   return forces;
 }
 
@@ -157,8 +226,10 @@ export default function LiveErgView() {
   const [allCurves,           setAllCurves]           = useState<number[][]>([]);
   const [forceCurveSupported, setForceCurveSupported] = useState<boolean | null>(null);
 
-  const [targetInput, setTargetInput] = useState("");
-  const [targetCs,    setTargetCs]    = useState<number | null>(null); // centiseconds
+  const [targetInput,    setTargetInput]    = useState("");
+  const [targetCs,       setTargetCs]       = useState<number | null>(null); // centiseconds
+  const [targetDistInput, setTargetDistInput] = useState("");
+  const [targetDist,     setTargetDist]     = useState<number | null>(null); // metres
 
   const hrDeviceRef        = useRef<any>(null);
   const hrNativeDeviceIdRef = useRef<string | null>(null);
@@ -191,7 +262,8 @@ export default function LiveErgView() {
     let cancelled = false;
 
     (async () => {
-      if (Capacitor.isNativePlatform() && ergDeviceId) {
+      const isNative = Capacitor.isNativePlatform();
+      if (isNative && ergDeviceId) {
         const tryNotify = async (service: string, char: string, handler: (dv: DataView) => void) => {
           try {
             await BleClient.startNotifications(ergDeviceId, service, char, (value) => {
@@ -201,11 +273,12 @@ export default function LiveErgView() {
         };
         await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulateStroke(parseGenStatus(dv)));
         await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulateStroke(parseAddStatus(dv)));
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS2, (dv) => accumulateStroke(parseAdd2Status(dv)));
         await tryNotify(C2_ROW_SVC, C2_STROKE_DATA, (dv) => accumulateStroke(parseStrokeData(dv)));
         try {
           await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, C2_FORCE_CURVE, (value) => {
             if (cancelled) return;
-            const forces = parseForceCurve(toDataView(value));
+            const forces = parseForceCurve(toDataView(value), true /* native */);
             if (forces.length > 0) {
               setForceCurveSupported(true);
               setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
@@ -457,6 +530,14 @@ export default function LiveErgView() {
     } catch {}
 
     try {
+      const a2c = await svc.getCharacteristic(C2_ADD_STATUS2);
+      await a2c.startNotifications();
+      a2c.addEventListener("characteristicvaluechanged", (e: any) => {
+        accumulateStroke(parseAdd2Status(e.target.value));
+      });
+    } catch {}
+
+    try {
       const sc = await svc.getCharacteristic(C2_STROKE_DATA);
       await sc.startNotifications();
       sc.addEventListener("characteristicvaluechanged", (e: any) => {
@@ -468,7 +549,7 @@ export default function LiveErgView() {
       const fcc = await svc.getCharacteristic(C2_FORCE_CURVE);
       await fcc.startNotifications();
       fcc.addEventListener("characteristicvaluechanged", (e: any) => {
-        const forces = parseForceCurve(e.target.value);
+        const forces = parseForceCurve(e.target.value, false /* web */);
         if (forces.length > 0) {
           setForceCurveSupported(true);
           setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
@@ -498,6 +579,29 @@ export default function LiveErgView() {
     }
   };
 
+  const applyTargetDist = () => {
+    const d = parseInt(targetDistInput, 10);
+    if (d > 0 && d <= 100000) {
+      setTargetDist(d);
+      toast({ title: `Target distance: ${d}m` });
+    } else {
+      toast({ title: "Invalid distance", description: "Enter metres e.g. 2000", variant: "destructive" });
+    }
+  };
+
+  // ── Projected finish time ─────────────────────────────────────
+  const projLabel = targetDist != null ? "Proj. Finish" : "Proj. 2000m";
+  const projValue = (() => {
+    const sc = data.strokeCount ?? 0;
+    const sp = data.splitPace ?? 0;
+    if (sc < 10 || !sp || sp <= 0 || sp > 100000) return "--:--";
+    const effectiveDist = targetDist ?? 2000;
+    const totalSecs = (sp / 100) * effectiveDist / 500;
+    const m   = Math.floor(totalSecs / 60);
+    const sec = Math.round(totalSecs % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  })();
+
   // ── Derived display values ────────────────────────────────────
   const state     = data.workoutState ?? 0;
   const isRowing  = state === 2;
@@ -516,13 +620,14 @@ export default function LiveErgView() {
     { label: "Split /500m",   value: fmtPace(data.splitPace ?? 0),                               big: true  },
     { label: "Stroke Rate",   value: data.strokeRate ? `${data.strokeRate} spm` : "-- spm",       big: false },
     { label: "Distance",      value: data.distance   ? `${Math.round(data.distance)}m` : "--m",   big: false },
-    { label: "Elapsed",       value: data.elapsedTime ? fmtTime(data.elapsedTime) : "--:--",       big: false },
+    { label: "Elapsed",       value: data.elapsedTime ? fmtTime(data.elapsedTime) : "--:--.0",     big: false },
     { label: "Calories",      value: data.calories   ? `${data.calories} cal` : "-- cal",          big: false },
     { label: "Power",         value: data.power      ? `${data.power} W` : "-- W",                 big: false },
     { label: "Heart Rate",    value: hr ? `${hr} bpm` : "-- bpm",                                  big: false },
-    { label: "Drive Length",  value: data.driveLength ? `${(data.driveLength / 100).toFixed(2)}m` : "--m", big: false },
-    { label: "Drive Time",    value: data.driveTime ? fmtDriveTime(data.driveTime) : "--",         big: false },
-    { label: "Recovery Time", value: data.recoveryTime ? fmtDriveTime(data.recoveryTime) : "--",  big: false },
+    { label: "Drive Length",  value: data.driveLength ? fmtDriveLength(data.driveLength) : "--m",  big: false },
+    { label: "Drive Time",    value: data.driveTime ? fmtDriveTime(data.driveTime) : "--",          big: false },
+    { label: "Recovery Time", value: data.recoveryTime ? fmtDriveTime(data.recoveryTime) : "--",   big: false },
+    { label: projLabel,       value: projValue,                                                     big: false },
   ];
 
   return (
@@ -568,19 +673,33 @@ export default function LiveErgView() {
 
       {/* ── Target split + reconnect notices ── */}
       {!ergConnected && !disconnected && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 bg-gray-900 border-b border-gray-800">
           <span className="text-xs text-gray-400 shrink-0">Target split:</span>
           <Input
             value={targetInput}
             onChange={e => setTargetInput(e.target.value)}
             placeholder="e.g. 2:00"
-            className="h-7 w-24 bg-gray-800 border-gray-700 text-white text-xs font-mono"
+            className="h-7 w-20 bg-gray-800 border-gray-700 text-white text-xs font-mono"
           />
           <Button size="sm" variant="outline" className="h-7 text-xs border-gray-700 text-gray-300 hover:text-white" onClick={applyTarget}>
             Set
           </Button>
           {targetCs && (
             <span className="text-xs text-green-400 font-mono">→ {fmtPace(targetCs)}/500m</span>
+          )}
+          <span className="text-xs text-gray-600">|</span>
+          <span className="text-xs text-gray-400 shrink-0">Target dist:</span>
+          <Input
+            value={targetDistInput}
+            onChange={e => setTargetDistInput(e.target.value)}
+            placeholder="e.g. 2000"
+            className="h-7 w-20 bg-gray-800 border-gray-700 text-white text-xs font-mono"
+          />
+          <Button size="sm" variant="outline" className="h-7 text-xs border-gray-700 text-gray-300 hover:text-white" onClick={applyTargetDist}>
+            Set
+          </Button>
+          {targetDist && (
+            <span className="text-xs text-blue-400 font-mono">→ {targetDist}m</span>
           )}
         </div>
       )}

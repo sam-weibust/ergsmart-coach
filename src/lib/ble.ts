@@ -44,52 +44,97 @@ export type DisconnectCallback = () => void;
 
 // ── Parser helpers ───────────────────────────────────────────────────────────
 
+// ── Debug counters (log first 5 updates per char for field verification) ──────
+const _dbg: Record<string, number> = {};
+function _log(tag: string, dv: DataView, parsed: object) {
+  _dbg[tag] = (_dbg[tag] ?? 0) + 1;
+  if (_dbg[tag] > 5) return;
+  const bytes = Array.from({ length: dv.byteLength }, (_, i) => dv.getUint8(i));
+  console.log(`[PM5 ${tag}] #${_dbg[tag]} raw bytes:`, bytes, '| parsed:', parsed);
+}
+
+// 0x0031 – Rowing General Status (19 bytes)
+// 0-2: elapsed time (0.01s, 24-bit LE)
+// 3-5: distance (0.1m, 24-bit LE)
+// 6:   split pace (0.5s/500m, uint8) → ×50 for centiseconds
+// 7:   split power (watts, uint8)
+// 8:   stroke rate (spm, uint8)
+// 9:   heart rate from HR strap (bpm, uint8)
+// 10:  cadence
+// 11:  drag factor
+// 12:  workout state
+// 13:  rowing type
 export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
-  if (dv.byteLength < 14) return {};
+  if (dv.byteLength < 13) return {};
   try {
-    return {
-      elapsedTime:  dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16),
-      distance:     ((dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16)) / 10),
-      workoutState: dv.getUint8(8),
-      strokeRate:   dv.getUint8(9),
-      heartRate:    dv.getUint8(10),
-      calories:     dv.getUint16(13, true),
-    };
+    const elapsedTime  = dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16);
+    const distance     = (dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16)) / 10;
+    const splitPace    = dv.getUint8(6) * 50;    // 0.5s → centiseconds
+    const strokeRate   = dv.getUint8(8);          // spm
+    const heartRate    = dv.getUint8(9);           // bpm
+    const workoutState = dv.byteLength >= 13 ? dv.getUint8(12) : 0;
+    const parsed = { elapsedTime, distance, splitPace, strokeRate, heartRate, workoutState };
+    _log('0031', dv, parsed);
+    return parsed;
   } catch { return {}; }
 }
 
+// 0x0032 – Rowing Additional Status 1
+// 0:   stroke count (uint8)
+// 1-2: split pace (centiseconds/500m, uint16 LE)
+// 3-4: stroke power (watts, uint16 LE)
+// 5:   stroke calories/hour (uint8)
+// 6-7: split avg pace (centiseconds/500m, uint16 LE)
+// 8:   split total calories (uint8)
 export function parseAdditionalStatus1(dv: DataView): Partial<PM5StreamData> {
   if (dv.byteLength < 5) return {};
   try {
-    const rawSplit = dv.getUint16(0, true);
-    const rawPower = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
-    console.log('[PM5 raw] splitPace (centiseconds/500m):', rawSplit, '| power (watts):', rawPower, '| byteLength:', dv.byteLength);
-    return {
-      splitPace: rawSplit,
-      power:     rawPower,
-    };
+    const splitPace = dv.getUint16(1, true);                                   // centiseconds/500m
+    const power     = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0;         // watts
+    const parsed = { splitPace, power };
+    _log('0032', dv, parsed);
+    return parsed;
   } catch { return {}; }
 }
 
+// 0x0033 – Rowing Additional Status 2
+// 0-1: elapsed time (0.01s, uint16 LE)
+// 2-3: interval count (uint16 LE)
+// 4-5: drive length (0.01m = centimeters, uint16 LE)
+// 6:   drive time (0.01s = centiseconds, uint8)
+// 7-8: stroke recovery time (0.01s = centiseconds, uint16 LE)
+// 9-10: stroke count (uint16 LE)
 export function parseAdditionalStatus2(dv: DataView): Partial<PM5StreamData> {
-  if (dv.byteLength < 6) return {};
+  if (dv.byteLength < 9) return {};
   try {
-    return {
-      driveLength:    dv.getUint8(0),
-      driveTime:      dv.getUint8(1) * 10,
-      recoveryTime:   dv.getUint16(2, true),
-      strokeDistance: dv.getUint16(4, true),
-    };
+    const driveLength    = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;   // centimeters
+    const driveTime      = dv.byteLength >= 7 ? dv.getUint8(6) : 0;          // centiseconds
+    const recoveryTime   = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;   // centiseconds
+    const strokeDistance = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
+    const parsed = { driveLength, driveTime, recoveryTime, strokeDistance };
+    _log('0033', dv, parsed);
+    return parsed;
   } catch { return {}; }
 }
 
-export function parseForceCurve(dv: DataView): number[] {
+// 0x0037 – Force Curve
+// Byte 0: number of data points (max 32)
+// Native iOS: bytes 1..count are uint8 arbitrary force units × calibration
+// Web: bytes 1..count are uint16 LE in 0.1N units
+export function parseForceCurve(dv: DataView, isNative = false): number[] {
   if (dv.byteLength < 2) return [];
   const count = Math.min(dv.getUint8(0), 32);
   const forces: number[] = [];
-  for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
-    forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1 N → N
+  if (isNative) {
+    for (let i = 0; i < count && 1 + i < dv.byteLength; i++) {
+      forces.push(dv.getUint8(1 + i) * 1.0); // arbitrary units, scale factor 1.0
+    }
+  } else {
+    for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
+      forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1N → N
+    }
   }
+  _log('0037', dv, { count, forces: forces.slice(0, 5) });
   return forces;
 }
 
