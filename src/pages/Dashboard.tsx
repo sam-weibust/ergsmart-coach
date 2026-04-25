@@ -163,6 +163,7 @@ const NAV_CONFIG: NavSection[] = [
     label: "Calculators",
     icon: Calculator,
     subs: [
+      { id: "stroke-watch", label: "Stroke Watch", description: "Tap to measure real-time stroke rate on the water", icon: Radio },
       { id: "split", label: "Split Calculator", description: "Two-way split ↔ total time for any distance", icon: Calculator },
       { id: "predictor-2k", label: "2K Predictor", description: "AI-powered conservative 2K prediction", icon: Zap },
       { id: "weight-adj", label: "Weight Adjustment", description: "Predict 2K time at target body weight", icon: Weight },
