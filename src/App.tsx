@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import RegattaPage from "./pages/RegattaPage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import PricingPage from "./pages/PricingPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/regatta/:id" element={<RegattaPage />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
