@@ -19,11 +19,10 @@ import { saveWorkoutToHealth } from "@/services/healthkit";
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
 const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
 const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
-const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66";
-const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66";
-const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66";
-const C2_STROKE_DATA  = "ce060034-43e5-11e4-916c-0800200c9a66";
-const C2_FORCE_CURVE  = "ce060037-43e5-11e4-916c-0800200c9a66";
+const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66"; // primary status
+const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66"; // power & calories
+const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66"; // drive metrics
+const C2_FORCE_CURVE  = "ce060035-43e5-11e4-916c-0800200c9a66"; // force curve (0x0035!)
 const HR_SVC          = "heart_rate";
 const HR_CHAR         = "heart_rate_measurement";
 
@@ -50,83 +49,72 @@ interface StrokePoint {
   hr: number;
 }
 
-// ── Debug logger (first 5 per char) ────────────────────────────
+// ── Debug hex logger (first 3 per char) ────────────────────────
 const _lev_dbg: Record<string, number> = {};
 function _lev_log(tag: string, dv: DataView, parsed: object) {
   _lev_dbg[tag] = (_lev_dbg[tag] ?? 0) + 1;
-  if (_lev_dbg[tag] > 5) return;
-  const bytes = Array.from({ length: dv.byteLength }, (_, i) => dv.getUint8(i));
-  console.log(`[LiveErg ${tag}] #${_lev_dbg[tag]} raw:`, bytes, '| parsed:', parsed);
+  if (_lev_dbg[tag] > 3) return;
+  const hex = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
+    .map(b => b.toString(16).padStart(2, '0')).join(' ');
+  console.log(`[PM5 ${tag}] #${_lev_dbg[tag]} hex: ${hex} | parsed:`, parsed);
 }
 
 // ── Parsing helpers ────────────────────────────────────────────
-// 0x0031 – Rowing General Status (19 bytes)
-// 0-2: elapsed time (0.01s, 24-bit LE)
-// 3-5: distance (0.1m, 24-bit LE)
-// 6:   split pace (0.5s/500m) → ×50 = centiseconds
-// 7:   split power (watts)
-// 8:   stroke rate (spm)
-// 9:   heart rate (bpm)
-// 12:  workout state
+// 0x0031 – Rowing General Status
+// 0-2: elapsed time (uint24 LE, 0.01s)
+// 3-5: distance (uint24 LE, 0.1m)
+// 6-7: split pace (uint16 LE, 0.5s/500m) → ×50 = centiseconds
+// 8:   stroke rate (uint8, spm)
+// 9:   stroke/workout state (uint8)
+// 9-10: heart rate (uint16 LE, bpm) — only show if 40–220
 function parseGenStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 13) return {};
-  const elapsedTime  = dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16);
-  const rawDist      = dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16);
+  if (dv.byteLength < 10) return {};
+  const elapsedTime  = dv.getUint8(0) + dv.getUint8(1) * 256 + dv.getUint8(2) * 65536;
+  const rawDist      = dv.getUint8(3) + dv.getUint8(4) * 256 + dv.getUint8(5) * 65536;
   const distance     = rawDist / 10;
-  const splitPace    = dv.getUint8(6) * 50;   // 0.5s → centiseconds
-  const strokeRate   = dv.getUint8(8);          // spm
-  const heartRate    = dv.getUint8(9);           // bpm from strap via PM5
-  const workoutState = dv.getUint8(12);
-  const parsed = { elapsedTime, distance, splitPace, strokeRate, heartRate, workoutState };
+  const rawSplit     = dv.getUint16(6, true);           // 0.5s/500m units
+  const splitPace    = Math.round(rawSplit * 50);        // → centiseconds
+  const strokeRate   = dv.getUint8(8) || 0;
+  const workoutState = dv.getUint8(9);
+  const rawHr        = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
+  const heartRate    = rawHr >= 40 && rawHr <= 220 ? rawHr : 0;
+  const parsed = { elapsedTime, distance, splitPace, strokeRate, workoutState, heartRate };
   _lev_log('0031', dv, parsed);
   return parsed;
 }
 
-// 0x0032 – Rowing Additional Status 1
-// 0:   stroke count (uint8)
-// 1-2: split pace (centiseconds/500m, uint16 LE)
-// 3-4: stroke power (watts, uint16 LE)
-// 5:   stroke calories/hour
-// 6-7: split avg pace (centiseconds/500m, uint16 LE)
-// 8:   split total calories
+// 0x0032 – Rowing Additional Status
+// 0-2: elapsed time (uint24 LE, 0.01s)
+// 3-4: split pace (uint16 LE, 0.5s/500m) → ×50 = centiseconds
+// 5-6: stroke power (uint16 LE, watts) — read directly, do NOT compute from split
+// 7:   stroke calories
+// 8-9: average pace (uint16 LE, 0.5s/500m)
 function parseAddStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 5) return {};
-  const strokeCount = dv.getUint8(0);
-  const splitPace   = dv.getUint16(1, true);                          // centiseconds/500m
-  const power       = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0; // watts
-  const parsed = { strokeCount, splitPace, power };
+  if (dv.byteLength < 7) return {};
+  const rawSplit  = dv.getUint16(3, true);
+  const splitPace = Math.round(rawSplit * 50);           // → centiseconds
+  const power     = dv.getUint16(5, true);               // watts, direct read
+  const calories  = dv.byteLength >= 8 ? dv.getUint8(7) : 0;
+  const parsed = { splitPace, power, calories };
   _lev_log('0032', dv, parsed);
   return parsed;
 }
 
-// 0x0033 – Rowing Additional Status 2 (drive/recovery metrics)
-// 0-1: elapsed time (0.01s)
-// 2-3: interval count
-// 4-5: drive length (0.01m = centimetres, uint16 LE)
-// 6:   drive time (0.01s = centiseconds, uint8)
-// 7-8: stroke recovery time (0.01s = centiseconds, uint16 LE)
+// 0x0033 – Rowing Additional Status 2 (per-stroke drive metrics)
+// 0-2: elapsed time (uint24 LE, 0.01s)
+// 3-4: drive length (uint16 LE, 0.01m = centimetres)
+// 5-6: drive time (uint16 LE, 0.01s = centiseconds)
+// 7-8: stroke recovery time (uint16 LE, 0.01s = centiseconds)
 // 9-10: stroke count (uint16 LE)
 function parseAdd2Status(dv: DataView): Partial<LiveData> {
   if (dv.byteLength < 9) return {};
-  const driveLength  = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;   // cm
-  const driveTime    = dv.byteLength >= 7 ? dv.getUint8(6) : 0;           // centiseconds
-  const recoveryTime = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;    // centiseconds
-  const parsed = { driveLength, driveTime, recoveryTime };
+  const driveLength   = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0;  // cm
+  const driveTime     = dv.byteLength >= 7 ? dv.getUint16(5, true) : 0;  // centiseconds
+  const recoveryTime  = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;  // centiseconds
+  const strokeCount   = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
+  const parsed = { driveLength, driveTime, recoveryTime, strokeCount };
   _lev_log('0033', dv, parsed);
   return parsed;
-}
-
-// 0x0034 – Stroke Data (fallback if 0x0033 not supported)
-// 0:   drive length (cm, uint8)
-// 1:   drive time (centiseconds, uint8)
-// 2-3: recovery time (centiseconds, uint16 LE)
-function parseStrokeData(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 4) return {};
-  const driveLength  = dv.getUint8(0);
-  const driveTime    = dv.getUint8(1);
-  const recoveryTime = dv.getUint16(2, true);
-  _lev_log('0034', dv, { driveLength, driveTime, recoveryTime });
-  return { driveLength, driveTime, recoveryTime };
 }
 
 // ── Formatters ─────────────────────────────────────────────────
@@ -163,22 +151,17 @@ function fmtDriveLength(cm: number): string {
   return `${(cm / 100).toFixed(2)}m`;
 }
 
-// Force curve: uint8 per point on native iOS, uint16/10 on web
-function parseForceCurve(dv: DataView, isNative: boolean): number[] {
-  if (dv.byteLength < 2) return [];
-  const count = Math.min(dv.getUint8(0), 32);
-  const forces: number[] = [];
-  if (isNative) {
-    for (let i = 0; i < count && 1 + i < dv.byteLength; i++) {
-      forces.push(dv.getUint8(1 + i) * 1.0); // arbitrary units
-    }
-  } else {
-    for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
-      forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1N → N
-    }
+// 0x0035 – Force Curve Data
+// Raw uint8 values, one per force sample through drive phase (16-32 samples/stroke).
+// No count prefix byte — parse all bytes directly.
+function parseForceCurve(dv: DataView): number[] {
+  if (dv.byteLength === 0) return [];
+  const samples: number[] = [];
+  for (let i = 0; i < dv.byteLength; i++) {
+    samples.push(dv.getUint8(i));
   }
-  _lev_log('0037', dv, { count, peak: Math.max(...forces, 0) });
-  return forces;
+  _lev_log('0035', dv, { samples: samples.length, peak: Math.max(...samples) });
+  return samples;
 }
 
 function parseSplitInput(str: string): number | null {
@@ -274,16 +257,19 @@ export default function LiveErgView() {
         await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulateStroke(parseGenStatus(dv)));
         await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulateStroke(parseAddStatus(dv)));
         await tryNotify(C2_ROW_SVC, C2_ADD_STATUS2, (dv) => accumulateStroke(parseAdd2Status(dv)));
-        await tryNotify(C2_ROW_SVC, C2_STROKE_DATA, (dv) => accumulateStroke(parseStrokeData(dv)));
+        // Force curve: 0x0035, raw uint8 samples per stroke
         try {
           await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, C2_FORCE_CURVE, (value) => {
             if (cancelled) return;
-            const forces = parseForceCurve(toDataView(value), true /* native */);
+            const dv = toDataView(value);
+            const forces = parseForceCurve(dv);
             if (forces.length > 0) {
               setForceCurveSupported(true);
               setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
               setCurrentCurve(forces);
               setAllCurves(prev => [...prev, forces]);
+            } else {
+              if (!cancelled) setForceCurveSupported(false);
             }
           });
           if (!cancelled) setForceCurveSupported(true);
@@ -537,19 +523,12 @@ export default function LiveErgView() {
       });
     } catch {}
 
-    try {
-      const sc = await svc.getCharacteristic(C2_STROKE_DATA);
-      await sc.startNotifications();
-      sc.addEventListener("characteristicvaluechanged", (e: any) => {
-        accumulateStroke(parseStrokeData(e.target.value));
-      });
-    } catch {}
-
+    // Force curve 0x0035 — raw uint8 samples per stroke
     try {
       const fcc = await svc.getCharacteristic(C2_FORCE_CURVE);
       await fcc.startNotifications();
       fcc.addEventListener("characteristicvaluechanged", (e: any) => {
-        const forces = parseForceCurve(e.target.value, false /* web */);
+        const forces = parseForceCurve(e.target.value as DataView);
         if (forces.length > 0) {
           setForceCurveSupported(true);
           setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
