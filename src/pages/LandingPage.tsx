@@ -301,9 +301,10 @@ const LandingPage = () => {
           <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.3px" }}>CrewSync</span>
         </div>
         <div className="nav-links-row" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
-          {["Features", "For Coaches", "Competition", "Pricing"].map((link) => (
+          {["Features", "For Coaches", "Competition"].map((link) => (
             <a key={link} href={`#${link.toLowerCase().replace(" ", "-")}`} className="nav-link">{link}</a>
           ))}
+          <a href="/pricing" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/pricing"); }}>Pricing</a>
           <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/auth"); }}>Login</a>
           <button className="btn-primary" style={{ padding: "8px 18px", fontSize: "14px" }} onClick={() => navigate("/auth")}>Get Started</button>
         </div>

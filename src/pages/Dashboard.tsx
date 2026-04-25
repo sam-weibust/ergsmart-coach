@@ -58,6 +58,10 @@ import {
   Heart,
   Search,
   Mail,
+  Check,
+  X,
+  ChevronUp,
+  Shield,
 } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
@@ -276,6 +280,151 @@ const NAV_CONFIG: NavSection[] = [
   },
 ];
 
+
+// ─── BILLING TAB ─────────────────────────────────────────────────────────────
+
+function BillingTab() {
+  const navigate = useNavigate();
+  const [annual, setAnnual] = useState(false);
+
+  const plans = [
+    {
+      name: "Free",
+      price: 0,
+      annualPrice: 0,
+      betaPrice: 0,
+      betaAnnual: 0,
+      color: "border-border",
+      badge: null,
+      features: ["Workout logging", "Basic analytics", "Community access", "3 AI queries/month"],
+    },
+    {
+      name: "Pro",
+      price: 10,
+      annualPrice: 8,
+      betaPrice: 8,
+      betaAnnual: 6.40,
+      color: "border-blue-500",
+      badge: "Most Popular",
+      features: ["Everything in Free", "Unlimited AI Coach", "Advanced analytics", "Training zones", "Split calculator"],
+    },
+    {
+      name: "Elite",
+      price: 15,
+      annualPrice: 12,
+      betaPrice: 12,
+      betaAnnual: 9.60,
+      color: "border-purple-500",
+      badge: null,
+      features: ["Everything in Pro", "Video critique", "Recruiting profile", "Regatta tracking", "Priority support"],
+    },
+    {
+      name: "Elite+",
+      price: 25,
+      annualPrice: 20,
+      betaPrice: 20,
+      betaAnnual: 16,
+      color: "border-amber-500",
+      badge: "Best Value",
+      features: ["Everything in Elite", "Head-to-Head racing", "Force curve analysis", "College targeting", "Early feature access"],
+    },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      {/* Beta banner */}
+      <div className="rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white">
+        <div className="flex items-center gap-2 mb-1">
+          <Zap className="h-4 w-4" />
+          <span className="font-bold text-sm">Beta Pricing — 20% Off For Life</span>
+        </div>
+        <p className="text-xs text-white/80">
+          Lock in your rate now. Early backers keep this discount forever — even after we raise prices.
+          No coupon needed.
+        </p>
+      </div>
+
+      {/* Billing toggle */}
+      <div className="flex items-center gap-3">
+        <span className={`text-sm font-medium ${!annual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
+        <button
+          onClick={() => setAnnual(!annual)}
+          className={`relative w-11 h-6 rounded-full transition-colors ${annual ? "bg-primary" : "bg-muted"}`}
+        >
+          <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${annual ? "translate-x-5" : ""}`} />
+        </button>
+        <span className={`text-sm font-medium ${annual ? "text-foreground" : "text-muted-foreground"}`}>
+          Annual <span className="text-green-600 font-semibold text-xs">Save 20%</span>
+        </span>
+      </div>
+
+      {/* Plan cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {plans.map((plan) => {
+          const display = annual ? plan.betaAnnual : plan.betaPrice;
+          const original = annual ? plan.annualPrice : plan.price;
+          const isFree = plan.price === 0;
+
+          return (
+            <div key={plan.name} className={`rounded-xl border-2 ${plan.color} bg-card p-5 space-y-4 relative`}>
+              {plan.badge && (
+                <div className="absolute -top-3 left-4">
+                  <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
+                    {plan.badge}
+                  </span>
+                </div>
+              )}
+              <div>
+                <h3 className="font-bold text-lg">{plan.name}</h3>
+                {isFree ? (
+                  <p className="text-2xl font-bold mt-1">Free</p>
+                ) : (
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-primary">${display.toFixed(display % 1 === 0 ? 0 : 2)}/mo</span>
+                    {original !== display && (
+                      <span className="text-sm text-muted-foreground line-through">${original}/mo</span>
+                    )}
+                  </div>
+                )}
+                {!isFree && (
+                  <div className="mt-1 flex items-center gap-1">
+                    <Shield className="h-3 w-3 text-green-600" />
+                    <span className="text-xs text-green-600 font-medium">Early Backer — 20% off for life</span>
+                  </div>
+                )}
+              </div>
+              <ul className="space-y-2">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant={plan.name === "Pro" ? "default" : "outline"}
+                className="w-full"
+                size="sm"
+                onClick={() => navigate("/pricing")}
+              >
+                {isFree ? "Current Plan" : "Get Started"}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="text-center">
+        <button
+          onClick={() => navigate("/pricing")}
+          className="text-sm text-primary hover:underline font-medium"
+        >
+          View full pricing, team plans & feature comparison →
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── SECTION LANDING PAGE ─────────────────────────────────────────────────────
 
@@ -655,21 +804,7 @@ const Dashboard = () => {
             </div>
           );
         case "billing":
-          return (
-            <div className="max-w-2xl space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold">Billing & Plan</h2>
-                <p className="text-sm text-muted-foreground mt-1">Manage your subscription and usage.</p>
-              </div>
-              <div className="p-6 rounded-xl border border-border bg-card space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">Current Plan</p>
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">Free</span>
-                </div>
-                <p className="text-sm text-muted-foreground">Unlimited erg logging, AI chat, training plans, and more.</p>
-              </div>
-            </div>
-          );
+          return <BillingTab />;
         default:
           return null;
       }
