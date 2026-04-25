@@ -6,7 +6,9 @@ export const PM5_SERVICE        = 'ce060000-43e5-11e4-916c-0800200c9a66';
 export const PM5_ROWING_SERVICE = 'ce060030-43e5-11e4-916c-0800200c9a66';
 export const PM5_STATUS_CHAR    = 'ce060031-43e5-11e4-916c-0800200c9a66';
 export const PM5_ADD1_CHAR      = 'ce060032-43e5-11e4-916c-0800200c9a66';
-export const PM5_ADD2_CHAR      = 'ce060033-43e5-11e4-916c-0800200c9a66';
+export const PM5_ADD2_CHAR       = 'ce060033-43e5-11e4-916c-0800200c9a66';
+export const PM5_STROKE_CHAR    = 'ce060034-43e5-11e4-916c-0800200c9a66';
+export const PM5_FORCE_CURVE_CHAR = 'ce060037-43e5-11e4-916c-0800200c9a66';
 
 // ── Heart Rate UUIDs ─────────────────────────────────────────────────────────
 export const HR_SERVICE     = '0000180d-0000-1000-8000-00805f9b34fb';
@@ -79,6 +81,16 @@ export function parseAdditionalStatus2(dv: DataView): Partial<PM5StreamData> {
       strokeDistance: dv.getUint16(4, true),
     };
   } catch { return {}; }
+}
+
+export function parseForceCurve(dv: DataView): number[] {
+  if (dv.byteLength < 2) return [];
+  const count = Math.min(dv.getUint8(0), 32);
+  const forces: number[] = [];
+  for (let i = 0; i < count && 1 + i * 2 + 1 < dv.byteLength; i++) {
+    forces.push(dv.getUint16(1 + i * 2, true) / 10); // 0.1 N → N
+  }
+  return forces;
 }
 
 export function parseHRMeasurement(dv: DataView): number | null {

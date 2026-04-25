@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -39,7 +39,12 @@ import {
   CheckCircle2,
   AlertTriangle,
   Calculator,
+  Radio,
+  RotateCcw,
+  Square,
+  Play,
 } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -2205,9 +2210,230 @@ interface PrefillData {
   gender?: string;
 }
 
+// ─── Stroke Watch ────────────────────────────────────────────────────────────
+
+function StrokeWatch() {
+  const [taps, setTaps]           = useState<number[]>([]); // timestamps (ms)
+  const [elapsed, setElapsed]     = useState(0);            // ms since first tap
+  const [running, setRunning]     = useState(false);
+  const [flash, setFlash]         = useState(false);
+  const [targetRate, setTargetRate] = useState("");
+  const startRef  = useRef<number | null>(null);
+  const rafRef    = useRef<number | null>(null);
+  const tapsRef   = useRef<number[]>([]);
+
+  // Keep tapsRef in sync
+  useEffect(() => { tapsRef.current = taps; }, [taps]);
+
+  const tick = useCallback(() => {
+    if (startRef.current !== null) {
+      setElapsed(Date.now() - startRef.current);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const startTimer = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(tick);
+    setRunning(true);
+  }, [tick]);
+
+  const stopTimer = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    setRunning(false);
+  }, []);
+
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  const handleStroke = useCallback(async () => {
+    const now = Date.now();
+
+    // Haptics on native
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { Haptics, ImpactStyle } = await import("@capacitor/haptics");
+        await Haptics.impact({ style: ImpactStyle.Medium });
+      } catch {}
+    } else {
+      try { navigator.vibrate?.(10); } catch {}
+    }
+
+    // Flash animation
+    setFlash(true);
+    setTimeout(() => setFlash(false), 120);
+
+    // Start timer on first tap
+    if (tapsRef.current.length === 0) {
+      startRef.current = now;
+      startTimer();
+    }
+
+    setTaps(prev => [...prev, now]);
+  }, [startTimer]);
+
+  const handleStartStop = useCallback(() => {
+    if (running) {
+      stopTimer();
+    } else {
+      if (startRef.current !== null) {
+        // Resume: shift start forward so elapsed doesn't reset
+        startRef.current = Date.now() - elapsed;
+        startTimer();
+      }
+    }
+  }, [running, elapsed, startTimer, stopTimer]);
+
+  const handleReset = useCallback(() => {
+    stopTimer();
+    setTaps([]);
+    tapsRef.current = [];
+    setElapsed(0);
+    startRef.current = null;
+    setRunning(false);
+  }, [stopTimer]);
+
+  // Stroke rate: 60 / avg interval of last 4 taps
+  const rate = (() => {
+    if (taps.length < 2) return null;
+    const recent = taps.slice(-4);
+    const intervals: number[] = [];
+    for (let i = 1; i < recent.length; i++) {
+      intervals.push((recent[i] - recent[i - 1]) / 1000);
+    }
+    const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    return Math.round(60 / avg);
+  })();
+
+  // Last 10 stroke intervals in seconds
+  const intervals = (() => {
+    const recent = taps.slice(-11);
+    const result: number[] = [];
+    for (let i = 1; i < recent.length; i++) {
+      result.push((recent[i] - recent[i - 1]) / 1000);
+    }
+    return result.reverse();
+  })();
+
+  // Format elapsed: mm:ss.d
+  const fmtElapsed = (ms: number) => {
+    const total = ms / 1000;
+    const m = Math.floor(total / 60);
+    const s = Math.floor(total % 60);
+    const d = Math.floor((total % 1) * 10);
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${d}`;
+  };
+
+  // Rate color relative to target
+  const target = parseInt(targetRate);
+  const rateColor = (() => {
+    if (!rate || !target || isNaN(target)) return "text-white";
+    const diff = Math.abs(rate - target);
+    if (diff <= 1) return "text-green-400";
+    if (diff <= 2) return "text-yellow-400";
+    return "text-red-400";
+  })();
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[500px] bg-[#0a1628] rounded-2xl overflow-hidden select-none">
+      {/* Top bar: timer + target */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+        <div className="font-mono text-3xl font-bold text-white tracking-widest">
+          {fmtElapsed(elapsed)}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="Target"
+            value={targetRate}
+            onChange={e => setTargetRate(e.target.value)}
+            className="w-20 h-9 bg-white/10 border border-white/20 rounded-lg px-2 text-white text-sm text-center placeholder:text-white/40 focus:outline-none focus:border-white/50"
+            style={{ fontSize: "16px" }}
+          />
+          <span className="text-white/40 text-xs">spm</span>
+        </div>
+      </div>
+
+      {/* Control buttons */}
+      <div className="flex gap-2 px-4 pb-3 shrink-0">
+        {taps.length > 0 && (
+          <button
+            onClick={handleStartStop}
+            className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white/10 text-white text-sm font-medium active:bg-white/20 transition-colors"
+          >
+            {running ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            {running ? "Pause" : "Resume"}
+          </button>
+        )}
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white/10 text-white text-sm font-medium active:bg-white/20 transition-colors"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reset
+        </button>
+      </div>
+
+      {/* STROKE button — takes up most of the vertical space */}
+      <button
+        onPointerDown={handleStroke}
+        className="flex-1 mx-4 rounded-2xl flex items-center justify-center transition-colors active:scale-[0.99] cursor-pointer touch-manipulation"
+        style={{
+          minHeight: 250,
+          backgroundColor: flash ? "#2d6be4" : "#0a1628",
+          border: "3px solid rgba(255,255,255,0.15)",
+          transition: flash ? "none" : "background-color 0.15s ease",
+          WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <span
+          className="font-bold text-white pointer-events-none"
+          style={{ fontSize: 52, letterSpacing: "0.04em" }}
+        >
+          STROKE
+        </span>
+      </button>
+
+      {/* Rate display */}
+      <div className="shrink-0 px-4 pt-4 pb-2 text-center">
+        <div className={`font-black tabular-nums leading-none ${rateColor}`} style={{ fontSize: 80 }}>
+          {rate !== null ? rate : "—"}
+        </div>
+        <div className="text-white/50 text-sm font-medium mt-1">spm</div>
+        {target && rate && !isNaN(target) && (
+          <div className={`text-xs mt-0.5 ${rateColor}`}>
+            {rate === target ? "On target" : `${rate > target ? "+" : ""}${rate - target} spm`}
+          </div>
+        )}
+      </div>
+
+      {/* Interval history */}
+      {intervals.length > 0 && (
+        <div className="shrink-0 px-4 pb-4">
+          <div className="text-white/30 text-[10px] uppercase tracking-wider mb-1.5">Last intervals (s)</div>
+          <div className="flex flex-wrap gap-1.5">
+            {intervals.map((iv, i) => (
+              <span key={i} className="text-xs font-mono bg-white/10 text-white/70 px-2 py-0.5 rounded-md">
+                {iv.toFixed(2)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {taps.length === 0 && (
+        <div className="shrink-0 pb-4 text-center text-white/30 text-xs">
+          Tap STROKE at every catch or finish to begin
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Calculator Registry ──────────────────────────────────────────────────────
 
 type CalcId =
+  | "stroke-watch"
   | "split"
   | "predictor-2k"
   | "weight-adj"
@@ -2225,6 +2451,12 @@ const CALCS: {
   icon: React.ElementType;
   description: string;
 }[] = [
+  {
+    id: "stroke-watch",
+    label: "Stroke Watch",
+    icon: Radio,
+    description: "Tap to measure real-time stroke rate on the water",
+  },
   {
     id: "split",
     label: "Split Calculator",
@@ -2375,6 +2607,8 @@ export function CalculatorsSection({
 
   const renderCalc = () => {
     switch (activeCalc) {
+      case "stroke-watch":
+        return <StrokeWatch />;
       case "split":
         return <SplitCalc prefill={prefill} />;
       case "predictor-2k":

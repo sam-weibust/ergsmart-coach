@@ -71,11 +71,14 @@ export default function WhoopConnectSection() {
   };
 
   const syncWhoop = async () => {
+    console.log("[WhoopConnectSection] syncWhoop called, isNative:", Capacitor.isNativePlatform());
     setIsSyncing(true);
     try {
       const user = await getSessionUser();
+      console.log("[WhoopConnectSection] user:", user?.id ?? "null");
       if (!user) return;
       if (Capacitor.isNativePlatform()) {
+        console.log("[WhoopConnectSection] using nativeFetch for sync-whoop");
         await nativeFetch("sync-whoop", { user_id: user.id });
       } else {
         const res = await whoopSync({ user_id: user.id });
@@ -85,6 +88,7 @@ export default function WhoopConnectSection() {
       setLastSync(new Date().toISOString());
       toast({ title: "Whoop Synced", description: "Recovery, sleep, and strain data updated." });
     } catch (e: any) {
+      console.error("[WhoopConnectSection] syncWhoop FAILED:", e?.message, e?.stack, e);
       toast({ title: "Sync Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSyncing(false);

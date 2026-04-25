@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Send, Bot, User, Loader2, Sparkles, Trash2, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { getSessionUser } from '@/lib/getUser';
+import { edgeFetch } from "@/lib/api";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -87,22 +88,10 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
     let assistantSoFar = "";
 
     try {
-      const [{ data: { session } }, { data: { user } }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
-      ]);
+      const user = await getSessionUser();
+      if (!user?.id) throw new Error("Not logged in");
 
-      if (!session?.access_token || !user?.id) throw new Error("Not logged in");
-
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ user_id: user.id, messages: updatedMessages }),
-      });
+      const resp = await edgeFetch("chat-rowing", { user_id: user.id, messages: updatedMessages });
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Request failed" }));
@@ -163,7 +152,7 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border border-border rounded-xl overflow-hidden">
+    <div className="flex flex-col h-full bg-card border border-border rounded-xl overflow-hidden" style={{ touchAction: "manipulation" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#0a1628] shrink-0">
         <div className="flex items-center gap-2">
@@ -192,7 +181,7 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
       {!collapsed && (
         <>
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0" style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
             {!historyLoaded ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -259,7 +248,8 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
                     sendMessage();
                   }
                 }}
-                className="min-h-[38px] max-h-[100px] resize-none text-sm py-2"
+                className="min-h-[38px] max-h-[100px] resize-none py-2"
+                style={{ fontSize: "16px", touchAction: "manipulation" }}
                 rows={1}
               />
               <Button

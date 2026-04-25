@@ -70,6 +70,8 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
 		<key>NSExceptionDomains</key>
 		<dict>
 			<key>clmesnkdwohtvduzdgex.supabase.co</key>
@@ -78,12 +80,20 @@
 				<true/>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
 			</dict>
 			<key>crewsync.app</key>
 			<dict>
 				<key>NSIncludesSubdomains</key>
 				<true/>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSExceptionRequiresForwardSecrecy</key>
 				<false/>
 			</dict>
 		</dict>

@@ -60,10 +60,12 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
+    hostname: 'crewsync.app',
     allowNavigation: [
       'crewsync.app',
       '*.crewsync.app',
       'log.concept2.com',
+      'clmesnkdwohtvduzdgex.supabase.co',
       '*.supabase.co',
       '*.supabase.in',
     ],

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
+import { toDataView } from "@/lib/ble";
+import { useBle } from "@/context/BleContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +115,7 @@ export default function RaceSection() {
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      BleClient.initialize().catch(() => setBtSupported(false));
+      BleClient.initialize({ requestBluetooth: true }).catch(() => setBtSupported(false));
     } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
       setBtSupported(false);
     }
@@ -124,11 +126,9 @@ export default function RaceSection() {
   const [myName, setMyName]       = useState<string>("Athlete");
   const [my2k, setMy2k]           = useState<number | null>(null);
 
-  // BLE
-  const [ergConnected, setErgConnected]   = useState(false);
-  const [connecting, setConnecting]       = useState(false);
-  const ergDeviceRef  = useRef<any>(null);
-  const ergServerRef  = useRef<any>(null);
+  // BLE — connection managed by BleContext for cross-page persistence
+  const { ergDeviceId, ergConnected, ergConnecting, webErgDevice, connectPM5, disconnectPM5 } = useBle();
+  const ergNativeDeviceIdRef = useRef<string | null>(null); // kept in sync with context on native
   const bleDataRef    = useRef<BleData>({});
   const strokesRef    = useRef<StrokePoint[]>([]);
   const latestDistRef = useRef(0);
@@ -218,64 +218,60 @@ export default function RaceSection() {
   }, []);
 
   // ── BLE connect ───────────────────────────────────────────────
-  const resubscribeErg = async (server: any) => {
-    const svc = await server.getPrimaryService(C2_ROW_SVC);
-    try {
-      const gc = await svc.getCharacteristic(C2_GEN_STATUS);
-      await gc.startNotifications();
-      gc.addEventListener("characteristicvaluechanged", (e: any) => accumulate(parseGenStatus(e.target.value)));
-    } catch {}
-    try {
-      const ac = await svc.getCharacteristic(C2_ADD_STATUS);
-      await ac.startNotifications();
-      ac.addEventListener("characteristicvaluechanged", (e: any) => accumulate(parseAddStatus(e.target.value)));
-    } catch {}
-    try {
-      const sc = await svc.getCharacteristic(C2_STROKE_DATA);
-      await sc.startNotifications();
-      sc.addEventListener("characteristicvaluechanged", (e: any) => accumulate(parseStrokeDataBle(e.target.value)));
-    } catch {}
-  };
+
+  // Keep ergNativeDeviceIdRef in sync when context ergDeviceId changes
+  useEffect(() => {
+    ergNativeDeviceIdRef.current = ergDeviceId;
+  }, [ergDeviceId]);
+
+  // Subscribe to PM5 data whenever connected (for race data tracking)
+  useEffect(() => {
+    if (!ergConnected) return;
+    let cancelled = false;
+
+    (async () => {
+      if (Capacitor.isNativePlatform() && ergDeviceId) {
+        const tryNotify = async (service: string, char: string, handler: (dv: DataView) => void) => {
+          try {
+            await BleClient.startNotifications(ergDeviceId, service, char, (value) => {
+              if (!cancelled) handler(toDataView(value));
+            });
+          } catch {}
+        };
+        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulate(parseGenStatus(dv)));
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulate(parseAddStatus(dv)));
+        await tryNotify(C2_ROW_SVC, C2_STROKE_DATA, (dv) => accumulate(parseStrokeDataBle(dv)));
+      } else if (!Capacitor.isNativePlatform() && webErgDevice?.gatt?.connected) {
+        const server = webErgDevice.gatt;
+        const svc = await server.getPrimaryService(C2_ROW_SVC);
+        const tryNotifyWeb = async (char: string, handler: (dv: DataView) => void) => {
+          try {
+            const c = await svc.getCharacteristic(char);
+            await c.startNotifications();
+            c.addEventListener("characteristicvaluechanged", (e: any) => {
+              if (!cancelled) handler(e.target.value as DataView);
+            });
+          } catch {}
+        };
+        await tryNotifyWeb(C2_GEN_STATUS,  (dv) => accumulate(parseGenStatus(dv)));
+        await tryNotifyWeb(C2_ADD_STATUS,  (dv) => accumulate(parseAddStatus(dv)));
+        await tryNotifyWeb(C2_STROKE_DATA, (dv) => accumulate(parseStrokeDataBle(dv)));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ergConnected, ergDeviceId]);
 
   const connectErg = useCallback(async () => {
     if (!btSupported) return;
-    setConnecting(true);
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [C2_SERVICE] }, { namePrefix: "PM5" }, { namePrefix: "Concept2" }],
-        optionalServices: [C2_ROW_SVC],
-      });
-      device.addEventListener("gattserverdisconnected", async () => {
-        setErgConnected(false);
-        try {
-          const srv = await device.gatt!.connect();
-          ergServerRef.current = srv;
-          await resubscribeErg(srv);
-          setErgConnected(true);
-        } catch {
-          toast({ title: "Erg Disconnected", description: "Reconnect your PM5 to continue racing.", variant: "destructive" });
-        }
-      });
-      const server = await device.gatt!.connect();
-      ergDeviceRef.current = device;
-      ergServerRef.current = server;
-      await resubscribeErg(server);
-      setErgConnected(true);
-      toast({ title: "PM5 Connected", description: device.name || "Concept2 PM5" });
-    } catch (e: any) {
-      if (e.name !== "NotFoundError") {
-        toast({ title: "Connection Failed", description: e.message, variant: "destructive" });
-      }
-    } finally {
-      setConnecting(false);
-    }
-  }, [btSupported, accumulate]);
+    await connectPM5();
+    toast({ title: "PM5 Connected", description: "Concept2 PM5 ready to race" });
+  }, [btSupported, connectPM5, toast]);
 
   const disconnectErg = useCallback(() => {
-    try { ergDeviceRef.current?.gatt?.disconnect(); } catch {}
-    setErgConnected(false);
-    ergDeviceRef.current = null;
-  }, []);
+    disconnectPM5();
+  }, [disconnectPM5]);
 
   // ── Supabase room subscription ────────────────────────────────
   const subscribeToRoom = useCallback((roomId: string) => {
@@ -1032,9 +1028,9 @@ export default function RaceSection() {
                 Disconnect
               </Button>
             ) : (
-              <Button size="sm" onClick={connectErg} disabled={connecting || !btSupported} className="shrink-0 gap-2">
-                {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bluetooth className="h-4 w-4" />}
-                {connecting ? "Connecting…" : "Connect PM5"}
+              <Button size="sm" onClick={connectErg} disabled={ergConnecting || !btSupported} className="shrink-0 gap-2">
+                {ergConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bluetooth className="h-4 w-4" />}
+                {ergConnecting ? "Connecting…" : "Connect PM5"}
               </Button>
             )}
           </div>

@@ -1,5 +1,3 @@
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { BleProvider } from "./context/BleContext";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
@@ -51,9 +50,8 @@ function AuthBridge() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      <BleProvider>
       <TooltipProvider>
-        <Analytics />
-        <SpeedInsights />
         <Toaster />
         <Sonner />
         <AuthBridge />
@@ -75,6 +73,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </BleProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

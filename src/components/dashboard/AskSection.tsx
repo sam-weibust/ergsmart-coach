@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Send, Bot, User, Loader2, Sparkles, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { getSessionUser } from '@/lib/getUser';
+import { edgeFetch } from "@/lib/api";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -95,27 +96,10 @@ const AskSection = () => {
     let assistantSoFar = "";
 
     try {
-      const [{ data: { session } }, { data: { user } }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
-      ]);
+      const user = await getSessionUser();
+      if (!user?.id) throw new Error("Not logged in");
 
-      if (!session?.access_token || !user?.id) {
-        throw new Error("Not logged in");
-      }
-
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          messages: updatedMessages,
-        }),
-      });
+      const resp = await edgeFetch("chat-rowing", { user_id: user.id, messages: updatedMessages });
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Request failed" }));
@@ -210,12 +194,13 @@ const AskSection = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" style={{ touchAction: "manipulation" }}>
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div
             ref={scrollRef}
             className="h-[500px] overflow-y-auto p-4 space-y-4"
+            style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}
           >
             {!historyLoaded ? (
               <div className="flex items-center justify-center h-full">
@@ -334,6 +319,7 @@ const AskSection = () => {
                   }
                 }}
                 className="min-h-[44px] max-h-[120px] resize-none"
+                style={{ fontSize: "16px", touchAction: "manipulation" }}
                 rows={1}
               />
 

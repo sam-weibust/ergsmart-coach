@@ -78,9 +78,11 @@ export default function Concept2Section() {
   };
 
   const syncC2 = async () => {
+    console.log("[Concept2Section] syncC2 called");
     setIsSyncingC2(true);
     try {
       const user = await getSessionUser();
+      console.log("[Concept2Section] user:", user?.id ?? "null");
       if (!user) return;
       const res = await c2Sync({ user_id: user.id });
       const data = await res.json();
@@ -88,6 +90,7 @@ export default function Concept2Section() {
       toast({ title: "Sync Complete", description: `${data.imported ?? 0} workouts synced` });
       checkC2();
     } catch (e: any) {
+      console.error("[Concept2Section] syncC2 FAILED:", e?.message, e?.stack, e);
       toast({ title: "Sync Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSyncingC2(false);

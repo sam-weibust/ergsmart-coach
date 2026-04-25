@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
@@ -81,28 +80,31 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
         </nav>
       </div>
 
-      {/* Mobile horizontal scroll strip + main content stacked */}
-      <div className="flex flex-col flex-1 min-w-0 gap-4">
-        {/* Mobile section picker */}
-        <div className="md:hidden">
-          <Select value={activeSection} onValueChange={setActiveSection}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SIDEBAR_ITEMS.map((item) => {
-                const Icon = ICON_MAP[item.icon];
-                return (
-                  <SelectItem key={item.key} value={item.key}>
-                    <span className="flex items-center gap-2">
-                      {Icon && <Icon className="h-4 w-4" />}
-                      {item.label}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+      {/* Mobile: sticky tab bar + content */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Sticky horizontal tab bar — mobile only */}
+        <div className="md:hidden sticky top-0 z-20 bg-[#0a1628] border-b border-white/10 -mx-4 px-0 mb-4">
+          <div className="flex overflow-x-auto scrollbar-none">
+            {SIDEBAR_ITEMS.map((item) => {
+              const Icon = ICON_MAP[item.icon];
+              const isActive = activeSection === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveSection(item.key)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors",
+                    isActive
+                      ? "border-white text-white"
+                      : "border-transparent text-white/50 hover:text-white/80"
+                  )}
+                >
+                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Main content */}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
+import { toDataView } from "@/lib/ble";
+import { useBle } from "@/context/BleContext";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -124,21 +126,26 @@ const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"]
 export default function LiveErgView() {
   const { toast } = useToast();
 
+  const { ergDeviceId, ergDeviceName, ergConnected, ergConnecting, webErgDevice, connectPM5, disconnectPM5 } = useBle();
+
   // Assume supported; only set false if BleClient.initialize() actually fails on native,
   // or if Web Bluetooth is absent on web. Never block on uncertain permission state.
   const [btSupported, setBtSupported] = useState(true);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      BleClient.initialize().catch(() => setBtSupported(false));
+      BleClient.initialize({ requestBluetooth: true }).catch((err) => {
+        console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
+        setBtSupported(false);
+      });
     } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
       setBtSupported(false);
     }
   }, []);
-  const [connecting,   setConnecting]   = useState(false);
-  const [ergConnected, setErgConnected] = useState(false);
+
   const [hrConnected,  setHrConnected]  = useState(false);
   const [disconnected, setDisconnected] = useState(false); // mid-workout disconnect
+  const wasConnectedRef = useRef(false);
 
   const [data,    setData]    = useState<Partial<LiveData>>({});
   const [hrBpm,   setHrBpm]   = useState<number | null>(null);
@@ -153,9 +160,8 @@ export default function LiveErgView() {
   const [targetInput, setTargetInput] = useState("");
   const [targetCs,    setTargetCs]    = useState<number | null>(null); // centiseconds
 
-  const ergDeviceRef  = useRef<any>(null);
-  const ergServerRef  = useRef<any>(null);
-  const hrDeviceRef   = useRef<any>(null);
+  const hrDeviceRef        = useRef<any>(null);
+  const hrNativeDeviceIdRef = useRef<string | null>(null);
   const prevStateRef  = useRef<number | undefined>(undefined);
   const autoSavedRef  = useRef(false);
   const strokesRef    = useRef<StrokePoint[]>([]); // keep in sync for save
@@ -168,6 +174,57 @@ export default function LiveErgView() {
   useEffect(() => { dataRef.current = data; }, [data]);
   useEffect(() => { currentCurveRef.current = currentCurve; }, [currentCurve]);
   useEffect(() => { allCurvesRef.current = allCurves; }, [allCurves]);
+
+  // Track mid-workout disconnect via context ergConnected
+  useEffect(() => {
+    if (ergConnected) {
+      wasConnectedRef.current = true;
+      setDisconnected(false);
+    } else if (wasConnectedRef.current) {
+      setDisconnected(true);
+    }
+  }, [ergConnected]);
+
+  // Subscribe to PM5 streaming data whenever connected (native or web)
+  useEffect(() => {
+    if (!ergConnected) return;
+    let cancelled = false;
+
+    (async () => {
+      if (Capacitor.isNativePlatform() && ergDeviceId) {
+        const tryNotify = async (service: string, char: string, handler: (dv: DataView) => void) => {
+          try {
+            await BleClient.startNotifications(ergDeviceId, service, char, (value) => {
+              if (!cancelled) handler(toDataView(value));
+            });
+          } catch {}
+        };
+        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulateStroke(parseGenStatus(dv)));
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulateStroke(parseAddStatus(dv)));
+        await tryNotify(C2_ROW_SVC, C2_STROKE_DATA, (dv) => accumulateStroke(parseStrokeData(dv)));
+        try {
+          await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, C2_FORCE_CURVE, (value) => {
+            if (cancelled) return;
+            const forces = parseForceCurve(toDataView(value));
+            if (forces.length > 0) {
+              setForceCurveSupported(true);
+              setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
+              setCurrentCurve(forces);
+              setAllCurves(prev => [...prev, forces]);
+            }
+          });
+          if (!cancelled) setForceCurveSupported(true);
+        } catch {
+          if (!cancelled) setForceCurveSupported(false);
+        }
+      } else if (!Capacitor.isNativePlatform() && webErgDevice?.gatt?.connected) {
+        await resubscribeErg(webErgDevice.gatt);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ergConnected, ergDeviceId]);
 
   // Accumulate graph points on every splitPace update
   const latestDist  = useRef(0);
@@ -300,53 +357,74 @@ export default function LiveErgView() {
   };
 
   // ── BT: connect HR ───────────────────────────────────────────
-  const subscribeHR = useCallback(async (device: any) => {
-    const server  = await device.gatt!.connect();
-    const service = await server.getPrimaryService(HR_SVC);
-    const char    = await service.getCharacteristic(HR_CHAR);
-    await char.startNotifications();
-    char.addEventListener("characteristicvaluechanged", (e: any) => {
-      const dv = e.target.value as DataView;
-      const isU16 = dv.getUint8(0) & 0x1;
-      const hr = isU16 ? dv.getUint16(1, true) : dv.getUint8(1);
-      setHrBpm(hr);
-      latestHr.current = hr;
-    });
-  }, []);
-
   const connectHR = useCallback(async () => {
     if (!btSupported) return;
     try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [HR_SVC] }],
-      });
-      device.addEventListener("gattserverdisconnected", async () => {
-        setHrConnected(false);
-        setHrBpm(null);
-        try {
-          await subscribeHR(device);
-          setHrConnected(true);
-          toast({ title: "HR Monitor Reconnected" });
-        } catch {
+      if (Capacitor.isNativePlatform()) {
+        // Native: use BleClient for HR
+        const HR_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
+        const HR_CHAR_UUID    = '00002a37-0000-1000-8000-00805f9b34fb';
+        const device = await BleClient.requestDevice({ services: [HR_SERVICE_UUID] });
+        const deviceId = device.deviceId;
+        hrNativeDeviceIdRef.current = deviceId;
+        await BleClient.connect(deviceId, () => {
+          setHrConnected(false);
+          setHrBpm(null);
           toast({ title: "HR Monitor Disconnected" });
-        }
-      });
-      await subscribeHR(device);
-      hrDeviceRef.current = device;
-      setHrConnected(true);
-      toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
+        });
+        await BleClient.startNotifications(deviceId, HR_SERVICE_UUID, HR_CHAR_UUID, (value) => {
+          const dv = toDataView(value);
+          const isU16 = dv.getUint8(0) & 0x1;
+          const hr = isU16 ? dv.getUint16(1, true) : dv.getUint8(1);
+          setHrBpm(hr);
+          latestHr.current = hr;
+        });
+        setHrConnected(true);
+        toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
+      } else {
+        // Web Bluetooth
+        const device = await (navigator as any).bluetooth.requestDevice({
+          filters: [{ services: [HR_SVC] }],
+        });
+        const connectAndSubscribe = async () => {
+          const server  = await device.gatt!.connect();
+          const service = await server.getPrimaryService(HR_SVC);
+          const char    = await service.getCharacteristic(HR_CHAR);
+          await char.startNotifications();
+          char.addEventListener("characteristicvaluechanged", (e: any) => {
+            const dv = e.target.value as DataView;
+            const isU16 = dv.getUint8(0) & 0x1;
+            const hr = isU16 ? dv.getUint16(1, true) : dv.getUint8(1);
+            setHrBpm(hr);
+            latestHr.current = hr;
+          });
+        };
+        device.addEventListener("gattserverdisconnected", async () => {
+          setHrConnected(false);
+          setHrBpm(null);
+          try {
+            await connectAndSubscribe();
+            setHrConnected(true);
+            toast({ title: "HR Monitor Reconnected" });
+          } catch {
+            toast({ title: "HR Monitor Disconnected" });
+          }
+        });
+        await connectAndSubscribe();
+        hrDeviceRef.current = device;
+        setHrConnected(true);
+        toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
+      }
     } catch (e: any) {
       if (e.name !== "NotFoundError") {
         toast({ title: "HR Connect Failed", description: e.message, variant: "destructive" });
       }
     }
-  }, [btSupported, subscribeHR, toast]);
+  }, [btSupported, toast]);
 
-  // ── BT: connect Erg ─────────────────────────────────────────
+  // ── BT: connect Erg (via BleContext for cross-page persistence) ─────────────
   const connectErg = useCallback(async () => {
     if (!btSupported) return;
-    setConnecting(true);
-    setDisconnected(false);
     autoSavedRef.current = false;
     prevStateRef.current = undefined;
     setSaved(false);
@@ -354,48 +432,11 @@ export default function LiveErgView() {
     setPrevCurve([]);
     setAllCurves([]);
     setForceCurveSupported(null);
+    wasConnectedRef.current = false;
+    await connectPM5();
+  }, [btSupported, connectPM5]);
 
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { services: [C2_SERVICE] },
-          { namePrefix: "PM5" },
-          { namePrefix: "Concept2" },
-        ],
-        optionalServices: [C2_ROW_SVC],
-      });
-
-      device.addEventListener("gattserverdisconnected", async () => {
-        setErgConnected(false);
-        setDisconnected(true);
-        // Auto-reconnect
-        try {
-          const srv = await device.gatt!.connect();
-          ergServerRef.current = srv;
-          await resubscribeErg(srv);
-          setErgConnected(true);
-          setDisconnected(false);
-          toast({ title: "Erg Reconnected" });
-        } catch {
-          toast({ title: "Erg Disconnected", description: "Data preserved — tap Reconnect.", variant: "destructive" });
-        }
-      });
-
-      const server = await device.gatt!.connect();
-      ergDeviceRef.current = device;
-      ergServerRef.current = server;
-      await resubscribeErg(server);
-      setErgConnected(true);
-      toast({ title: "PM5 Connected", description: device.name || "Concept2 PM5" });
-    } catch (e: any) {
-      if (e.name !== "NotFoundError") {
-        toast({ title: "Connection Failed", description: e.message, variant: "destructive" });
-      }
-    } finally {
-      setConnecting(false);
-    }
-  }, [btSupported]);
-
+  // ── Web-only: re-subscribe GATT characteristics on an existing server ────────
   const resubscribeErg = async (server: any) => {
     const svc = await server.getPrimaryService(C2_ROW_SVC);
 
@@ -442,10 +483,9 @@ export default function LiveErgView() {
   };
 
   const disconnectErg = useCallback(() => {
-    try { ergDeviceRef.current?.gatt?.disconnect(); } catch {}
-    setErgConnected(false);
-    ergDeviceRef.current = null;
-  }, []);
+    wasConnectedRef.current = false;
+    disconnectPM5();
+  }, [disconnectPM5]);
 
   // ── Target split ─────────────────────────────────────────────
   const applyTarget = () => {
@@ -517,8 +557,8 @@ export default function LiveErgView() {
               Disconnect
             </Button>
           ) : (
-            <Button size="sm" className="h-10 text-sm px-4 min-w-[44px]" onClick={connectErg} disabled={connecting || !btSupported}>
-              {connecting
+            <Button size="sm" className="h-10 text-sm px-4 min-w-[44px]" onClick={connectErg} disabled={ergConnecting || !btSupported}>
+              {ergConnecting
                 ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Connecting…</>
                 : <><Bluetooth className="h-4 w-4 mr-1.5" />Connect PM5</>}
             </Button>
@@ -549,8 +589,8 @@ export default function LiveErgView() {
         <div className="flex items-center gap-3 px-4 py-2 bg-yellow-900/30 border-b border-yellow-700/40">
           <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />
           <span className="text-xs text-yellow-300">Connection lost — data preserved. Auto-reconnecting…</span>
-          <Button size="sm" variant="outline" className="ml-auto h-6 text-xs border-yellow-600 text-yellow-300" onClick={connectErg} disabled={connecting}>
-            {connecting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reconnect"}
+          <Button size="sm" variant="outline" className="ml-auto h-6 text-xs border-yellow-600 text-yellow-300" onClick={connectErg} disabled={ergConnecting}>
+            {ergConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reconnect"}
           </Button>
         </div>
       )}
