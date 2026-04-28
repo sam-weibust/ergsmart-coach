@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -237,12 +238,9 @@ function SplitCalc({ prefill }: { prefill: PrefillData }) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">{mode === "time" ? "Total Time (M:SS)" : "Split /500m (M:SS)"}</Label>
-            <Input
-              placeholder={mode === "time" ? "7:05.4" : "1:46.4"}
+            <TimeInput
               value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              className="font-mono"
-              inputMode="decimal"
+              onChange={setInputVal}
             />
           </div>
           <div className="space-y-1">
@@ -475,22 +473,12 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Current Best 2K (M:SS.t)</Label>
-              <Input
-                placeholder="7:05.4"
-                value={form.current_2k}
-                onChange={(e) => set("current_2k", e.target.value)}
-                className="font-mono"
-              />
+              <Label className="text-xs">Current Best 2K (M:SS)</Label>
+              <TimeInput value={form.current_2k} onChange={(v) => set("current_2k", v)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Current Best 6K Total (M:SS)</Label>
-              <Input
-                placeholder="22:30.0"
-                value={form.current_6k}
-                onChange={(e) => set("current_6k", e.target.value)}
-                className="font-mono"
-              />
+              <TimeInput value={form.current_6k} onChange={(v) => set("current_6k", v)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">60-Minute Test Distance (m)</Label>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -310,24 +311,20 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duration">Duration (mm:ss or h:mm:ss)</Label>
-              <Input
-                id="duration"
-                placeholder="e.g., 7:30.0"
+              <Label>Duration (mm:ss)</Label>
+              <TimeInput
                 value={workout.duration}
-                onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
+                onChange={(v) => setWorkout({ ...workout, duration: v })}
               />
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="split">Avg Split (/500m)</Label>
-              <Input
-                id="split"
-                placeholder="e.g., 1:52.5"
+              <Label>Avg Split (/500m)</Label>
+              <TimeInput
                 value={workout.split}
-                onChange={(e) => setWorkout({ ...workout, split: e.target.value })}
+                onChange={(v) => setWorkout({ ...workout, split: v })}
               />
             </div>
 

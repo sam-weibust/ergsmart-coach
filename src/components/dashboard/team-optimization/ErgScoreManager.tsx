@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -184,8 +185,8 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                 </div>
                 {form.test_type !== "60min" ? (
                   <div className="space-y-1">
-                    <Label>Time (mm:ss.t)</Label>
-                    <Input placeholder="e.g. 6:47.2" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+                    <Label>Time (mm:ss)</Label>
+                    <TimeInput value={form.time} onChange={v => setForm(f => ({ ...f, time: v }))} />
                   </div>
                 ) : (
                   <div className="space-y-1">

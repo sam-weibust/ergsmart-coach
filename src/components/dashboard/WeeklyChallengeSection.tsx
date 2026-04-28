@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,16 +79,7 @@ const WeeklyChallengeSection = () => {
   const generateChallenge = async () => {
     setIsGenerating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-weekly-challenge`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session?.access_token}`,
-          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ week_start: weekStart }),
-      });
+      const res = await edgeFetch("generate-weekly-challenge", { week_start: weekStart });
       if (!res.ok) throw new Error("Failed to generate challenge");
       const challengeData = await res.json().catch(() => ({}));
       queryClient.invalidateQueries({ queryKey: ["weekly-challenge", weekStart] });

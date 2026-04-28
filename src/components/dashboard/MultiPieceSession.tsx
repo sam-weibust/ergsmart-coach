@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -170,12 +171,12 @@ const MultiPieceSession = ({ profile }: MultiPieceSessionProps) => {
                 <Input type="number" placeholder="2000" value={piece.distance} onChange={e => updatePiece(piece.id, "distance", e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Time (MM:SS.t)</Label>
-                <Input placeholder="7:00.0" value={piece.time} onChange={e => updatePiece(piece.id, "time", e.target.value)} />
+                <Label className="text-xs">Time (mm:ss)</Label>
+                <TimeInput value={piece.time} onChange={v => updatePiece(piece.id, "time", v)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Avg Split</Label>
-                <Input placeholder="Auto" value={piece.avgSplit} onChange={e => updatePiece(piece.id, "avgSplit", e.target.value)} />
+                <TimeInput value={piece.avgSplit} onChange={v => updatePiece(piece.id, "avgSplit", v)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Avg HR</Label>

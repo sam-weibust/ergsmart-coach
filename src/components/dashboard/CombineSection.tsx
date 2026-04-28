@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -179,19 +180,17 @@ const CombineSection = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>2k Erg Split (m:ss)</Label>
-                  <Input
-                    placeholder="e.g. 1:45.0"
+                  <TimeInput
                     value={form.two_k_split}
-                    onChange={(e) => setForm({ ...form, two_k_split: e.target.value })}
+                    onChange={(v) => setForm({ ...form, two_k_split: v })}
                   />
                   <p className="text-xs text-muted-foreground">50% of combine score</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>6k Erg Split (m:ss)</Label>
-                  <Input
-                    placeholder="e.g. 1:55.0"
+                  <TimeInput
                     value={form.six_k_split}
-                    onChange={(e) => setForm({ ...form, six_k_split: e.target.value })}
+                    onChange={(v) => setForm({ ...form, six_k_split: v })}
                   />
                   <p className="text-xs text-muted-foreground">30% of combine score</p>
                 </div>

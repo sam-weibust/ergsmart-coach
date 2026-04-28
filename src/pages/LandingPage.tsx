@@ -16,7 +16,7 @@ interface Stats {
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "crewsync_stats_cache_v3";
+const CACHE_KEY = "crewsync_stats_cache_v5";
 const CACHE_TTL = 5 * 60 * 1000;
 
 function useStats() {
@@ -38,37 +38,37 @@ function useStats() {
 
     async function fetchStats() {
       try {
-        const [usersRes, workoutsRes, twoKRes] = await Promise.all([
+        const [usersRes, workoutsRes, metersRes, twoKRes] = await Promise.all([
           supabase.rpc("get_user_count"),
-          supabase.from("erg_workouts").select("distance", { count: "exact" }),
-          supabase.rpc("get_avg_best_2k"),
+          supabase.from("erg_scores").select("id", { count: "exact", head: true }),
+          supabase.rpc("get_total_meters"),
+          supabase.rpc("get_avg_verified_2k"),
         ]);
 
         const total_users = (usersRes.data as number) ?? 0;
         const total_workouts = workoutsRes.count ?? 0;
 
-        const distances = (workoutsRes.data ?? []).map((r) => r.distance ?? 0);
-        const totalMeters = distances.reduce((a, b) => a + b, 0);
+        const rawMeters = (metersRes.data as number) ?? 0;
         const total_meters =
-          totalMeters >= 1_000_000
-            ? `${(totalMeters / 1_000_000).toFixed(1)}M`
-            : totalMeters >= 1_000
-            ? `${(totalMeters / 1_000).toFixed(0)}K`
-            : String(totalMeters);
+          rawMeters >= 1_000_000
+            ? `${(rawMeters / 1_000_000).toFixed(1)}M`
+            : rawMeters >= 1_000
+            ? `${(rawMeters / 1_000).toFixed(0)}K`
+            : String(rawMeters);
 
         const avgSec = twoKRes.data as number | null;
         let average_2k = "---";
-        if (avgSec) {
+        if (avgSec && avgSec > 0) {
           const m = Math.floor(avgSec / 60);
           const s = Math.round(avgSec % 60);
           average_2k = `${m}:${s.toString().padStart(2, "0")}`;
         }
 
-        const data: Stats = { total_users, average_2k, total_workouts, total_meters };
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
-        setStats(data);
+        const result: Stats = { total_users, average_2k, total_workouts, total_meters };
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, ts: Date.now() }));
+        setStats(result);
       } catch {
-        setStats({ total_users: 0, average_2k: "7:30", total_workouts: 0, total_meters: "0" });
+        setStats({ total_users: 0, average_2k: "---", total_workouts: 0, total_meters: "0" });
       } finally {
         setLoading(false);
       }

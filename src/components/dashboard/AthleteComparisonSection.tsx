@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -137,16 +138,7 @@ const AthleteComparisonSection = () => {
     setLoadingAI(true);
     setAiResult(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/compare-athletes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session?.access_token}`,
-          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ athlete1: stats1, athlete2: stats2 }),
-      });
+      const res = await edgeFetch("compare-athletes", { athlete1: stats1, athlete2: stats2 });
       if (!res.ok) throw new Error("AI comparison failed");
       const data = await res.json();
       setAiResult(data);

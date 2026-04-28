@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -92,16 +93,7 @@ export const CollegeTargetsSection = () => {
     mutationFn: async (target_id: string) => {
       if (!currentUser) throw new Error("Not authenticated");
       setScoringId(target_id);
-      const session = await supabase.auth.getSession();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/score-college-targets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": API_KEY,
-          "Authorization": `Bearer ${session.data.session?.access_token}`,
-        },
-        body: JSON.stringify({ user_id: currentUser.id, target_id }),
-      });
+      const res = await edgeFetch("score-college-targets", { user_id: currentUser.id, target_id });
       if (!res.ok) throw new Error("Scoring failed");
       return res.json();
     },

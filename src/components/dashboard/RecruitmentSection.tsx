@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { supabase } from "@/integrations/supabase/client";
+import { edgeFetch } from "@/lib/api";
 import RecruitEmailSection from "./RecruitEmailSection";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -301,14 +302,8 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
     setLoading(true);
 
     try {
-      const [{ data: { session } }, { data: { user } }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getSession().then(r => ({ data: { user: r.data.session?.user ?? null } })),
-      ]);
-
-      if (!session?.access_token || !user?.id) {
-        throw new Error("Not logged in");
-      }
+      const user = await getSessionUser();
+      if (!user?.id) throw new Error("Not logged in");
 
       const localGoals = {
         current_2k_time: current2k || null,
@@ -319,23 +314,13 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
         goal_6k_time: goals?.goal_6k_time || null,
       };
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/predict-recruitment`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            profile: activeProfile,
-            goals: localGoals,
-            gpa,
-            gender,
-          }),
-        }
-      );
+      const resp = await edgeFetch("predict-recruitment", {
+        user_id: user.id,
+        profile: activeProfile,
+        goals: localGoals,
+        gpa,
+        gender,
+      });
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Request failed" }));

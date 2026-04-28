@@ -9,12 +9,12 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Bluetooth, Heart, Loader2, AlertTriangle, Save } from "lucide-react";
 import ForceCurveCanvas from "./ForceCurveCanvas";
 import { getSessionUser } from '@/lib/getUser';
-import { saveWorkoutToHealth } from "@/services/healthkit";
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
 const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
@@ -400,16 +400,6 @@ export default function LiveErgView() {
       setSaved(true);
       toast({ title: "Workout saved", description: `${dist}m in ${dur}` });
 
-      // Save to Apple Health on iOS (no-op on web/Android)
-      const savedToHealth = await saveWorkoutToHealth({
-        startDate: new Date(Date.now() - (d.elapsedTime / 100) * 1000).toISOString(),
-        durationSeconds: Math.round(d.elapsedTime / 100),
-        distanceMeters: dist,
-        calories: d.calories ?? Math.round((avgWatts ?? 0) * (d.elapsedTime / 100) * 0.00024 * 1000),
-      });
-      if (savedToHealth) {
-        toast({ title: "Saved to Apple Health", description: "Rowing workout recorded." });
-      }
     } catch (e: any) {
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
     }
@@ -654,11 +644,10 @@ export default function LiveErgView() {
       {!ergConnected && !disconnected && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 bg-gray-900 border-b border-gray-800">
           <span className="text-xs text-gray-400 shrink-0">Target split:</span>
-          <Input
+          <TimeInput
             value={targetInput}
-            onChange={e => setTargetInput(e.target.value)}
-            placeholder="e.g. 2:00"
-            className="h-7 w-20 bg-gray-800 border-gray-700 text-white text-xs font-mono"
+            onChange={setTargetInput}
+            className="h-7 bg-gray-800 border-gray-700 text-white"
           />
           <Button size="sm" variant="outline" className="h-7 text-xs border-gray-700 text-gray-300 hover:text-white" onClick={applyTarget}>
             Set

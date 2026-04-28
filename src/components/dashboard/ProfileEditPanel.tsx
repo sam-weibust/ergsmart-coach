@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeInput } from "@/components/ui/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -322,11 +323,11 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Current 2K (M:SS)</Label>
-                <Input value={current2k} onChange={(e) => setCurrent2k(e.target.value)} placeholder="7:30" />
+                <TimeInput value={current2k} onChange={setCurrent2k} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Goal 2K (M:SS)</Label>
-                <Input value={goal2k} onChange={(e) => setGoal2k(e.target.value)} placeholder="7:00" />
+                <TimeInput value={goal2k} onChange={setGoal2k} />
               </div>
             </div>
           </div>

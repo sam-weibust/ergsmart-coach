@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -141,16 +142,7 @@ export const PublicProfileSection = () => {
     if (!currentUser) return;
     setGeneratingSummary(true);
     try {
-      const session = await supabase.auth.getSession();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-athlete-summary`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": API_KEY,
-          "Authorization": `Bearer ${session.data.session?.access_token}`,
-        },
-        body: JSON.stringify({ user_id: currentUser.id }),
-      });
+      const res = await edgeFetch("generate-athlete-summary", { user_id: currentUser.id });
       const data = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || `HTTP ${res.status}`);
