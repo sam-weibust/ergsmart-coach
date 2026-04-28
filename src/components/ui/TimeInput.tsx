@@ -48,17 +48,14 @@ export function TimeInput({ value, onChange, className = "", disabled }: TimeInp
   }
 
   function handleMinutes(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/\D/g, "");
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
     setMinutes(raw);
     if (raw.length === 2) secRef.current?.focus();
   }
 
   function handleMinutesBlur() {
     minFocused.current = false;
-    let m = minutes;
-    if (m.length > 2) m = m.slice(-2);
-    setMinutes(m);
-    emit(m, seconds);
+    emit(minutes, seconds);
   }
 
   function handleSecondsFocus() {
@@ -113,8 +110,7 @@ export function TimeInput({ value, onChange, className = "", disabled }: TimeInp
       <input
         ref={minRef}
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode="text"
         placeholder="mm"
         value={minutes}
         onFocus={handleMinutesFocus}
@@ -129,8 +125,7 @@ export function TimeInput({ value, onChange, className = "", disabled }: TimeInp
       <input
         ref={secRef}
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode="text"
         placeholder="ss"
         value={seconds}
         onFocus={handleSecondsFocus}
