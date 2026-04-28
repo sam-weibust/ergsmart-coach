@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   Scale, Droplets, Moon, Sparkles, RefreshCw, Check, TrendingUp,
-  TrendingDown, Minus, Loader2, Flame, Target, ChevronRight, AlertCircle,
+  TrendingDown, Minus, Loader2, Flame, Target, ChevronRight, AlertCircle, Settings,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -143,7 +145,7 @@ function RecoveryScoreCard({
             { label: "Hydration", value: components.hydration, icon: Droplets },
             { label: "Calories", value: components.calories, icon: Flame },
             { label: "Weight", value: components.weight, icon: Scale },
-          ].map(({ label, value, icon: Icon }) => (
+          ].filter(c => c.value >= 0).map(({ label, value, icon: Icon }) => (
             <div key={label} className="text-center">
               <Icon className="h-3.5 w-3.5 mx-auto mb-1 text-white/40" />
               <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
@@ -165,10 +167,11 @@ function RecoveryScoreCard({
 
 function QuickLogRow({
   onLogWeight, onLogWater, onLogSleep,
-  weightLogged, waterLogged, sleepLogged, caloriesLogged,
+  weightLogged, waterLogged, sleepLogged, caloriesLogged, prefs,
 }: {
   onLogWeight: () => void; onLogWater: () => void; onLogSleep: () => void;
   weightLogged: boolean; waterLogged: boolean; sleepLogged: boolean; caloriesLogged: boolean;
+  prefs: RecoveryPrefs;
 }) {
   return (
     <Card>
@@ -176,14 +179,14 @@ function QuickLogRow({
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Today's Tracking</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { label: "Weight", logged: weightLogged, icon: Scale, action: onLogWeight, color: "text-blue-500" },
-            { label: "Water", logged: waterLogged, icon: Droplets, action: onLogWater, color: "text-cyan-500" },
-            { label: "Sleep", logged: sleepLogged, icon: Moon, action: onLogSleep, color: "text-purple-500" },
-            { label: "Calories", logged: caloriesLogged, icon: Flame, color: "text-orange-500", action: undefined },
-          ].map(({ label, logged, icon: Icon, action, color }) => (
+            { label: "Weight", logged: weightLogged, icon: Scale, action: prefs.track_weight ? onLogWeight : null, color: "text-blue-500", enabled: prefs.track_weight },
+            { label: "Water", logged: waterLogged, icon: Droplets, action: prefs.track_water ? onLogWater : null, color: "text-cyan-500", enabled: prefs.track_water },
+            { label: "Sleep", logged: sleepLogged, icon: Moon, action: prefs.track_sleep ? onLogSleep : null, color: "text-purple-500", enabled: prefs.track_sleep },
+            { label: "Calories", logged: caloriesLogged, icon: Flame, color: "text-orange-500", action: null, enabled: prefs.track_calories },
+          ].filter(item => item.enabled).map(({ label, logged, icon: Icon, action, color }) => (
             <button
               key={label}
-              onClick={action}
+              onClick={action ?? undefined}
               disabled={!action}
               className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all text-sm font-medium ${
                 logged
@@ -884,6 +887,72 @@ function InsightsTab({ profile }: { profile: any }) {
   );
 }
 
+// ── Preferences Panel ─────────────────────────────────────────────────────────
+
+interface RecoveryPrefs {
+  track_sleep: boolean;
+  track_calories: boolean;
+  track_water: boolean;
+  track_weight: boolean;
+}
+
+const DEFAULT_PREFS: RecoveryPrefs = {
+  track_sleep: true,
+  track_calories: true,
+  track_water: true,
+  track_weight: true,
+};
+
+function PreferencesSheet({
+  open, onClose, prefs, onSave, saving,
+}: {
+  open: boolean;
+  onClose: () => void;
+  prefs: RecoveryPrefs;
+  onSave: (p: RecoveryPrefs) => void;
+  saving: boolean;
+}) {
+  const [local, setLocal] = useState(prefs);
+  const toggle = (key: keyof RecoveryPrefs) => setLocal(p => ({ ...p, [key]: !p[key] }));
+
+  const items = [
+    { key: "track_sleep" as const, label: "Sleep", icon: Moon, desc: "Sleep duration and quality" },
+    { key: "track_water" as const, label: "Hydration", icon: Droplets, desc: "Daily water intake" },
+    { key: "track_calories" as const, label: "Calories", icon: Flame, desc: "Daily calorie intake" },
+    { key: "track_weight" as const, label: "Weight", icon: Scale, desc: "Daily weight logging" },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+      <SheetContent side="right" className="w-80">
+        <SheetHeader className="mb-4">
+          <SheetTitle>Recovery Tracking Settings</SheetTitle>
+        </SheetHeader>
+        <p className="text-sm text-muted-foreground mb-5">
+          Choose which factors to include in your recovery score. The score automatically reweights based on enabled factors.
+        </p>
+        <div className="space-y-4">
+          {items.map(({ key, label, icon: Icon, desc }) => (
+            <div key={key} className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
+              <div className="flex items-center gap-3">
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <div className="text-sm font-medium">{label}</div>
+                  <div className="text-xs text-muted-foreground">{desc}</div>
+                </div>
+              </div>
+              <Switch checked={local[key]} onCheckedChange={() => toggle(key)} />
+            </div>
+          ))}
+        </div>
+        <Button className="w-full mt-6" onClick={() => onSave(local)} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Save Preferences
+        </Button>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
@@ -891,7 +960,50 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
   const [showWeightForm, setShowWeightForm] = useState(false);
   const [showWaterForm, setShowWaterForm] = useState(false);
   const [showSleepForm, setShowSleepForm] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const isAfter9am = new Date().getHours() >= 9;
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  // ── Preferences ────────────────────────────────────────────────────────────
+
+  const { data: prefs = DEFAULT_PREFS } = useQuery({
+    queryKey: ["recovery-preferences"],
+    queryFn: async () => {
+      const user = await getSessionUser();
+      if (!user) return DEFAULT_PREFS;
+      const { data } = await (supabase as any)
+        .from("recovery_preferences")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return data ? {
+        track_sleep: data.track_sleep,
+        track_calories: data.track_calories,
+        track_water: data.track_water,
+        track_weight: data.track_weight,
+      } : DEFAULT_PREFS;
+    },
+  });
+
+  const savePrefs = useMutation({
+    mutationFn: async (p: RecoveryPrefs) => {
+      const user = await getSessionUser();
+      if (!user) throw new Error("Not signed in");
+      const { error } = await (supabase as any).from("recovery_preferences").upsert({
+        user_id: user.id,
+        ...p,
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recovery-preferences"] });
+      qc.invalidateQueries({ queryKey: ["recovery-score"] });
+      setShowSettings(false);
+      toast({ title: "Preferences saved" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const { data: recoveryData, isLoading: scoreLoading } = useQuery({
     queryKey: ["recovery-score"],
@@ -902,14 +1014,13 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const sevenAgo = nDaysAgo(7);
       const hydrationGoal = profile?.hydration_goal_ml || 2500;
 
-      const [sleepRes, waterRes, weightRes, mealsRes, foodLogRes, whoopRecRes, hkHrRes] = await Promise.all([
+      const [sleepRes, waterRes, weightRes, mealsRes, foodLogRes, whoopRecRes] = await Promise.all([
         supabase.from("sleep_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }).limit(7),
         supabase.from("water_entries").select("*").eq("user_id", user.id).gte("date", sevenAgo).order("date", { ascending: false }),
         supabase.from("weight_entries").select("*").eq("user_id", user.id).order("date", { ascending: false }).limit(14),
         supabase.from("meal_plans").select("calories,meal_date").eq("user_id", user.id).gte("meal_date", sevenAgo),
         (supabase.from("food_log") as any).select("calories,date").eq("user_id", user.id).gte("date", sevenAgo),
         supabase.from("whoop_recovery").select("recovery_score,hrv_rmssd,sleep_performance_percentage").eq("user_id", user.id).eq("date", t).maybeSingle(),
-        (supabase.from("healthkit_heart_rate") as any).select("resting_heart_rate,hrv_ms,heart_rate_average").eq("user_id", user.id).eq("date", t).maybeSingle(),
       ]);
 
       const sleepEntries = sleepRes.data || [];
@@ -918,13 +1029,11 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const meals = mealsRes.data || [];
       const foodLogEntries = foodLogRes.data || [];
       const whoopToday = whoopRecRes.data ?? null;
-      const hkHrToday = hkHrRes.data ?? null;
 
-      // Sleep component (40 pts)
+      // Sleep component (40 pts base)
       const todaySleepEntry = sleepEntries.find(e => e.date === t);
       let sleepComponent = 0;
       if (whoopToday?.recovery_score != null) {
-        // Whoop recovery score is 0-100, use directly as sleep/recovery component
         sleepComponent = whoopToday.recovery_score;
       } else if (todaySleepEntry) {
         const durationScore = Math.min(1, todaySleepEntry.duration_hours / 8) * 0.7;
@@ -938,7 +1047,7 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       const todayWater = waterByDate[t] || 0;
       const hydrationComponent = Math.min(100, (todayWater / hydrationGoal) * 100);
 
-      // Calorie component — combine meal_plans + food_log
+      // Calorie component
       const mealsByDate: Record<string, number> = {};
       for (const m of meals) mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
       for (const f of foodLogEntries) mealsByDate[f.date] = (mealsByDate[f.date] || 0) + (f.calories || 0);
@@ -968,56 +1077,93 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
         else weightComponent = 55;
       }
 
-      // HealthKit heart rate as fallback when Whoop not connected
       const usingWhoop = whoopToday?.recovery_score != null;
-      const usingHealthKit = !usingWhoop && (hkHrToday?.resting_heart_rate != null || hkHrToday?.hrv_ms != null);
-
-      // If HealthKit RHR available, use it to modulate sleep component
-      if (usingHealthKit && hkHrToday?.resting_heart_rate && !usingWhoop) {
-        // Lower RHR = better recovery; 50bpm = excellent, 70bpm = baseline
-        const rhrScore = Math.max(0, Math.min(100, 100 - (hkHrToday.resting_heart_rate - 50) * 2));
-        sleepComponent = todaySleepEntry
-          ? (sleepComponent * 0.6 + rhrScore * 0.4)
-          : rhrScore * 0.7;
-      }
-
-      const score: number | null = (usingWhoop || usingHealthKit || todaySleepEntry)
-        ? usingWhoop
-          ? sleepComponent * 0.6 + hydrationComponent * 0.2 + calorieComponent * 0.1 + weightComponent * 0.1
-          : sleepComponent * 0.4 + hydrationComponent * 0.2 + calorieComponent * 0.2 + weightComponent * 0.2
-        : null;
 
       const todayWeight = weightEntries.some(e => e.date === t);
       const todayWaterLogged = (waterByDate[t] || 0) > 0;
-      const todaySleep = !!todaySleepEntry || usingWhoop || usingHealthKit;
+      const todaySleep = !!todaySleepEntry || usingWhoop;
       const todayCalories = (mealsByDate[t] || 0) > 0;
       const checkInComplete = todaySleep && todayWaterLogged && todayWeight;
 
       return {
-        score, sleepComponent, hydrationComponent, calorieComponent, weightComponent,
+        sleepComponent, hydrationComponent, calorieComponent, weightComponent,
         todayWeight, todayWaterLogged, todaySleep, todayCalories, checkInComplete,
-        usingWhoop, usingHealthKit,
+        usingWhoop,
         whoopHrv: whoopToday?.hrv_rmssd ?? null,
-        hkRhr: hkHrToday?.resting_heart_rate ?? null,
-        hkHrv: hkHrToday?.hrv_ms ?? null,
       };
     },
   });
 
+  // ── Adaptive score calculation using preferences ───────────────────────────
+
+  const adaptedScore = useMemo(() => {
+    if (!recoveryData) return null;
+    const { sleepComponent, hydrationComponent, calorieComponent, weightComponent, usingWhoop, todaySleep } = recoveryData;
+    if (!todaySleep) return null;
+
+    // Base weights per factor
+    const BASE = { sleep: 40, hydration: 20, calories: 20, weight: 20 };
+    const components = {
+      sleep: sleepComponent,
+      hydration: hydrationComponent,
+      calories: calorieComponent,
+      weight: weightComponent,
+    };
+    const enabled: Record<string, boolean> = {
+      sleep: prefs.track_sleep,
+      hydration: prefs.track_water,
+      calories: prefs.track_calories,
+      weight: prefs.track_weight,
+    };
+
+    const totalWeight = Object.entries(BASE).reduce((sum, [k, w]) => enabled[k] ? sum + w : sum, 0);
+    if (totalWeight === 0) return null;
+
+    if (usingWhoop) {
+      // Whoop-powered: sleep gets 60% base, reweight others proportionally
+      const whoopWeight = 60;
+      const remaining = { hydration: 20, calories: 10, weight: 10 };
+      const enabledRemaining = Object.entries(remaining).filter(([k]) => enabled[k]);
+      const remTotal = enabledRemaining.reduce((s, [, w]) => s + w, 0) || 1;
+      return sleepComponent * (whoopWeight / 100) +
+        (enabled.hydration ? hydrationComponent * (remaining.hydration / 100) : 0) +
+        (enabled.calories ? calorieComponent * (remaining.calories / 100) : 0) +
+        (enabled.weight ? weightComponent * (remaining.weight / 100) : 0);
+    }
+
+    return Object.entries(components).reduce((sum, [k, v]) => {
+      if (!enabled[k]) return sum;
+      return sum + v * (BASE[k as keyof typeof BASE] / totalWeight);
+    }, 0);
+  }, [recoveryData, prefs]);
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Recovery</h2>
-        <p className="text-sm text-muted-foreground">Track weight, hydration, sleep, and performance</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Recovery</h2>
+          <p className="text-sm text-muted-foreground">Track weight, hydration, sleep, and performance</p>
+        </div>
+        <Button size="icon" variant="ghost" onClick={() => setShowSettings(true)} className="shrink-0">
+          <Settings className="h-4 w-4" />
+        </Button>
       </div>
 
+      <PreferencesSheet
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        prefs={prefs}
+        onSave={p => savePrefs.mutate(p)}
+        saving={savePrefs.isPending}
+      />
+
       <RecoveryScoreCard
-        score={recoveryData?.score ?? null}
+        score={adaptedScore ?? null}
         components={{
-          sleep: recoveryData?.sleepComponent ?? 0,
-          hydration: recoveryData?.hydrationComponent ?? 0,
-          calories: recoveryData?.calorieComponent ?? 0,
-          weight: recoveryData?.weightComponent ?? 0,
+          sleep: prefs.track_sleep ? (recoveryData?.sleepComponent ?? 0) : -1,
+          hydration: prefs.track_water ? (recoveryData?.hydrationComponent ?? 0) : -1,
+          calories: prefs.track_calories ? (recoveryData?.calorieComponent ?? 0) : -1,
+          weight: prefs.track_weight ? (recoveryData?.weightComponent ?? 0) : -1,
         }}
         loading={scoreLoading}
         onLogSleep={() => { setActiveTab("sleep"); setShowSleepForm(true); }}
@@ -1030,18 +1176,6 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
             Powered by Whoop
           </span>
           <span>— recovery score uses Whoop data (HRV, sleep, resting HR)</span>
-        </div>
-      )}
-      {recoveryData?.usingHealthKit && !recoveryData?.usingWhoop && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-          <span className="inline-flex items-center gap-1 text-[#FF3B30] font-medium">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline">
-              <rect width="24" height="24" rx="6" fill="#FF3B30" />
-              <path d="M12 18.5C12 18.5 5 13.5 5 9.5C5 7.567 6.567 6 8.5 6C9.668 6 10.703 6.591 11.333 7.5L12 8.5L12.667 7.5C13.297 6.591 14.332 6 15.5 6C17.433 6 19 7.567 19 9.5C19 13.5 12 18.5 12 18.5Z" fill="white"/>
-            </svg>
-            Apple Health
-          </span>
-          <span>— recovery uses resting HR{recoveryData.hkRhr ? ` (${recoveryData.hkRhr} bpm)` : ""}{recoveryData.hkHrv ? `, HRV ${recoveryData.hkHrv}ms` : ""}</span>
         </div>
       )}
 
@@ -1061,13 +1195,14 @@ export default function RecoveryDashboard({ profile }: RecoveryDashboardProps) {
       )}
 
       <QuickLogRow
-        onLogWeight={() => { setActiveTab("weight"); setShowWeightForm(true); }}
-        onLogWater={() => { setActiveTab("water"); setShowWaterForm(true); }}
-        onLogSleep={() => { setActiveTab("sleep"); setShowSleepForm(true); }}
+        onLogWeight={prefs.track_weight ? () => { setActiveTab("weight"); setShowWeightForm(true); } : undefined as any}
+        onLogWater={prefs.track_water ? () => { setActiveTab("water"); setShowWaterForm(true); } : undefined as any}
+        onLogSleep={prefs.track_sleep ? () => { setActiveTab("sleep"); setShowSleepForm(true); } : undefined as any}
         weightLogged={recoveryData?.todayWeight ?? false}
         waterLogged={recoveryData?.todayWaterLogged ?? false}
         sleepLogged={recoveryData?.todaySleep ?? false}
         caloriesLogged={recoveryData?.todayCalories ?? false}
+        prefs={prefs}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

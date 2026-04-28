@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Capacitor } from "@capacitor/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { getSessionUser } from "@/lib/getUser";
 import { getLocalDate } from "@/lib/dateUtils";
 import {
   Search, Star, Clock, Plus, Trash2, ScanBarcode, X, Loader2,
-  Flame, ChefHat, BarChart3, CheckCircle2, XCircle, Trophy,
+  Flame, ChefHat, BarChart3, CheckCircle2, XCircle, Trophy, Camera,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip as RechartTooltip, ResponsiveContainer,
@@ -267,9 +268,10 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     food_name: "", calories_per_100g: "", protein_per_100g: "", carbs_per_100g: "", fat_per_100g: "",
     default_serving_size: "100", default_serving_unit: "g",
   });
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [scannerActive, setScannerActive] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [barcodeQuery, setBarcodeQuery] = useState("");
   const [savedSummary, setSavedSummary] = useState<{
     calories: number; protein: number; carbs: number; fat: number;
@@ -632,71 +634,120 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  // Barcode scanner
-  const stopScanner = useCallback(async () => {
-    if (html5QrRef.current) {
-      try { if (html5QrRef.current.getState() === 2) await html5QrRef.current.stop(); } catch {}
-      try { html5QrRef.current.clear(); } catch {}
-      html5QrRef.current = null;
+  // ── Barcode / Camera scanner ───────────────────────────────────────────────
+
+  const stopWebCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
     setScannerActive(false);
   }, []);
 
-  const lookupBarcode = useCallback(async (code: string) => {
+  /** Send base64 image to scan-barcode edge function and handle result */
+  const handleScanResult = useCallback(async (base64: string, mimeType = "image/jpeg") => {
+    setScanning(true);
     try {
-      const off = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
-      const data = await off.json();
-      if (data.status === 1 && data.product) {
-        const p = data.product;
-        const n = p.nutriments ?? {};
+      const { data, error } = await supabase.functions.invoke("scan-barcode", {
+        body: { imageBase64: base64, mimeType },
+      });
+      if (error) throw error;
+      if (data?.type === "food") {
         const food: FoodResult = {
-          fdcId: `barcode_${code}`,
-          name: p.product_name || `Barcode ${code}`,
-          brand: p.brands || null,
-          calories_per_100g: Math.round(n["energy-kcal_100g"] || 0),
-          calories_per_serving: Math.round(n["energy-kcal_serving"] || n["energy-kcal_100g"] || 0),
-          serving_size: p.serving_quantity || 100,
-          serving_unit: "g",
-          protein: Math.round((n.proteins_serving ?? n.proteins_100g ?? 0) * 10) / 10,
-          carbs: Math.round((n.carbohydrates_serving ?? n.carbohydrates_100g ?? 0) * 10) / 10,
-          fat: Math.round((n.fat_serving ?? n.fat_100g ?? 0) * 10) / 10,
-          fiber: Math.round((n.fiber_serving ?? n.fiber_100g ?? 0) * 10) / 10,
-          sugar: Math.round((n.sugars_serving ?? n.sugars_100g ?? 0) * 10) / 10,
+          fdcId: data.barcode ? `barcode_${data.barcode}` : `scan_${Date.now()}`,
+          name: data.name,
+          brand: data.brand ?? null,
+          calories_per_100g: data.calories,
+          calories_per_serving: data.calories,
+          serving_size: typeof data.serving_size === "number" ? data.serving_size : 1,
+          serving_unit: typeof data.serving_size === "string" ? data.serving_size : "serving",
+          protein: data.protein ?? 0,
+          carbs: data.carbs ?? 0,
+          fat: data.fat ?? 0,
+          fiber: 0,
+          sugar: 0,
         };
         setSelectedFood(food);
-        toast({ title: "Product found!", description: food.name });
+        toast({ title: "Food found!", description: food.name });
+        stopWebCamera();
       } else {
-        toast({ title: "Not found", description: "Try searching by name.", variant: "destructive" });
+        toast({
+          title: "Nothing detected",
+          description: data?.message ?? "Try again or enter manually.",
+          variant: "destructive",
+        });
       }
-    } catch {
-      toast({ title: "Lookup failed", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Scan failed", description: e.message, variant: "destructive" });
     } finally {
-      await stopScanner();
+      setScanning(false);
     }
-  }, [stopScanner, toast]);
+  }, [stopWebCamera, toast]);
 
-  const startScanner = useCallback(async () => {
-    if (scannerActive) { await stopScanner(); return; }
+  /** iOS native: use Capacitor Camera to take a photo */
+  const startNativeScan = useCallback(async () => {
+    setScanning(true);
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      await new Promise(r => setTimeout(r, 100));
-      if (!scannerRef.current) return;
-      const id = "food-barcode-scanner";
-      scannerRef.current.id = id;
-      const scanner = new Html5Qrcode(id);
-      html5QrRef.current = scanner;
+      const { Camera, CameraSource, CameraResultType } = await import("@capacitor/camera");
+      const photo = await Camera.getPhoto({
+        source: CameraSource.Camera,
+        resultType: CameraResultType.DataUrl,
+        quality: 80,
+        width: 1280,
+      });
+      if (!photo.dataUrl) throw new Error("No image captured");
+      // dataUrl is "data:image/jpeg;base64,..." — strip prefix
+      const [header, base64] = photo.dataUrl.split(",");
+      const mimeType = header.match(/data:([^;]+)/)?.[1] ?? "image/jpeg";
+      await handleScanResult(base64, mimeType);
+    } catch (e: any) {
+      if (e?.message !== "User cancelled photos app") {
+        toast({ title: "Camera failed", description: e?.message, variant: "destructive" });
+      }
+      setScanning(false);
+    }
+  }, [handleScanResult, toast]);
+
+  /** Web: open getUserMedia camera viewfinder */
+  const startWebCamera = useCallback(async () => {
+    if (scannerActive) { stopWebCamera(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 } },
+      });
+      streamRef.current = stream;
       setScannerActive(true);
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 100 } },
-        lookupBarcode,
-        () => {}
-      );
+      // Attach stream to video element after state update
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 50);
     } catch {
-      setScannerActive(false);
       toast({ title: "Camera unavailable", variant: "destructive" });
     }
-  }, [scannerActive, stopScanner, lookupBarcode, toast]);
+  }, [scannerActive, stopWebCamera, toast]);
+
+  /** Web: capture current video frame and send for scanning */
+  const captureWebFrame = useCallback(async () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const base64 = dataUrl.split(",")[1];
+    stopWebCamera();
+    await handleScanResult(base64, "image/jpeg");
+  }, [stopWebCamera, handleScanResult]);
+
+  const isNative = Capacitor.isNativePlatform();
+  const handleScanButton = useCallback(() => {
+    if (isNative) {
+      startNativeScan();
+    } else {
+      startWebCamera();
+    }
+  }, [isNative, startNativeScan, startWebCamera]);
 
   const isFavorited = (name: string) => favorites.some((f: any) => f.food_name === name);
 
@@ -801,16 +852,47 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
                   variant={scannerActive ? "destructive" : "outline"}
                   size="icon"
                   className="h-9 w-9 shrink-0"
-                  onClick={startScanner}
-                  title="Scan barcode"
+                  onClick={handleScanButton}
+                  disabled={scanning}
+                  title={isNative ? "Scan with camera" : "Open camera scanner"}
                 >
-                  {scannerActive ? <X className="h-4 w-4" /> : <ScanBarcode className="h-4 w-4" />}
+                  {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : scannerActive ? <X className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
                 </Button>
               </div>
 
-              {scannerActive && (
-                <div ref={scannerRef} className="w-full rounded-lg overflow-hidden border" />
+              {/* Web camera viewfinder */}
+              {scannerActive && !isNative && (
+                <div className="relative rounded-lg overflow-hidden border bg-black">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full max-h-48 object-cover"
+                  />
+                  {/* Scanning frame overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-48 h-32 border-2 border-white rounded-lg opacity-80" style={{
+                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+                    }} />
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 flex gap-2 p-3 bg-black/60">
+                    <Button
+                      size="sm"
+                      className="flex-1 h-9"
+                      onClick={captureWebFrame}
+                      disabled={scanning}
+                    >
+                      {scanning ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Camera className="h-4 w-4 mr-1" />}
+                      {scanning ? "Scanning..." : "Capture"}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-9 bg-transparent text-white border-white/40" onClick={stopWebCamera}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
               )}
+
               {!scannerActive && (
                 <div className="flex gap-2">
                   <Input
@@ -818,11 +900,45 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
                     placeholder="Or type barcode number..."
                     value={barcodeQuery}
                     onChange={e => setBarcodeQuery(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && barcodeQuery && lookupBarcode(barcodeQuery)}
+                    onKeyDown={e => e.key === "Enter" && barcodeQuery && handleScanResult(barcodeQuery)}
                   />
                   {barcodeQuery && (
-                    <Button size="sm" className="h-8 text-xs px-2" onClick={() => lookupBarcode(barcodeQuery)}>
-                      Look up
+                    <Button size="sm" className="h-8 text-xs px-2" onClick={async () => {
+                      // Direct barcode number lookup via Open Food Facts
+                      const code = barcodeQuery.replace(/\D/g, "");
+                      if (!code) return;
+                      setScanning(true);
+                      try {
+                        const off = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+                        const data = await off.json();
+                        if (data.status === 1 && data.product) {
+                          const p = data.product;
+                          const n = p.nutriments ?? {};
+                          const food: FoodResult = {
+                            fdcId: `barcode_${code}`,
+                            name: p.product_name || `Product ${code}`,
+                            brand: p.brands || null,
+                            calories_per_100g: Math.round(n["energy-kcal_100g"] || 0),
+                            calories_per_serving: Math.round(n["energy-kcal_serving"] || n["energy-kcal_100g"] || 0),
+                            serving_size: p.serving_quantity || 100,
+                            serving_unit: "g",
+                            protein: Math.round((n.proteins_serving ?? n.proteins_100g ?? 0) * 10) / 10,
+                            carbs: Math.round((n.carbohydrates_serving ?? n.carbohydrates_100g ?? 0) * 10) / 10,
+                            fat: Math.round((n.fat_serving ?? n.fat_100g ?? 0) * 10) / 10,
+                            fiber: Math.round((n.fiber_serving ?? n.fiber_100g ?? 0) * 10) / 10,
+                            sugar: Math.round((n.sugars_serving ?? n.sugars_100g ?? 0) * 10) / 10,
+                          };
+                          setSelectedFood(food);
+                          setBarcodeQuery("");
+                          toast({ title: "Found!", description: food.name });
+                        } else {
+                          toast({ title: "Not found", description: "Try searching by name.", variant: "destructive" });
+                        }
+                      } catch {
+                        toast({ title: "Lookup failed", variant: "destructive" });
+                      } finally { setScanning(false); }
+                    }}>
+                      {scanning ? <Loader2 className="h-3 w-3 animate-spin" /> : "Look up"}
                     </Button>
                   )}
                 </div>

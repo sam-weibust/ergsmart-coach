@@ -106,11 +106,14 @@ import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
 import Concept2Section from "@/components/dashboard/Concept2Section";
 import WhoopConnectSection from "@/components/dashboard/WhoopConnectSection";
+import HealthKitConnect from "@/components/dashboard/HealthKitConnect";
 import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 import { getSessionUser } from '@/lib/getUser';
 import { getLocalDate } from "@/lib/dateUtils";
+import { AppStoreBanner } from "@/components/AppStoreBanner";
+import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -146,6 +149,7 @@ const NAV_CONFIG: NavSection[] = [
       { id: "history", label: "History", description: "Review your past workouts", icon: History },
       { id: "erg", label: "Erg Workout", description: "Log an erg session", icon: Activity },
       { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
+      { id: "cross-training", label: "Cross Training", description: "Log runs, rides, and swims", icon: Activity },
       { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
       { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
     ],
@@ -646,6 +650,8 @@ const Dashboard = () => {
           );
         case "strength":
           return <MultiSetStrengthForm profile={profile} />;
+        case "cross-training":
+          return <CrossTrainingSection profile={profile} />;
         case "nutrition":
           return <MealPlanTab profile={profile} />;
         case "recovery":
@@ -801,6 +807,7 @@ const Dashboard = () => {
               </div>
               <Concept2Section />
               <WhoopConnectSection />
+              <HealthKitConnect />
             </div>
           );
         case "billing":
@@ -827,6 +834,7 @@ const Dashboard = () => {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
+      <AppStoreBanner />
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="border-b border-white/10 bg-[#0a1628] z-20 shadow-sm shrink-0">
         <div className="px-4 py-3 flex justify-between items-center">
