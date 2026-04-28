@@ -2,9 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BleProvider } from "./context/BleContext";
 import LandingPage from "./pages/LandingPage";
@@ -48,6 +48,31 @@ function AuthBridge() {
   return null;
 }
 
+// Guards the root "/" route — checks session (fast localStorage read) before
+// rendering anything. Logged-in users are redirected immediately to /dashboard
+// without the LandingPage ever rendering. Shows a plain navy screen while
+// the check runs so there is no white flash.
+function RootRoute() {
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        setChecking(false);
+      }
+    });
+  }, [navigate]);
+
+  if (checking) {
+    return <div style={{ position: "fixed", inset: 0, background: "#0a1628" }} />;
+  }
+
+  return <LandingPage />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
@@ -58,7 +83,7 @@ const App = () => (
         <AuthBridge />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/" element={<RootRoute />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/athlete/:username" element={<AthleteProfile />} />

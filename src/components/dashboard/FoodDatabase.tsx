@@ -12,13 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getSessionUser } from "@/lib/getUser";
+import { getLocalDate } from "@/lib/dateUtils";
 import {
   Search, Star, Clock, Plus, Trash2, ScanBarcode, X, Loader2,
-  Flame, ChefHat, BarChart3,
+  Flame, ChefHat, BarChart3, CheckCircle2, XCircle, Trophy,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip as RechartTooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine,
 } from "recharts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -153,11 +154,6 @@ const MACRO_COLORS = { protein: "#ef4444", carbs: "#f59e0b", fat: "#3b82f6" };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function scaledNutrients(food: FoodResult, qty: number) {
   const factor = qty;
   return {
@@ -168,6 +164,16 @@ function scaledNutrients(food: FoodResult, qty: number) {
     fiber: Math.round(food.fiber * factor * 10) / 10,
     sugar: Math.round(food.sugar * factor * 10) / 10,
   };
+}
+
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
+}
+
+function hitGoal(actual: number, goal: number) {
+  return goal > 0 && actual >= goal * 0.9;
 }
 
 // ── Add food dialog ───────────────────────────────────────────────────────────
@@ -265,7 +271,17 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
   const html5QrRef = useRef<any>(null);
   const [scannerActive, setScannerActive] = useState(false);
   const [barcodeQuery, setBarcodeQuery] = useState("");
-  const today = todayStr();
+  const [savedSummary, setSavedSummary] = useState<{
+    calories: number; protein: number; carbs: number; fat: number;
+    goalCal: number; goalPro: number; goalCarb: number; goalFat: number;
+  } | null>(null);
+
+  const today = getLocalDate();
+
+  // Derived macro goals
+  const proteinGoal = Math.round(calorieTarget * 0.25 / 4);
+  const carbsGoal = Math.round(calorieTarget * 0.5 / 4);
+  const fatGoal = Math.round(calorieTarget * 0.25 / 9);
 
   // Debounce search
   useEffect(() => {
@@ -273,7 +289,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Fetch today's log
+  // Fetch today's log — filtered by local date
   const { data: todayLog = [] } = useQuery({
     queryKey: ["food-log-today", today],
     queryFn: async () => {
@@ -341,31 +357,53 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     },
   });
 
-  // Weekly calorie data
-  const { data: weeklyData = [] } = useQuery({
-    queryKey: ["food-log-weekly"],
+  // 14-day macro data for charts
+  const { data: fourteenDayData = [] } = useQuery({
+    queryKey: ["food-log-14day", calorieTarget],
     queryFn: async () => {
       const user = await getSessionUser();
       if (!user) return [];
-      const d = new Date();
-      const days = Array.from({ length: 7 }, (_, i) => {
-        const dd = new Date(d);
-        dd.setDate(d.getDate() - (6 - i));
-        return `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, "0")}-${String(dd.getDate()).padStart(2, "0")}`;
+      const days = Array.from({ length: 14 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (13 - i));
+        return getLocalDate(d);
       });
       const { data } = await supabase
         .from("food_log")
-        .select("date, calories")
+        .select("date, calories, protein, carbs, fat")
         .eq("user_id", user.id)
         .in("date", days);
-      const byDate: Record<string, number> = {};
-      for (const d of days) byDate[d] = 0;
-      for (const row of (data ?? [])) byDate[row.date] = (byDate[row.date] || 0) + Number(row.calories);
+      const byDate: Record<string, { calories: number; protein: number; carbs: number; fat: number }> = {};
+      for (const d of days) byDate[d] = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      for (const row of (data ?? [])) {
+        byDate[row.date].calories += Number(row.calories);
+        byDate[row.date].protein += Number(row.protein);
+        byDate[row.date].carbs += Number(row.carbs);
+        byDate[row.date].fat += Number(row.fat);
+      }
       return days.map(d => ({
-        label: new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }),
-        calories: Math.round(byDate[d]),
-        goal: calorieTarget,
+        label: new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric" }),
+        calories: Math.round(byDate[d].calories),
+        protein: Math.round(byDate[d].protein),
+        carbs: Math.round(byDate[d].carbs),
+        fat: Math.round(byDate[d].fat),
       }));
+    },
+  });
+
+  // Meal history from daily_nutrition_summary
+  const { data: historyData = [] } = useQuery({
+    queryKey: ["nutrition-history"],
+    queryFn: async () => {
+      const user = await getSessionUser();
+      if (!user) return [];
+      const { data } = await (supabase as any)
+        .from("daily_nutrition_summary")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false })
+        .limit(30);
+      return data ?? [];
     },
   });
 
@@ -434,7 +472,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["food-log-today"] });
       qc.invalidateQueries({ queryKey: ["food-log-recent"] });
-      qc.invalidateQueries({ queryKey: ["food-log-weekly"] });
+      qc.invalidateQueries({ queryKey: ["food-log-14day"] });
       setSelectedFood(null);
       toast({ title: "Logged!" });
     },
@@ -467,7 +505,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["food-log-today"] });
-      qc.invalidateQueries({ queryKey: ["food-log-weekly"] });
+      qc.invalidateQueries({ queryKey: ["food-log-14day"] });
       toast({ title: "Re-added!" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -480,7 +518,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["food-log-today"] });
-      qc.invalidateQueries({ queryKey: ["food-log-weekly"] });
+      qc.invalidateQueries({ queryKey: ["food-log-14day"] });
     },
   });
 
@@ -550,8 +588,46 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["food-log-today"] });
-      qc.invalidateQueries({ queryKey: ["food-log-weekly"] });
+      qc.invalidateQueries({ queryKey: ["food-log-14day"] });
       toast({ title: "Template added to today's log!" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const saveAndFinish = useMutation({
+    mutationFn: async () => {
+      const user = await getSessionUser();
+      if (!user) throw new Error("Not signed in");
+      const { error } = await (supabase as any)
+        .from("daily_nutrition_summary")
+        .upsert({
+          user_id: user.id,
+          date: today,
+          total_calories: Math.round(totals.calories),
+          total_protein: Math.round(totals.protein),
+          total_carbs: Math.round(totals.carbs),
+          total_fat: Math.round(totals.fat),
+          goal_calories: calorieTarget,
+          goal_protein: proteinGoal,
+          goal_carbs: carbsGoal,
+          goal_fat: fatGoal,
+          completed: true,
+        }, { onConflict: "user_id,date" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setSavedSummary({
+        calories: Math.round(totals.calories),
+        protein: Math.round(totals.protein),
+        carbs: Math.round(totals.carbs),
+        fat: Math.round(totals.fat),
+        goalCal: calorieTarget,
+        goalPro: proteinGoal,
+        goalCarb: carbsGoal,
+        goalFat: fatGoal,
+      });
+      qc.invalidateQueries({ queryKey: ["nutrition-history"] });
+      toast({ title: "Day saved!" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -568,7 +644,6 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
 
   const lookupBarcode = useCallback(async (code: string) => {
     try {
-      // Try USDA first via search, then OpenFoodFacts
       const off = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
       const data = await off.json();
       if (data.status === 1 && data.product) {
@@ -675,9 +750,9 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
           <Progress value={Math.min((totals.calories / calorieTarget) * 100, 100)} className="h-2" />
           <div className="grid grid-cols-3 gap-2 text-center text-sm">
             {[
-              { label: "Protein", val: totals.protein, color: "text-red-500", goal: Math.round(calorieTarget * 0.25 / 4) },
-              { label: "Carbs", val: totals.carbs, color: "text-amber-500", goal: Math.round(calorieTarget * 0.5 / 4) },
-              { label: "Fat", val: totals.fat, color: "text-blue-500", goal: Math.round(calorieTarget * 0.25 / 9) },
+              { label: "Protein", val: totals.protein, color: "text-red-500", goal: proteinGoal },
+              { label: "Carbs", val: totals.carbs, color: "text-amber-500", goal: carbsGoal },
+              { label: "Fat", val: totals.fat, color: "text-blue-500", goal: fatGoal },
             ].map(m => (
               <div key={m.label} className="bg-muted rounded-lg p-2">
                 <div className={`font-bold ${m.color}`}>{Math.round(m.val)}g</div>
@@ -733,7 +808,6 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
                 </Button>
               </div>
 
-              {/* Barcode scanner */}
               {scannerActive && (
                 <div ref={scannerRef} className="w-full rounded-lg overflow-hidden border" />
               )}
@@ -985,56 +1059,165 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
               </div>
             </div>
           )}
+
+          {/* Save and Finish */}
+          {todayLog.length > 0 && !savedSummary && (
+            <Button
+              className="w-full mt-2"
+              onClick={() => saveAndFinish.mutate()}
+              disabled={saveAndFinish.isPending}
+            >
+              {saveAndFinish.isPending
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                : <><Trophy className="h-4 w-4 mr-2" />Save and Finish Day</>}
+            </Button>
+          )}
+
+          {/* Post-save summary */}
+          {savedSummary && (
+            <div className="mt-3 p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 space-y-3">
+              <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400">
+                <Trophy className="h-4 w-4" />
+                Day Complete!
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                {[
+                  { label: "Calories", actual: savedSummary.calories, goal: savedSummary.goalCal, unit: "kcal", color: "text-foreground" },
+                  { label: "Protein", actual: savedSummary.protein, goal: savedSummary.goalPro, unit: "g", color: "text-red-500" },
+                  { label: "Carbs", actual: savedSummary.carbs, goal: savedSummary.goalCarb, unit: "g", color: "text-amber-500" },
+                  { label: "Fat", actual: savedSummary.fat, goal: savedSummary.goalFat, unit: "g", color: "text-blue-500" },
+                ].map(({ label, actual, goal, unit, color }) => (
+                  <div key={label} className="bg-background rounded-lg p-2">
+                    <div className={`font-bold text-sm ${color}`}>{actual}{unit}</div>
+                    <div className="text-muted-foreground">/ {goal}{unit}</div>
+                    <div className="mt-1">
+                      {hitGoal(actual, goal)
+                        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                        : <XCircle className="h-3.5 w-3.5 text-red-500 mx-auto" />}
+                    </div>
+                    <div className="text-muted-foreground mt-0.5">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+                onClick={() => setSavedSummary(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Charts */}
-      {totals.calories > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />Macro Breakdown
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={donutData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value" paddingAngle={3}>
-                    {donutData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <RechartTooltip formatter={(v: any, name: any) => [`${v} kcal`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-4 text-xs mt-1">
-                {donutData.map(d => (
-                  <span key={d.name} className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                    {d.name}
-                  </span>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+      {/* Meal History */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Meal History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {historyData.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No completed days yet. Tap "Save and Finish Day" to record a day.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {historyData.map((day: any) => (
+                <div key={day.id} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">{fmtDate(day.date)}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {day.total_calories} / {day.goal_calories} kcal
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    {[
+                      { label: "Cal", actual: day.total_calories, goal: day.goal_calories },
+                      { label: "Pro", actual: day.total_protein, goal: day.goal_protein },
+                      { label: "Carb", actual: day.total_carbs, goal: day.goal_carbs },
+                      { label: "Fat", actual: day.total_fat, goal: day.goal_fat },
+                    ].map(({ label, actual, goal }) => (
+                      <div key={label} className="flex flex-col items-center gap-0.5">
+                        {hitGoal(actual, goal)
+                          ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          : <XCircle className="h-3.5 w-3.5 text-red-500" />}
+                        <span className="text-[10px] text-muted-foreground">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Weekly Calories</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={weeklyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <RechartTooltip formatter={(v: any) => [`${v} kcal`]} />
-                  <Bar dataKey="calories" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="goal" fill="hsl(var(--muted-foreground))" opacity={0.3} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+      {/* 14-day macro charts */}
+      {fourteenDayData.some(d => d.calories > 0) && (
+        <div className="space-y-4">
+          {[
+            { key: "calories", label: "Calories (14 days)", goal: calorieTarget, color: "hsl(var(--primary))", unit: "kcal" },
+            { key: "protein", label: "Protein (14 days)", goal: proteinGoal, color: MACRO_COLORS.protein, unit: "g" },
+            { key: "carbs", label: "Carbs (14 days)", goal: carbsGoal, color: MACRO_COLORS.carbs, unit: "g" },
+            { key: "fat", label: "Fat (14 days)", goal: fatGoal, color: MACRO_COLORS.fat, unit: "g" },
+          ].map(({ key, label, goal, color, unit }) => (
+            <Card key={key}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />{label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={fourteenDayData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={1} />
+                    <YAxis tick={{ fontSize: 9 }} />
+                    <RechartTooltip formatter={(v: any) => [`${v} ${unit}`]} />
+                    <ReferenceLine y={goal} stroke={color} strokeDasharray="4 2" opacity={0.6} />
+                    <Bar dataKey={key} fill={color} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                  <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: color }} />
+                  Goal: {goal}{unit}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
+      )}
+
+      {/* Today's macro donut chart */}
+      {totals.calories > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />Macro Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={160}>
+              <PieChart>
+                <Pie data={donutData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value" paddingAngle={3}>
+                  {donutData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <RechartTooltip formatter={(v: any, name: any) => [`${v} kcal`, name]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-4 text-xs mt-1">
+              {donutData.map(d => (
+                <span key={d.name} className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Add food dialog */}
