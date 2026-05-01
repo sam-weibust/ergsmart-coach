@@ -192,7 +192,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
         ? feetInchesToCm(parseFloat(heightFeet) || 0, parseFloat(heightInches) || 0)
         : null;
 
-      await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: user.id,
         weight: weightKg,
         height: heightCm,
@@ -218,7 +218,9 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
         best_2k_seconds: best2kDisplay ? (() => { const p = best2kDisplay.split(":"); return p.length === 2 ? parseInt(p[0]) * 60 + parseFloat(p[1]) : null; })() : null,
         best_6k_seconds: best6kDisplay ? (() => { const p = best6kDisplay.split(":"); return p.length === 2 ? parseInt(p[0]) * 60 + parseFloat(p[1]) : null; })() : null,
         updated_at: new Date().toISOString(),
-      } as any);
+      } as any, { onConflict: "id" });
+      console.log("[ProfileSave] is_coxswain:", isCoxswain, "error:", profileError);
+      if (profileError) throw profileError;
 
       await supabase.from("user_goals").upsert({
         user_id: user.id,
@@ -244,6 +246,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["user-goals-profile"] });
       queryClient.invalidateQueries({ queryKey: ["user-goals"] });
       queryClient.invalidateQueries({ queryKey: ["athlete-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-cox-check"] });
       onClose();
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
