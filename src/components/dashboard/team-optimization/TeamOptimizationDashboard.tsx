@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
+  CalendarDays, History, Settings,
 } from "lucide-react";
 import { SIDEBAR_ITEMS } from "./constants";
 import TeamOverview from "./TeamOverview";
@@ -17,10 +21,15 @@ import ProgramDepth from "./ProgramDepth";
 import TeamTrainingPlanSection from "./TeamTrainingPlanSection";
 import TeamErgLeaderboard from "./TeamErgLeaderboard";
 import TeamMessageBoard from "./TeamMessageBoard";
+import TeamCalendar from "./TeamCalendar";
+import WorkoutHistory from "./WorkoutHistory";
+import SeasonManager from "./SeasonManager";
+import BoatManager from "./BoatManager";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
+  CalendarDays, History, Settings,
 };
 
 interface Props {
@@ -34,12 +43,44 @@ interface Props {
 
 const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection }: Props) => {
   const [activeSection, setActiveSection] = useState(initialSection ?? "overview");
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("all");
+
+  const { data: seasons = [] } = useQuery({
+    queryKey: ["team-seasons", teamId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("team_seasons")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("start_date", { ascending: false });
+      return data || [];
+    },
+  });
+
+  const { data: boats = [] } = useQuery({
+    queryKey: ["team-boats", teamId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("team_boats")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("created_at", { ascending: true });
+      return data || [];
+    },
+  });
+
+  // Auto-select active season on first load
+  const activeSeason = seasons.find((s: any) => s.is_active);
+  const effectiveSeasonId = selectedSeasonId === "all" ? null : selectedSeasonId;
+
+  const commonProps = { teamId, teamName, teamMembers, isCoach, profile, seasonId: effectiveSeasonId, boats };
 
   const renderSection = () => {
-    const commonProps = { teamId, teamName, teamMembers, isCoach, profile };
     switch (activeSection) {
       case "overview": return <TeamOverview {...commonProps} />;
+      case "calendar": return <TeamCalendar {...commonProps} />;
       case "lineups": return <BoatLineupBuilder {...commonProps} />;
+      case "history": return <WorkoutHistory {...commonProps} />;
       case "erg_scores": return <ErgScoreManager {...commonProps} />;
       case "onwater": return <OnWaterResults {...commonProps} />;
       case "seat_racing": return <SeatRacingAnalysis {...commonProps} />;
@@ -50,6 +91,12 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       case "training_plan": return <TeamTrainingPlanSection {...commonProps} />;
       case "leaderboard": return <TeamErgLeaderboard {...commonProps} />;
       case "board": return <TeamMessageBoard {...commonProps} />;
+      case "settings": return (
+        <div className="space-y-8">
+          <SeasonManager teamId={teamId} isCoach={isCoach} />
+          <BoatManager teamId={teamId} isCoach={isCoach} />
+        </div>
+      );
       default: return <TeamOverview {...commonProps} />;
     }
   };
@@ -57,7 +104,21 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
   return (
     <div className="flex flex-col md:flex-row gap-4 min-h-[600px]">
       {/* Sidebar — desktop only */}
-      <div className="hidden md:flex flex-col w-52 shrink-0">
+      <div className="hidden md:flex flex-col w-52 shrink-0 gap-2">
+        {/* Season selector */}
+        {seasons.length > 0 && (
+          <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="All seasons" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All seasons</SelectItem>
+              {seasons.map((s: any) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}{s.is_active ? " ●" : ""}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <nav className="space-y-0.5">
           {SIDEBAR_ITEMS.map((item) => {
             const Icon = ICON_MAP[item.icon];
@@ -82,6 +143,23 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
 
       {/* Mobile: sticky tab bar + content */}
       <div className="flex flex-col flex-1 min-w-0">
+        {/* Season selector mobile */}
+        {seasons.length > 0 && (
+          <div className="md:hidden mb-2">
+            <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="All seasons" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All seasons</SelectItem>
+                {seasons.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}{s.is_active ? " ●" : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Sticky horizontal tab bar — mobile only */}
         <div className="md:hidden sticky top-0 z-20 bg-[#0a1628] border-b border-white/10 -mx-4 px-0 mb-4">
           <div className="flex overflow-x-auto scrollbar-none">

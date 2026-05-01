@@ -81,6 +81,11 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const [isPublic, setIsPublic] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Rowing history fields
+  const [best2kDisplay, setBest2kDisplay] = useState("");
+  const [best6kDisplay, setBest6kDisplay] = useState("");
+  const [yearsRowing, setYearsRowing] = useState("");
+
   // Coxswain fields
   const [isCoxswain, setIsCoxswain] = useState(false);
   const [coxWeightLbs, setCoxWeightLbs] = useState("");
@@ -149,6 +154,15 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
     setCoxVoiceLevel(((profile as any).cox_voice_level || "").toString());
     setCoxYears(((profile as any).cox_years_coxing || "").toString());
     setCoxNotes((profile as any).cox_notes || "");
+    setYearsRowing(((profile as any).years_rowing || "").toString());
+    if ((profile as any).best_2k_seconds) {
+      const s = (profile as any).best_2k_seconds;
+      setBest2kDisplay(`${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
+    }
+    if ((profile as any).best_6k_seconds) {
+      const s = (profile as any).best_6k_seconds;
+      setBest6kDisplay(`${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
+    }
   }, [profile]);
 
   useEffect(() => {
@@ -200,6 +214,9 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
         cox_voice_level: isCoxswain && coxVoiceLevel ? parseInt(coxVoiceLevel) : null,
         cox_years_coxing: isCoxswain && coxYears ? parseInt(coxYears) : null,
         cox_notes: isCoxswain && coxNotes ? coxNotes : null,
+        years_rowing: yearsRowing ? parseInt(yearsRowing) : null,
+        best_2k_seconds: best2kDisplay ? (() => { const p = best2kDisplay.split(":"); return p.length === 2 ? parseInt(p[0]) * 60 + parseFloat(p[1]) : null; })() : null,
+        best_6k_seconds: best6kDisplay ? (() => { const p = best6kDisplay.split(":"); return p.length === 2 ? parseInt(p[0]) * 60 + parseFloat(p[1]) : null; })() : null,
         updated_at: new Date().toISOString(),
       } as any);
 
@@ -342,7 +359,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
 
           {/* 2K Times */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground border-b pb-1">2K Times</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-1">Times & Experience</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Current 2K (M:SS)</Label>
@@ -351,6 +368,18 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
               <div className="space-y-1">
                 <Label className="text-xs">Goal 2K (M:SS)</Label>
                 <TimeInput value={goal2k} onChange={setGoal2k} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Best 2K (M:SS)</Label>
+                <Input value={best2kDisplay} onChange={e => setBest2kDisplay(e.target.value)} placeholder="7:15" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Best 6K (M:SS)</Label>
+                <Input value={best6kDisplay} onChange={e => setBest6kDisplay(e.target.value)} placeholder="23:30" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Years Rowing</Label>
+                <Input type="number" value={yearsRowing} onChange={e => setYearsRowing(e.target.value)} placeholder="3" min="0" max="30" />
               </div>
             </div>
           </div>

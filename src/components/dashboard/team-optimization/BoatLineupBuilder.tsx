@@ -21,6 +21,8 @@ interface Props {
   teamMembers: any[];
   isCoach: boolean;
   profile: any;
+  seasonId?: string | null;
+  boats?: any[];
 }
 
 interface SeatAssignment {
@@ -76,7 +78,7 @@ function SortableSeat({ seat, athletes, coxswains, onAthleteChange }: {
   );
 }
 
-const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => {
+const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, boats = [] }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const sensors = useSensors(useSensor(PointerSensor));
@@ -85,27 +87,29 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   const [editingLineup, setEditingLineup] = useState<any | null>(null);
   const [newName, setNewName] = useState("");
   const [newBoatClass, setNewBoatClass] = useState<string>("8+");
+  const [selectedBoatId, setSelectedBoatId] = useState<string>("");
   const [practiceDate, setPracticeDate] = useState(new Date().toISOString().split("T")[0]);
   const [practiceTime, setPracticeTime] = useState("07:00");
   const [seats, setSeats] = useState<SeatAssignment[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [balanceScore, setBalanceScore] = useState<number | null>(null);
   const [aiRationale, setAiRationale] = useState<string>("");
-  const [attendanceLineupId, setAttendanceLineupId] = useState<string | null>(null);
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
   const coxswains = allAthletes.filter((a: any) => a.is_coxswain);
-  // For rower seats, show all athletes (coaches may place anyone in rower seats)
   const rowers = allAthletes;
+  const activeBoats = boats.filter((b: any) => b.is_active);
 
   const { data: lineups = [], isLoading } = useQuery({
-    queryKey: ["boat-lineups", teamId],
+    queryKey: ["boat-lineups", teamId, seasonId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("boat_lineups")
         .select("*")
         .eq("team_id", teamId)
         .order("created_at", { ascending: false });
+      if (seasonId) q = q.eq("season_id", seasonId);
+      const { data, error } = await q;
       if (error) throw error;
       return data || [];
     },
@@ -148,6 +152,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   function openCreate() {
     setNewName("");
     setNewBoatClass("8+");
+    setSelectedBoatId("");
     setPracticeDate(new Date().toISOString().split("T")[0]);
     setPracticeTime("07:00");
     setSeats(initSeats("8+"));
@@ -160,6 +165,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   function openEdit(lineup: any) {
     setNewName(lineup.name);
     setNewBoatClass(lineup.boat_class);
+    setSelectedBoatId(lineup.boat_id || "");
     setPracticeDate(lineup.practice_date || new Date().toISOString().split("T")[0]);
     setPracticeTime(lineup.practice_start_time ? lineup.practice_start_time.slice(0, 5) : "07:00");
     const savedSeats: SeatAssignment[] = Array.isArray(lineup.seats) ? lineup.seats : [];
@@ -172,6 +178,17 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
     setAiRationale(lineup.ai_rationale || "");
     setEditingLineup(lineup);
     setCreateOpen(true);
+  }
+
+  function handleBoatSelect(boatId: string) {
+    setSelectedBoatId(boatId);
+    const boat = activeBoats.find((b: any) => b.id === boatId);
+    if (boat) {
+      setNewBoatClass(boat.boat_class);
+      setSeats(initSeats(boat.boat_class));
+    }
+    setBalanceScore(null);
+    setAiRationale("");
   }
 
   function handleBoatClassChange(bc: string) {
@@ -229,10 +246,14 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
 
   const saveLineup = useMutation({
     mutationFn: async () => {
+      const boat = activeBoats.find((b: any) => b.id === selectedBoatId);
+      const resolvedBoatClass = boat ? boat.boat_class : newBoatClass;
       const payload = {
         team_id: teamId,
-        name: newName,
-        boat_class: newBoatClass,
+        name: newName || (boat ? boat.name : "Lineup"),
+        boat_class: resolvedBoatClass,
+        boat_id: selectedBoatId || null,
+        season_id: seasonId || null,
         seats,
         practice_date: practiceDate || null,
         practice_start_time: practiceTime || null,
@@ -367,6 +388,9 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
                     <div>
                       <CardTitle className="text-base">{lineup.name}</CardTitle>
                       <CardDescription className="flex items-center gap-2 mt-1 flex-wrap">
+                        {lineup.boat_id && boats.find((b: any) => b.id === lineup.boat_id) && (
+                          <Badge className="bg-blue-600 text-white text-xs">{boats.find((b: any) => b.id === lineup.boat_id).name}</Badge>
+                        )}
                         <Badge variant="outline">{lineup.boat_class}</Badge>
                         <Badge variant={lineup.status === "final" ? "default" : "secondary"}>{lineup.status || "draft"}</Badge>
                         {lineup.ai_suggestion_used && <Badge variant="outline" className="gap-1 text-xs"><Wand2 className="h-3 w-3" />AI</Badge>}
@@ -453,27 +477,43 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
             <DialogTitle>{editingLineup ? "Edit Lineup" : "New Boat Lineup"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Lineup Name</Label>
-                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Varsity 8+" />
-              </div>
-              <div className="space-y-1">
-                <Label>Boat Class</Label>
-                <Select value={newBoatClass} onValueChange={handleBoatClassChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {BOAT_CLASSES.map(bc => <SelectItem key={bc} value={bc}>{bc}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Practice Date</Label>
-                <Input type="date" value={practiceDate} onChange={e => setPracticeDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Practice Time</Label>
-                <Input type="time" value={practiceTime} onChange={e => setPracticeTime(e.target.value)} />
+            <div className="space-y-3">
+              {activeBoats.length > 0 && (
+                <div className="space-y-1">
+                  <Label>Named Boat</Label>
+                  <Select value={selectedBoatId || "custom"} onValueChange={v => v === "custom" ? setSelectedBoatId("") : handleBoatSelect(v)}>
+                    <SelectTrigger><SelectValue placeholder="Select a boat" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="custom">Custom (no named boat)</SelectItem>
+                      {activeBoats.map((b: any) => (
+                        <SelectItem key={b.id} value={b.id}>{b.name} ({b.boat_class})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Lineup Name</Label>
+                  <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Varsity 8+ Practice" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Boat Class</Label>
+                  <Select value={newBoatClass} onValueChange={handleBoatClassChange} disabled={!!selectedBoatId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BOAT_CLASSES.map(bc => <SelectItem key={bc} value={bc}>{bc}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Practice Date</Label>
+                  <Input type="date" value={practiceDate} onChange={e => setPracticeDate(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Practice Time</Label>
+                  <Input type="time" value={practiceTime} onChange={e => setPracticeTime(e.target.value)} />
+                </div>
               </div>
             </div>
 

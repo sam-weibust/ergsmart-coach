@@ -61,7 +61,9 @@ export function displayName(profile: any): string {
 
 export const SIDEBAR_ITEMS = [
   { key: "overview", label: "Overview", icon: "LayoutDashboard" },
+  { key: "calendar", label: "Calendar", icon: "CalendarDays" },
   { key: "lineups", label: "Boat Lineups", icon: "Ship" },
+  { key: "history", label: "Workout History", icon: "History" },
   { key: "erg_scores", label: "Erg Scores", icon: "BarChart3" },
   { key: "onwater", label: "On-Water Results", icon: "Waves" },
   { key: "seat_racing", label: "Seat Racing", icon: "ArrowLeftRight" },
@@ -72,4 +74,5 @@ export const SIDEBAR_ITEMS = [
   { key: "training_plan", label: "Training Plan", icon: "Calendar" },
   { key: "leaderboard", label: "Leaderboard", icon: "Medal" },
   { key: "board", label: "Message Board", icon: "MessageSquare" },
+  { key: "settings", label: "Team Settings", icon: "Settings" },
 ] as const;

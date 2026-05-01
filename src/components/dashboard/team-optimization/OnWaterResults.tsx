@@ -19,6 +19,8 @@ interface Props {
   teamMembers: any[];
   isCoach: boolean;
   profile: any;
+  seasonId?: string | null;
+  boats?: any[];
 }
 
 function parseTimeStr(t: string): number | null {
@@ -40,7 +42,7 @@ function formatTimeDisplay(seconds: number | null): string {
 
 const PIECE_TYPES = ["2k", "4k", "6k", "500m", "1500m", "steady state", "technical"] as const;
 
-const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
+const OnWaterResults = ({ teamId, isCoach, profile, teamMembers, seasonId, boats = [] }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -49,11 +51,17 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
     piece_type: "2k",
     distance_meters: "2000",
     boat_class: "8+",
+    boat_id: "",
     time: "",
     conditions: "",
     notes: "",
+    wind_conditions: "",
+    water_conditions: "",
+    stroke_rate: "",
+    splits: "",
   });
   const [manualAthletes, setManualAthletes] = useState<string[]>([]);
+  const activeBoats = boats.filter((b: any) => b.is_active);
 
   // Check if current user is a coxswain
   const { data: userProfile } = useQuery({
@@ -72,21 +80,22 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
   const isCoxswain = !!userProfile?.is_coxswain;
   const canLog = isCoach || isCoxswain;
 
-  // If coxswain is logging, look up today's published lineup for the selected boat class
+  // If coxswain is logging, look up today's published lineup for the selected boat
   const { data: publishedLineup } = useQuery({
-    queryKey: ["published-lineup-for-date", teamId, form.result_date, form.boat_class],
+    queryKey: ["published-lineup-for-date", teamId, form.result_date, form.boat_id || form.boat_class],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("boat_lineups")
         .select("id, name, seats, practice_date")
         .eq("team_id", teamId)
         .eq("practice_date", form.result_date)
-        .eq("boat_class", form.boat_class)
-        .not("published_at", "is", null)
-        .maybeSingle();
+        .not("published_at", "is", null);
+      if (form.boat_id) q = q.eq("boat_id", form.boat_id);
+      else q = q.eq("boat_class", form.boat_class);
+      const { data } = await q.maybeSingle();
       return data;
     },
-    enabled: !!form.result_date && !!form.boat_class && isCoxswain,
+    enabled: !!form.result_date && (!!form.boat_id || !!form.boat_class) && isCoxswain,
   });
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
@@ -134,11 +143,26 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
       };
     }).filter(d => d.water_split);
 
+  // Parse splits string "1:45.2, 1:47.0, 1:43.5" into [{split_seconds: 105.2}, ...]
+  function parseSplits(splitsStr: string): any[] {
+    if (!splitsStr.trim()) return [];
+    return splitsStr.split(",").map((s, i) => {
+      const t = s.trim();
+      const m = t.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+      if (!m) return null;
+      const secs = parseInt(m[1]) * 60 + parseFloat(m[2]);
+      return { interval: (i + 1) * 500, split_seconds: secs };
+    }).filter(Boolean);
+  }
+
   const addResult = useMutation({
     mutationFn: async () => {
       const time_seconds = parseTimeStr(form.time);
       const distance = parseInt(form.distance_meters) || null;
       const avg_split = time_seconds && distance ? calcAvgSplit(time_seconds, distance) : null;
+      const splitsArr = parseSplits(form.splits);
+      const boat = activeBoats.find((b: any) => b.id === form.boat_id);
+      const resolvedBoatClass = boat ? boat.boat_class : form.boat_class;
 
       // Determine athlete_ids: from published lineup or manual selection
       const athleteIds = lineupAthletes.length > 0 ? lineupAthletes : manualAthletes;
@@ -148,11 +172,17 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
         result_date: form.result_date,
         piece_type: form.piece_type,
         distance_meters: distance,
-        boat_class: form.boat_class,
+        boat_class: resolvedBoatClass,
+        boat_id: form.boat_id || null,
+        season_id: seasonId || null,
         time_seconds,
         avg_split_seconds: avg_split,
         conditions: form.conditions || null,
         notes: form.notes || null,
+        wind_conditions: form.wind_conditions || null,
+        water_conditions: form.water_conditions || null,
+        stroke_rate: form.stroke_rate ? parseFloat(form.stroke_rate) : null,
+        splits: splitsArr.length > 0 ? splitsArr : null,
         created_by: profile.id,
         logged_by: profile.id,
         lineup_id: publishedLineup?.id || null,
@@ -177,7 +207,7 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
       queryClient.invalidateQueries({ queryKey: ["onwater-results", teamId] });
       setAddOpen(false);
       setManualAthletes([]);
-      setForm({ result_date: new Date().toISOString().split("T")[0], piece_type: "2k", distance_meters: "2000", boat_class: "8+", time: "", conditions: "", notes: "" });
+      setForm({ result_date: new Date().toISOString().split("T")[0], piece_type: "2k", distance_meters: "2000", boat_class: "8+", boat_id: "", time: "", conditions: "", notes: "", wind_conditions: "", water_conditions: "", stroke_rate: "", splits: "" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -283,7 +313,22 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
           <DialogHeader>
             <DialogTitle>Log On-Water Result</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {activeBoats.length > 0 && (
+              <div className="space-y-1">
+                <Label>Named Boat</Label>
+                <Select value={form.boat_id || "custom"} onValueChange={v => {
+                  const boat = activeBoats.find((b: any) => b.id === v);
+                  setForm(f => ({ ...f, boat_id: v === "custom" ? "" : v, boat_class: boat ? boat.boat_class : f.boat_class }));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select boat" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">No named boat</SelectItem>
+                    {activeBoats.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name} ({b.boat_class})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Date</Label>
@@ -291,7 +336,7 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
               </div>
               <div className="space-y-1">
                 <Label>Boat Class</Label>
-                <Select value={form.boat_class} onValueChange={v => setForm(f => ({ ...f, boat_class: v }))}>
+                <Select value={form.boat_class} onValueChange={v => setForm(f => ({ ...f, boat_class: v }))} disabled={!!form.boat_id}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{BOAT_CLASSES.map(bc => <SelectItem key={bc} value={bc}>{bc}</SelectItem>)}</SelectContent>
                 </Select>
@@ -310,13 +355,46 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
                 <Input type="number" value={form.distance_meters} onChange={e => setForm(f => ({ ...f, distance_meters: e.target.value }))} />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label>Time (m:ss)</Label>
-              <Input placeholder="e.g. 6:42" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Total Time (m:ss)</Label>
+                <Input placeholder="e.g. 6:42" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Stroke Rate</Label>
+                <Input type="number" placeholder="e.g. 28" value={form.stroke_rate} onChange={e => setForm(f => ({ ...f, stroke_rate: e.target.value }))} />
+              </div>
             </div>
             <div className="space-y-1">
-              <Label>Conditions</Label>
-              <Input placeholder="e.g. calm, tailwind, choppy" value={form.conditions} onChange={e => setForm(f => ({ ...f, conditions: e.target.value }))} />
+              <Label>500m Splits (comma-separated)</Label>
+              <Input placeholder="1:45.2, 1:47.0, 1:43.5, 1:46.8" value={form.splits} onChange={e => setForm(f => ({ ...f, splits: e.target.value }))} />
+              <p className="text-xs text-muted-foreground">Enter each 500m split in M:SS.s format, separated by commas</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Wind</Label>
+                <Select value={form.wind_conditions || "none"} onValueChange={v => setForm(f => ({ ...f, wind_conditions: v === "none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Not logged" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not logged</SelectItem>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="moderate">Moderate</SelectItem>
+                    <SelectItem value="heavy">Heavy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Water</Label>
+                <Select value={form.water_conditions || "none"} onValueChange={v => setForm(f => ({ ...f, water_conditions: v === "none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Not logged" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not logged</SelectItem>
+                    <SelectItem value="flat">Flat</SelectItem>
+                    <SelectItem value="choppy">Choppy</SelectItem>
+                    <SelectItem value="rough">Rough</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Notes</Label>
