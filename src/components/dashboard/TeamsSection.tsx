@@ -55,7 +55,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           team_members(
             id,
             user_id,
-            profile:profiles(id, full_name, email, username, is_coxswain)
+            profile:profiles(id, full_name, email, username, role, is_coxswain)
           )
         `)
         .eq("coach_id", profile.id);
@@ -69,7 +69,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
             team_members(
               id,
               user_id,
-              profile:profiles(id, full_name, email, username, is_coxswain)
+              profile:profiles(id, full_name, email, username, role, is_coxswain)
             )
           )
         `)
@@ -291,8 +291,14 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                                   <p className="font-medium">
                                     {member.profile?.full_name || member.profile?.username || "Unknown"}
                                   </p>
-                                  {member.profile?.is_coxswain && (
+                                  {(member.profile?.role === "coxswain" || member.profile?.is_coxswain) && (
                                     <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
+                                  )}
+                                  {member.profile?.role === "coach" && (
+                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-600 text-white">COACH</Badge>
+                                  )}
+                                  {member.profile?.role === "athlete" && (
+                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
                                   )}
                                 </div>
                                 <p className="text-xs text-muted-foreground">{member.profile?.email}</p>

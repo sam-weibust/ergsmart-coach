@@ -63,13 +63,13 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers, seasonId, boats
   const [manualAthletes, setManualAthletes] = useState<string[]>([]);
   const activeBoats = boats.filter((b: any) => b.is_active);
 
-  // Check if current user is a coxswain
+  // Check if current user is a coxswain or coach
   const { data: userProfile } = useQuery({
     queryKey: ["profile-cox-check", profile?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("is_coxswain, full_name")
+        .select("role, is_coxswain, full_name")
         .eq("id", profile.id)
         .maybeSingle();
       return data;
@@ -77,7 +77,7 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers, seasonId, boats
     enabled: !!profile?.id,
   });
 
-  const isCoxswain = !!userProfile?.is_coxswain;
+  const isCoxswain = userProfile?.role === "coxswain" || !!userProfile?.is_coxswain;
   const canLog = isCoach || isCoxswain;
 
   // If coxswain is logging, look up today's published lineup for the selected boat

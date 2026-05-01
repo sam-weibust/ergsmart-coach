@@ -566,11 +566,10 @@ const Dashboard = () => {
     enabled: !loading,
   });
 
-  // Coach = user_type is "coach" OR they have created a team
-  // Only evaluate after both queries have settled (not undefined)
+  // Coach = role is "coach" OR legacy user_type "coach" OR they have created a team
   const isCoach =
     profile != null &&
-    ((profile as any)?.user_type === "coach" || (Array.isArray(coachTeams) && coachTeams.length > 0));
+    ((profile as any)?.role === "coach" || (profile as any)?.user_type === "coach" || (Array.isArray(coachTeams) && coachTeams.length > 0));
 
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],

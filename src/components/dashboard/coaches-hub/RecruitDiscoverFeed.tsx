@@ -68,9 +68,12 @@ export function RecruitDiscoverFeed({ coachId, coachProfile }: Props) {
     queryFn: async () => {
       const { data: aps } = await supabase
         .from("athlete_profiles")
-        .select("*, profiles!inner(full_name, height, weight, experience_level, username)")
+        .select("*, profiles!inner(full_name, height, weight, experience_level, username, role, user_type, is_coxswain)")
         .eq("is_recruiting", true)
-        .eq("is_public", true);
+        .eq("is_public", true)
+        // Exclude coaches from recruitable prospects
+        .neq("profiles.role" as any, "coach")
+        .neq("profiles.user_type" as any, "coach");
 
       if (!aps?.length) return [];
 

@@ -36,8 +36,10 @@ export function RecommendedAthletes({ coachId, coachProfile }: Props) {
       const ids = recs.map((r: any) => r.athlete_user_id);
       const { data: aps } = await supabase
         .from("athlete_profiles")
-        .select("*, profiles!inner(full_name, height, weight, experience_level, username)")
-        .in("user_id", ids);
+        .select("*, profiles!inner(full_name, height, weight, experience_level, username, role, user_type)")
+        .in("user_id", ids)
+        .neq("profiles.role" as any, "coach")
+        .neq("profiles.user_type" as any, "coach");
 
       const { data: ergScores } = await supabase
         .from("erg_scores")

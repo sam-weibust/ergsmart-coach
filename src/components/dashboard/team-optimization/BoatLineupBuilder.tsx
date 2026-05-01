@@ -96,8 +96,9 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
   const [aiRationale, setAiRationale] = useState<string>("");
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
-  const coxswains = allAthletes.filter((a: any) => a.is_coxswain);
-  const rowers = allAthletes;
+  // role-based filtering: coxswain seat gets only coxswains, rowing seats get athletes (not coaches)
+  const coxswains = allAthletes.filter((a: any) => a.role === "coxswain" || a.is_coxswain);
+  const rowers = allAthletes.filter((a: any) => a.role !== "coach");
   const activeBoats = boats.filter((b: any) => b.is_active);
 
   const { data: lineups = [], isLoading } = useQuery({

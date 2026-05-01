@@ -82,7 +82,7 @@ export default function AthleteProfile() {
     queryFn: async () => {
       const { data: baseProfile } = await supabase
         .from("profiles")
-        .select("id, full_name, username, height, weight, user_type")
+        .select("id, full_name, username, height, weight, user_type, role, is_coxswain, cox_weight_lbs, cox_experience, cox_steering_pref, cox_voice_level, cox_years_coxing, cox_notes, coach_city, coach_state, years_coaching, coaching_level, contact_phone")
         .eq("username", username)
         .maybeSingle();
 
@@ -245,6 +245,11 @@ export default function AthleteProfile() {
   }
 
   const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine, academics } = profileData;
+  // Derive role from new column, falling back to legacy fields
+  const profileRole: "athlete" | "coxswain" | "coach" =
+    (base as any).role === "coxswain" || (base as any).is_coxswain ? "coxswain"
+    : (base as any).role === "coach" || (base as any).user_type === "coach" ? "coach"
+    : "athlete";
   const watts = wattFromSplit(bestErg?.avg_split);
   const wkg = watts && base.weight ? (parseFloat(watts) / base.weight).toFixed(2) : null;
   const socialLinks = ap.social_links || {};
@@ -392,10 +397,19 @@ export default function AthleteProfile() {
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap">
-                {ap.is_recruiting && (
+                {profileRole === "coxswain" && (
+                  <Badge className="bg-amber-500 text-white">COX</Badge>
+                )}
+                {profileRole === "coach" && (
+                  <Badge className="bg-blue-600 text-white">COACH</Badge>
+                )}
+                {profileRole === "athlete" && (
+                  <Badge className="bg-primary/10 text-primary border border-primary/20">ATHLETE</Badge>
+                )}
+                {ap.is_recruiting && profileRole !== "coach" && (
                   <Badge className="bg-green-500 text-white"><GraduationCap className="h-3 w-3 mr-1" />Actively Recruiting</Badge>
                 )}
-                {ap.grad_year && <Badge variant="outline">Class of {ap.grad_year}</Badge>}
+                {ap.grad_year && profileRole !== "coach" && <Badge variant="outline">Class of {ap.grad_year}</Badge>}
                 {!isOwnProfile && (
                   <Button
                     size="sm"
@@ -485,8 +499,102 @@ export default function AthleteProfile() {
               </Card>
             )}
 
-            {/* Erg Stats */}
-            <Card>
+            {/* Coxswain Info Card */}
+            {profileRole === "coxswain" && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="h-4 w-4" />Coxswain Profile
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {(base as any).cox_experience && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Experience</span>
+                      <span className="font-medium capitalize">{(base as any).cox_experience}</span>
+                    </div>
+                  )}
+                  {(base as any).cox_steering_pref && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Steering Preference</span>
+                      <span className="font-medium capitalize">{(base as any).cox_steering_pref}</span>
+                    </div>
+                  )}
+                  {(base as any).cox_voice_level && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Voice Level</span>
+                      <span className="font-medium">{(base as any).cox_voice_level} / 5</span>
+                    </div>
+                  )}
+                  {(base as any).cox_years_coxing && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Seasons Coxing</span>
+                      <span className="font-medium">{(base as any).cox_years_coxing}</span>
+                    </div>
+                  )}
+                  {(base as any).cox_weight_lbs && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Weight</span>
+                      <span className="font-medium">{(base as any).cox_weight_lbs} lbs</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Coach Info Card */}
+            {profileRole === "coach" && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4" />Coaching Profile
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {ap.school && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Program</span>
+                      <span className="font-medium">{ap.school}</span>
+                    </div>
+                  )}
+                  {((base as any).coach_city || (base as any).coach_state) && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Location</span>
+                      <span className="font-medium">{[(base as any).coach_city, (base as any).coach_state].filter(Boolean).join(", ")}</span>
+                    </div>
+                  )}
+                  {(base as any).years_coaching != null && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Years Coaching</span>
+                      <span className="font-medium">{(base as any).years_coaching}</span>
+                    </div>
+                  )}
+                  {(base as any).coaching_level && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Level</span>
+                      <span className="font-medium capitalize">{(base as any).coaching_level.replace("_", " ")}</span>
+                    </div>
+                  )}
+                  {ap.contact_email && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Email</span>
+                      <a href={`mailto:${ap.contact_email}`} className="font-medium text-primary flex items-center gap-1">
+                        <Mail className="h-3 w-3" />{ap.contact_email}
+                      </a>
+                    </div>
+                  )}
+                  {(base as any).contact_phone && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Phone</span>
+                      <span className="font-medium">{(base as any).contact_phone}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Erg Stats — athletes only */}
+            {profileRole === "athlete" && <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" />Performance</CardTitle>
               </CardHeader>
@@ -536,35 +644,39 @@ export default function AthleteProfile() {
                   </div>
                 )}
               </CardContent>
-            </Card>
+            </Card>}
 
-            {/* Calendar Heatmap */}
-            <Card className="bg-gradient-to-br from-[#0a1628] to-[#112240] border-white/10">
-              <CardContent className="p-5">
-                <CalendarHeatmap userId={base.id} />
-              </CardContent>
-            </Card>
+            {/* Calendar Heatmap — athletes only */}
+            {profileRole === "athlete" && (
+              <Card className="bg-gradient-to-br from-[#0a1628] to-[#112240] border-white/10">
+                <CardContent className="p-5">
+                  <CalendarHeatmap userId={base.id} />
+                </CardContent>
+              </Card>
+            )}
 
-            {/* PR Wall Link */}
-            <Card className="border-[#f59e0b]/30 bg-gradient-to-r from-[#f59e0b]/5 to-transparent cursor-pointer hover:border-[#f59e0b]/50 transition-colors"
-              onClick={() => navigate(`/athlete/${username}/prs`)}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Trophy className="h-6 w-6 text-[#f59e0b]" />
-                  <div>
-                    <p className="font-semibold text-foreground">Personal Records</p>
-                    <p className="text-xs text-muted-foreground">View all-time PRs</p>
+            {/* PR Wall Link — athletes only */}
+            {profileRole === "athlete" && (
+              <Card className="border-[#f59e0b]/30 bg-gradient-to-r from-[#f59e0b]/5 to-transparent cursor-pointer hover:border-[#f59e0b]/50 transition-colors"
+                onClick={() => navigate(`/athlete/${username}/prs`)}>
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="h-6 w-6 text-[#f59e0b]" />
+                    <div>
+                      <p className="font-semibold text-foreground">Personal Records</p>
+                      <p className="text-xs text-muted-foreground">View all-time PRs</p>
+                    </div>
                   </div>
-                </div>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Whoop Data Display */}
-            <WhoopSection userId={base.id} />
+            {/* Whoop Data Display — athletes only */}
+            {profileRole === "athlete" && <WhoopSection userId={base.id} />}
 
-            {/* Recruiting Info */}
-            {ap.is_recruiting && (
+            {/* Recruiting Info — athletes and coxswains */}
+            {ap.is_recruiting && profileRole !== "coach" && (
               <Card className="border-green-200 dark:border-green-800">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-400">
@@ -649,11 +761,12 @@ export default function AthleteProfile() {
 
           {/* Right column */}
           <div className="space-y-6">
-            {/* Physical Stats */}
+            {/* Physical Stats — athletes and coxswains only */}
+            {profileRole !== "coach" && (
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">Athlete Info</CardTitle></CardHeader>
+              <CardHeader className="pb-3"><CardTitle className="text-base">{profileRole === "coxswain" ? "Coxswain Info" : "Athlete Info"}</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                {base.height && (
+                {profileRole === "athlete" && base.height && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Height</span>
                     <span className="font-medium">{cmToDisplay(base.height)}</span>
@@ -671,7 +784,7 @@ export default function AthleteProfile() {
                     <span className="font-medium">{ap.grad_year}</span>
                   </div>
                 )}
-                {strengthCount > 0 && (
+                {profileRole === "athlete" && strengthCount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Strength Sessions</span>
                     <span className="font-medium flex items-center gap-1"><Dumbbell className="h-3 w-3" />{strengthCount}</span>
@@ -679,6 +792,7 @@ export default function AthleteProfile() {
                 )}
               </CardContent>
             </Card>
+            )}
 
             {/* Personal Facts */}
             {personalFacts.length > 0 && (
@@ -695,8 +809,8 @@ export default function AthleteProfile() {
               </Card>
             )}
 
-            {/* Concept2 Integration — only shown to profile owner */}
-            {isOwnProfile && (
+            {/* Concept2 Integration — only shown to athlete profile owner */}
+            {isOwnProfile && profileRole === "athlete" && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -765,8 +879,8 @@ export default function AthleteProfile() {
               </Card>
             )}
 
-            {/* Whoop Integration — only shown to profile owner */}
-            {isOwnProfile && (
+            {/* Whoop Integration — only shown to athlete profile owner */}
+            {isOwnProfile && profileRole === "athlete" && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
