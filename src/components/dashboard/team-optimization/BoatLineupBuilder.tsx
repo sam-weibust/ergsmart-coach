@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2 } from "lucide-react";
+import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2, Send, CheckCircle, XCircle, Clock, HelpCircle } from "lucide-react";
 import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName } from "./constants";
 
 interface Props {
@@ -30,13 +30,22 @@ interface SeatAssignment {
   rationale?: string;
 }
 
-function SortableSeat({ seat, athletes, onAthleteChange }: {
+function AttendanceDot({ status }: { status: string }) {
+  if (status === "yes") return <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block" title="Confirmed" />;
+  if (status === "no") return <span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block" title="Declined" />;
+  if (status === "maybe") return <span className="h-2.5 w-2.5 rounded-full bg-yellow-400 inline-block" title="Maybe" />;
+  return <span className="h-2.5 w-2.5 rounded-full bg-gray-400 inline-block" title="No response" />;
+}
+
+function SortableSeat({ seat, athletes, coxswains, onAthleteChange }: {
   seat: SeatAssignment;
   athletes: any[];
+  coxswains: any[];
   onAthleteChange: (seatNum: number, userId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(seat.seat_number) });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const pool = seat.seat_number === 0 ? coxswains : athletes;
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-center gap-2 p-2.5 rounded-lg border bg-card min-h-[52px]">
@@ -48,11 +57,14 @@ function SortableSeat({ seat, athletes, onAthleteChange }: {
       </div>
       <Select value={seat.user_id || "none"} onValueChange={v => onAthleteChange(seat.seat_number, v === "none" ? "" : v)}>
         <SelectTrigger className="min-h-[44px] text-sm">
-          <SelectValue placeholder="Unassigned" />
+          <SelectValue placeholder={seat.seat_number === 0 ? "Coxswain only" : "Unassigned"} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">Unassigned</SelectItem>
-          {athletes.map(a => (
+          {pool.length === 0 && seat.seat_number === 0 && (
+            <SelectItem value="__none_cox__" disabled>No coxswains on roster</SelectItem>
+          )}
+          {pool.map(a => (
             <SelectItem key={a.id} value={String(a.id)}>{displayName(a)}</SelectItem>
           ))}
         </SelectContent>
@@ -73,12 +85,18 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   const [editingLineup, setEditingLineup] = useState<any | null>(null);
   const [newName, setNewName] = useState("");
   const [newBoatClass, setNewBoatClass] = useState<string>("8+");
+  const [practiceDate, setPracticeDate] = useState(new Date().toISOString().split("T")[0]);
+  const [practiceTime, setPracticeTime] = useState("07:00");
   const [seats, setSeats] = useState<SeatAssignment[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [balanceScore, setBalanceScore] = useState<number | null>(null);
   const [aiRationale, setAiRationale] = useState<string>("");
+  const [attendanceLineupId, setAttendanceLineupId] = useState<string | null>(null);
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
+  const coxswains = allAthletes.filter((a: any) => a.is_coxswain);
+  // For rower seats, show all athletes (coaches may place anyone in rower seats)
+  const rowers = allAthletes;
 
   const { data: lineups = [], isLoading } = useQuery({
     queryKey: ["boat-lineups", teamId],
@@ -91,6 +109,26 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
       if (error) throw error;
       return data || [];
     },
+  });
+
+  const { data: attendanceMap = {} } = useQuery({
+    queryKey: ["practice-attendance", teamId],
+    queryFn: async () => {
+      const publishedIds = lineups.filter((l: any) => l.published_at).map((l: any) => l.id);
+      if (publishedIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from("practice_attendance")
+        .select("*")
+        .in("lineup_id", publishedIds);
+      if (error) throw error;
+      const map: Record<string, any[]> = {};
+      for (const row of data || []) {
+        if (!map[row.lineup_id]) map[row.lineup_id] = [];
+        map[row.lineup_id].push(row);
+      }
+      return map;
+    },
+    enabled: lineups.length > 0,
   });
 
   function initSeats(boatClass: string) {
@@ -110,6 +148,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   function openCreate() {
     setNewName("");
     setNewBoatClass("8+");
+    setPracticeDate(new Date().toISOString().split("T")[0]);
+    setPracticeTime("07:00");
     setSeats(initSeats("8+"));
     setBalanceScore(null);
     setAiRationale("");
@@ -120,6 +160,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   function openEdit(lineup: any) {
     setNewName(lineup.name);
     setNewBoatClass(lineup.boat_class);
+    setPracticeDate(lineup.practice_date || new Date().toISOString().split("T")[0]);
+    setPracticeTime(lineup.practice_start_time ? lineup.practice_start_time.slice(0, 5) : "07:00");
     const savedSeats: SeatAssignment[] = Array.isArray(lineup.seats) ? lineup.seats : [];
     const basedSeats = initSeats(lineup.boat_class).map(s => {
       const saved = savedSeats.find((ss: any) => ss.seat_number === s.seat_number);
@@ -161,9 +203,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
   async function suggestLineup() {
     setAiLoading(true);
     try {
-      const athletePool = allAthletes;
       const { data, error } = await supabase.functions.invoke("suggest-boat-lineup", {
-        body: { team_id: teamId, boat_class: newBoatClass, athlete_pool: athletePool, locked_seats: [] },
+        body: { team_id: teamId, boat_class: newBoatClass, athlete_pool: allAthletes, locked_seats: [] },
       });
       if (error) throw new Error(error.message);
       if (data?.seats) {
@@ -193,6 +234,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
         name: newName,
         boat_class: newBoatClass,
         seats,
+        practice_date: practiceDate || null,
+        practice_start_time: practiceTime || null,
         ai_suggestion_used: !!aiRationale,
         ai_rationale: aiRationale || null,
         updated_at: new Date().toISOString(),
@@ -210,6 +253,64 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
       toast({ title: editingLineup ? "Lineup updated!" : "Lineup saved!" });
       queryClient.invalidateQueries({ queryKey: ["boat-lineups", teamId] });
       setCreateOpen(false);
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const publishLineup = useMutation({
+    mutationFn: async (lineup: any) => {
+      const seatsArr: SeatAssignment[] = Array.isArray(lineup.seats) ? lineup.seats : [];
+      const athleteIds = seatsArr.filter(s => s.user_id).map(s => s.user_id!);
+
+      // Mark as published
+      const { error: pubErr } = await supabase.from("boat_lineups").update({
+        published_at: new Date().toISOString(),
+        status: "final",
+      }).eq("id", lineup.id);
+      if (pubErr) throw pubErr;
+
+      // Create attendance records for each athlete
+      if (athleteIds.length > 0) {
+        const records = athleteIds.map(uid => ({
+          lineup_id: lineup.id,
+          user_id: uid,
+          status: "no_response",
+        }));
+        await supabase.from("practice_attendance").upsert(records, { onConflict: "lineup_id,user_id" });
+
+        // Send in-app notifications
+        const dateStr = lineup.practice_date ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "upcoming practice";
+        const notifRecords = athleteIds.map(uid => ({
+          user_id: uid,
+          type: "plan_shared",
+          title: "Are you attending practice?",
+          body: `${profile.full_name || profile.username || "Your coach"} published the lineup for ${dateStr}. Tap to confirm your attendance.`,
+          data: JSON.stringify({ lineup_id: lineup.id, action: "attendance" }),
+        }));
+        await supabase.from("notifications").insert(notifRecords as any);
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Lineup published! Athletes notified." });
+      queryClient.invalidateQueries({ queryKey: ["boat-lineups", teamId] });
+      queryClient.invalidateQueries({ queryKey: ["practice-attendance", teamId] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const overrideAttendance = useMutation({
+    mutationFn: async ({ lineupId, userId, status }: { lineupId: string; userId: string; status: string }) => {
+      const { error } = await supabase.from("practice_attendance").upsert({
+        lineup_id: lineupId,
+        user_id: userId,
+        status,
+        responded_at: new Date().toISOString(),
+        overridden_by: profile.id,
+      }, { onConflict: "lineup_id,user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["practice-attendance", teamId] });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -252,23 +353,37 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
           {lineups.map((lineup: any) => {
             const seatsArr: SeatAssignment[] = Array.isArray(lineup.seats) ? lineup.seats : [];
             const filledSeats = seatsArr.filter(s => s.user_id).length;
+            const attendance: any[] = attendanceMap[lineup.id] || [];
+            const confirmed = attendance.filter(a => a.status === "yes").length;
+            const declined = attendance.filter(a => a.status === "no").length;
+            const maybe = attendance.filter(a => a.status === "maybe").length;
+            const noResp = attendance.filter(a => a.status === "no_response").length;
+            const showAttendance = !!lineup.published_at && attendance.length > 0;
+
             return (
               <Card key={lineup.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle className="text-base">{lineup.name}</CardTitle>
-                      <CardDescription className="flex items-center gap-2 mt-1">
+                      <CardDescription className="flex items-center gap-2 mt-1 flex-wrap">
                         <Badge variant="outline">{lineup.boat_class}</Badge>
-                        <Badge variant={lineup.status === "final" ? "default" : "secondary"}>{lineup.status}</Badge>
+                        <Badge variant={lineup.status === "final" ? "default" : "secondary"}>{lineup.status || "draft"}</Badge>
                         {lineup.ai_suggestion_used && <Badge variant="outline" className="gap-1 text-xs"><Wand2 className="h-3 w-3" />AI</Badge>}
+                        {lineup.published_at && <Badge className="bg-green-600 text-white text-xs">Published</Badge>}
+                        {lineup.practice_date && <span className="text-xs text-muted-foreground">{new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>}
                       </CardDescription>
                     </div>
                     {isCoach && (
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(lineup)}>Edit</Button>
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteLineup.mutate(lineup.id)}>
-                          <Trash2 className="h-4 w-4" />
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        {!lineup.published_at && (
+                          <Button size="sm" variant="outline" className="gap-1 text-xs h-7 px-2" onClick={() => publishLineup.mutate(lineup)} disabled={publishLineup.isPending}>
+                            <Send className="h-3 w-3" />Publish
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openEdit(lineup)}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive h-7 px-2" onClick={() => deleteLineup.mutate(lineup.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     )}
@@ -276,6 +391,44 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
                 </CardHeader>
                 <CardContent>
                   <div className="text-sm text-muted-foreground mb-2">{filledSeats}/{seatsArr.length} seats filled</div>
+
+                  {/* Attendance summary */}
+                  {showAttendance && (
+                    <div className="mb-3 p-2 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-green-500" />{confirmed}</span>
+                        <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-red-500" />{declined}</span>
+                        <span className="flex items-center gap-1"><HelpCircle className="h-3 w-3 text-yellow-500" />{maybe}</span>
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-gray-400" />{noResp}</span>
+                      </div>
+                      {/* Per-athlete indicators */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {seatsArr.filter(s => s.user_id).map(s => {
+                          const rec = attendance.find(a => a.user_id === s.user_id);
+                          const status = rec?.status || "no_response";
+                          return (
+                            <div key={s.seat_number} className="flex items-center gap-1">
+                              <AttendanceDot status={status} />
+                              <span className="text-[11px]">{s.name || "?"}</span>
+                              {isCoach && (
+                                <select
+                                  className="text-[10px] border rounded px-0.5 py-0 bg-background"
+                                  value={status}
+                                  onChange={e => overrideAttendance.mutate({ lineupId: lineup.id, userId: s.user_id!, status: e.target.value })}
+                                >
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                  <option value="maybe">Maybe</option>
+                                  <option value="no_response">—</option>
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {seatsArr.slice(0, 4).map((s: any) => (
                     <div key={s.seat_number} className="flex gap-2 text-xs py-0.5">
                       <span className="text-muted-foreground w-12 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
@@ -314,6 +467,14 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label>Practice Date</Label>
+                <Input type="date" value={practiceDate} onChange={e => setPracticeDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Practice Time</Label>
+                <Input type="time" value={practiceTime} onChange={e => setPracticeTime(e.target.value)} />
+              </div>
             </div>
 
             {isCoach && (
@@ -336,6 +497,12 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
               <p className="text-xs text-muted-foreground italic bg-muted/50 rounded p-2">{aiRationale}</p>
             )}
 
+            {coxswains.length === 0 && HAS_COX[newBoatClass] && (
+              <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
+                No coxswains on your roster yet. Athletes can mark themselves as coxswains in their profile settings.
+              </p>
+            )}
+
             <div className="space-y-1">
               <Label>Seat Assignments (drag to reorder)</Label>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -345,7 +512,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile }: Props) => 
                       <SortableSeat
                         key={seat.seat_number}
                         seat={seat}
-                        athletes={allAthletes}
+                        athletes={rowers}
+                        coxswains={coxswains}
                         onAthleteChange={handleAthleteChange}
                       />
                     ))}

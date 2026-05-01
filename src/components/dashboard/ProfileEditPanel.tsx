@@ -81,6 +81,15 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const [isPublic, setIsPublic] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Coxswain fields
+  const [isCoxswain, setIsCoxswain] = useState(false);
+  const [coxWeightLbs, setCoxWeightLbs] = useState("");
+  const [coxExperience, setCoxExperience] = useState("");
+  const [coxSteeringPref, setCoxSteeringPref] = useState("");
+  const [coxVoiceLevel, setCoxVoiceLevel] = useState("");
+  const [coxYears, setCoxYears] = useState("");
+  const [coxNotes, setCoxNotes] = useState("");
+
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
@@ -133,6 +142,13 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
     setEnableMealPlans((profile as any).enable_meal_plans !== false);
     setDietGoal((profile as any).diet_goal || "maintain");
     setAllergies(((profile as any).allergies || []).join(", "));
+    setIsCoxswain((profile as any).is_coxswain || false);
+    setCoxWeightLbs(((profile as any).cox_weight_lbs || "").toString());
+    setCoxExperience((profile as any).cox_experience || "");
+    setCoxSteeringPref((profile as any).cox_steering_pref || "");
+    setCoxVoiceLevel(((profile as any).cox_voice_level || "").toString());
+    setCoxYears(((profile as any).cox_years_coxing || "").toString());
+    setCoxNotes((profile as any).cox_notes || "");
   }, [profile]);
 
   useEffect(() => {
@@ -177,6 +193,13 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
         allergies: allergies ? allergies.split(",").map((a) => a.trim()).filter(Boolean) : [],
         age: age ? parseInt(age) : null,
         health_issues: healthIssues ? healthIssues.split(",").map((h) => h.trim()).filter(Boolean) : [],
+        is_coxswain: isCoxswain,
+        cox_weight_lbs: isCoxswain && coxWeightLbs ? parseFloat(coxWeightLbs) : null,
+        cox_experience: isCoxswain && coxExperience ? coxExperience : null,
+        cox_steering_pref: isCoxswain && coxSteeringPref ? coxSteeringPref : null,
+        cox_voice_level: isCoxswain && coxVoiceLevel ? parseInt(coxVoiceLevel) : null,
+        cox_years_coxing: isCoxswain && coxYears ? parseInt(coxYears) : null,
+        cox_notes: isCoxswain && coxNotes ? coxNotes : null,
         updated_at: new Date().toISOString(),
       } as any);
 
@@ -367,6 +390,64 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
                 <Textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Short bio about your rowing journey..." rows={2} maxLength={500} />
               </div>
             </div>
+          </div>
+
+          {/* Coxswain */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b pb-1">
+              <h3 className="text-sm font-semibold text-foreground">Coxswain</h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{isCoxswain ? "Yes" : "No"}</span>
+                <Switch checked={isCoxswain} onCheckedChange={setIsCoxswain} />
+              </div>
+            </div>
+            {isCoxswain && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Cox Weight (lbs)</Label>
+                  <Input type="number" value={coxWeightLbs} onChange={e => setCoxWeightLbs(e.target.value)} placeholder="120" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Experience Level</Label>
+                  <Select value={coxExperience} onValueChange={setCoxExperience}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="novice">Novice</SelectItem>
+                      <SelectItem value="jv">JV</SelectItem>
+                      <SelectItem value="varsity">Varsity</SelectItem>
+                      <SelectItem value="collegiate">Collegiate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Steering Preference</Label>
+                  <Select value={coxSteeringPref} onValueChange={setCoxSteeringPref}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="port">Port</SelectItem>
+                      <SelectItem value="starboard">Starboard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Voice Level (1–5)</Label>
+                  <Select value={coxVoiceLevel} onValueChange={setCoxVoiceLevel}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Years Coxing</Label>
+                  <Input type="number" value={coxYears} onChange={e => setCoxYears(e.target.value)} placeholder="2" min="0" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Coxswain Notes (coach-visible)</Label>
+                  <Textarea value={coxNotes} onChange={e => setCoxNotes(e.target.value)} placeholder="Notes for coaches..." rows={2} maxLength={500} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Training Goals */}

@@ -27,6 +27,7 @@ import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
+import AttendancePrompt from "./team-optimization/AttendancePrompt";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface TeamsSectionProps {
@@ -54,7 +55,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           team_members(
             id,
             user_id,
-            profile:profiles(id, full_name, email, username)
+            profile:profiles(id, full_name, email, username, is_coxswain)
           )
         `)
         .eq("coach_id", profile.id);
@@ -68,7 +69,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
             team_members(
               id,
               user_id,
-              profile:profiles(id, full_name, email, username)
+              profile:profiles(id, full_name, email, username, is_coxswain)
             )
           )
         `)
@@ -284,11 +285,18 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                             key={member.id}
                             className="flex items-center justify-between p-2 border rounded-lg text-sm"
                           >
-                            <div>
-                              <p className="font-medium">
-                                {member.profile?.full_name || member.profile?.username || "Unknown"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-medium">
+                                    {member.profile?.full_name || member.profile?.username || "Unknown"}
+                                  </p>
+                                  {member.profile?.is_coxswain && (
+                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                              </div>
                             </div>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -397,7 +405,9 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                   {team.description && (
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
-                  
+
+                  <AttendancePrompt teamId={team.id} userId={profile.id} />
+
                   <div className="grid gap-4 md:grid-cols-2">
                     <Leaderboard teamId={team.id} teamName={team.name} />
                     <TeamGoals teamId={team.id} isCoach={false} currentUserId={profile.id} />

@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Plus, Waves, Loader2 } from "lucide-react";
-import { BOAT_CLASSES, formatSplit } from "./constants";
+import { Plus, Waves, Loader2, Lock } from "lucide-react";
+import { BOAT_CLASSES, formatSplit, displayName } from "./constants";
 
 interface Props {
   teamId: string;
@@ -40,7 +40,7 @@ function formatTimeDisplay(seconds: number | null): string {
 
 const PIECE_TYPES = ["2k", "4k", "6k", "500m", "1500m", "steady state", "technical"] as const;
 
-const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
+const OnWaterResults = ({ teamId, isCoach, profile, teamMembers }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -53,6 +53,50 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
     conditions: "",
     notes: "",
   });
+  const [manualAthletes, setManualAthletes] = useState<string[]>([]);
+
+  // Check if current user is a coxswain
+  const { data: userProfile } = useQuery({
+    queryKey: ["profile-cox-check", profile?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_coxswain, full_name")
+        .eq("id", profile.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.id,
+  });
+
+  const isCoxswain = !!userProfile?.is_coxswain;
+  const canLog = isCoach || isCoxswain;
+
+  // If coxswain is logging, look up today's published lineup for the selected boat class
+  const { data: publishedLineup } = useQuery({
+    queryKey: ["published-lineup-for-date", teamId, form.result_date, form.boat_class],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("boat_lineups")
+        .select("id, name, seats, practice_date")
+        .eq("team_id", teamId)
+        .eq("practice_date", form.result_date)
+        .eq("boat_class", form.boat_class)
+        .not("published_at", "is", null)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!form.result_date && !!form.boat_class && isCoxswain,
+  });
+
+  const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
+
+  // Athletes from published lineup for coxswain auto-populate
+  const lineupAthletes = publishedLineup
+    ? (Array.isArray(publishedLineup.seats) ? publishedLineup.seats : [])
+        .filter((s: any) => s.user_id && s.seat_number !== 0)
+        .map((s: any) => s.user_id)
+    : [];
 
   const { data: results = [], isLoading } = useQuery({
     queryKey: ["onwater-results", teamId],
@@ -79,7 +123,6 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
     },
   });
 
-  // Scatter: erg split vs water split for 2k pieces
   const scatterData = results
     .filter(r => r.piece_type === "2k" && r.avg_split_seconds)
     .map(r => {
@@ -96,6 +139,10 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
       const time_seconds = parseTimeStr(form.time);
       const distance = parseInt(form.distance_meters) || null;
       const avg_split = time_seconds && distance ? calcAvgSplit(time_seconds, distance) : null;
+
+      // Determine athlete_ids: from published lineup or manual selection
+      const athleteIds = lineupAthletes.length > 0 ? lineupAthletes : manualAthletes;
+
       const { error } = await supabase.from("onwater_results").insert({
         team_id: teamId,
         result_date: form.result_date,
@@ -107,13 +154,29 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
         conditions: form.conditions || null,
         notes: form.notes || null,
         created_by: profile.id,
-      });
+        logged_by: profile.id,
+        lineup_id: publishedLineup?.id || null,
+        athlete_ids: athleteIds.length > 0 ? athleteIds : null,
+      } as any);
       if (error) throw error;
+
+      // If coxswain logged, notify athletes in the boat
+      if (isCoxswain && athleteIds.length > 0) {
+        const coxName = userProfile?.full_name || profile?.full_name || "Your coxswain";
+        const notifs = athleteIds.map((uid: string) => ({
+          user_id: uid,
+          type: "plan_shared",
+          title: "Practice results logged",
+          body: `${coxName} logged your practice results — tap to view your splits.`,
+        }));
+        await supabase.from("notifications").insert(notifs as any);
+      }
     },
     onSuccess: () => {
       toast({ title: "Result logged!" });
       queryClient.invalidateQueries({ queryKey: ["onwater-results", teamId] });
       setAddOpen(false);
+      setManualAthletes([]);
       setForm({ result_date: new Date().toISOString().split("T")[0], piece_type: "2k", distance_meters: "2000", boat_class: "8+", time: "", conditions: "", notes: "" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -128,60 +191,28 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
           <h2 className="text-lg font-semibold">On-Water Results</h2>
           <p className="text-sm text-muted-foreground">Log timed pieces and track performance trends</p>
         </div>
-        {isCoach && (
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-2"><Plus className="h-4 w-4" />Log Result</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Log On-Water Result</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label>Date</Label>
-                    <Input type="date" value={form.result_date} onChange={e => setForm(f => ({ ...f, result_date: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Boat Class</Label>
-                    <Select value={form.boat_class} onValueChange={v => setForm(f => ({ ...f, boat_class: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{BOAT_CLASSES.map(bc => <SelectItem key={bc} value={bc}>{bc}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label>Piece Type</Label>
-                    <Select value={form.piece_type} onValueChange={v => setForm(f => ({ ...f, piece_type: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{PIECE_TYPES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Distance (m)</Label>
-                    <Input type="number" value={form.distance_meters} onChange={e => setForm(f => ({ ...f, distance_meters: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label>Time (m:ss)</Label>
-                  <Input placeholder="e.g. 6:42" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Conditions</Label>
-                  <Input placeholder="e.g. calm, tailwind, choppy" value={form.conditions} onChange={e => setForm(f => ({ ...f, conditions: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Notes</Label>
-                  <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes..." />
-                </div>
-                <Button className="w-full" onClick={() => addResult.mutate()} disabled={addResult.isPending || !form.time}>
-                  {addResult.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Result"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        {canLog ? (
+          <Button size="sm" className="gap-2" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4" />{isCoxswain && !isCoach ? "Log as Coxswain" : "Log Result"}
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Lock className="h-4 w-4" />
+            <span className="hidden sm:inline">On-water workouts are logged by your coxswain or coach</span>
+          </div>
         )}
       </div>
+
+      {/* Restricted message for regular athletes */}
+      {!canLog && (
+        <Card className="border-dashed">
+          <CardContent className="py-8 text-center space-y-2">
+            <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
+            <p className="text-sm font-medium">On-water workouts are logged by your coxswain or coach</p>
+            <p className="text-xs text-muted-foreground">When your coxswain logs a session you'll receive a notification with your results.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Results table */}
       <Card>
@@ -245,6 +276,99 @@ const OnWaterResults = ({ teamId, isCoach, profile }: Props) => {
           </CardContent>
         </Card>
       )}
+
+      {/* Log Result Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log On-Water Result</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Date</Label>
+                <Input type="date" value={form.result_date} onChange={e => setForm(f => ({ ...f, result_date: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Boat Class</Label>
+                <Select value={form.boat_class} onValueChange={v => setForm(f => ({ ...f, boat_class: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{BOAT_CLASSES.map(bc => <SelectItem key={bc} value={bc}>{bc}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Piece Type</Label>
+                <Select value={form.piece_type} onValueChange={v => setForm(f => ({ ...f, piece_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{PIECE_TYPES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Distance (m)</Label>
+                <Input type="number" value={form.distance_meters} onChange={e => setForm(f => ({ ...f, distance_meters: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Time (m:ss)</Label>
+              <Input placeholder="e.g. 6:42" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Conditions</Label>
+              <Input placeholder="e.g. calm, tailwind, choppy" value={form.conditions} onChange={e => setForm(f => ({ ...f, conditions: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Notes</Label>
+              <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes..." />
+            </div>
+
+            {/* Coxswain: show athlete lineup info */}
+            {isCoxswain && (
+              <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                {publishedLineup ? (
+                  <div>
+                    <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">
+                      Lineup found: {publishedLineup.name} ({lineupAthletes.length} athletes auto-populated)
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {lineupAthletes.map((uid: string) => {
+                        const a = allAthletes.find((x: any) => x.id === uid);
+                        return a ? <Badge key={uid} variant="secondary" className="text-xs">{displayName(a)}</Badge> : null;
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">No published lineup found for this date/boat. Select athletes manually:</p>
+                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                      {allAthletes.map((a: any) => {
+                        const selected = manualAthletes.includes(a.id);
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => setManualAthletes(prev =>
+                              selected ? prev.filter(id => id !== a.id) : [...prev, a.id]
+                            )}
+                            className={`text-xs px-2 py-0.5 rounded border transition-colors ${selected ? "bg-primary text-primary-foreground border-primary" : "border-muted-foreground/30 hover:border-primary"}`}
+                          >
+                            {displayName(a)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Button className="w-full" onClick={() => addResult.mutate()} disabled={addResult.isPending || !form.time}>
+              {addResult.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Result"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
