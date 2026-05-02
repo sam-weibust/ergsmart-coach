@@ -64,6 +64,7 @@ export const SIDEBAR_ITEMS = [
   { key: "calendar", label: "Calendar", icon: "CalendarDays" },
   { key: "lineups", label: "Boat Lineups", icon: "Ship" },
   { key: "lineup_history", label: "Lineup History", icon: "History" },
+  { key: "practice_detail", label: "Practice Detail", icon: "Waves" },
   { key: "boat_perf", label: "Boat Performance", icon: "TrendingDown" },
   { key: "history", label: "Workout History", icon: "Waves" },
   { key: "erg_scores", label: "Erg Scores", icon: "BarChart3" },

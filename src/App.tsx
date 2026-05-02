@@ -21,6 +21,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import PricingPage from "./pages/PricingPage";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
+import { Capacitor } from "@capacitor/core";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,13 +35,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const isNative = (() => {
-  try {
-    return (window as any).Capacitor?.isNativePlatform?.() === true;
-  } catch {
-    return false;
-  }
-})();
+const isNative = Capacitor.isNativePlatform();
 
 function Splash() {
   return (

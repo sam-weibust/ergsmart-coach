@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2, Send, CheckCircle, XCircle, Clock, HelpCircle } from "lucide-react";
 import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName } from "./constants";
 
@@ -94,6 +95,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
   const [aiLoading, setAiLoading] = useState(false);
   const [balanceScore, setBalanceScore] = useState<number | null>(null);
   const [aiRationale, setAiRationale] = useState<string>("");
+  const [workoutPlan, setWorkoutPlan] = useState<string>("");
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
   // role-based filtering: coxswain seat gets only coxswains, rowing seats get athletes (not coaches)
@@ -114,6 +116,33 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
       if (error) throw error;
       return data || [];
     },
+  });
+
+  // Wellness check-ins for published lineup dates (coach view)
+  const publishedLineups = lineups.filter((l: any) => l.published_at);
+  const practiceDates = [...new Set(publishedLineups.map((l: any) => l.practice_date).filter(Boolean))];
+  const athleteIds = [...new Set(publishedLineups.flatMap((l: any) => {
+    const seats: any[] = Array.isArray(l.seats) ? l.seats : [];
+    return seats.filter(s => s.user_id).map(s => s.user_id);
+  }))];
+
+  const { data: wellnessMap = {} } = useQuery({
+    queryKey: ["lineup-wellness", teamId, practiceDates.join(",")],
+    queryFn: async () => {
+      if (!isCoach || practiceDates.length === 0 || athleteIds.length === 0) return {};
+      const { data } = await supabase
+        .from("wellness_checkins" as any)
+        .select("user_id, checkin_date, energy, soreness, sleep_hours")
+        .in("user_id", athleteIds)
+        .in("checkin_date", practiceDates);
+      const map: Record<string, Record<string, any>> = {};
+      for (const w of data || []) {
+        if (!map[w.checkin_date]) map[w.checkin_date] = {};
+        map[w.checkin_date][w.user_id] = w;
+      }
+      return map;
+    },
+    enabled: isCoach && publishedLineups.length > 0,
   });
 
   const { data: attendanceMap = {} } = useQuery({
@@ -159,6 +188,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
     setSeats(initSeats("8+"));
     setBalanceScore(null);
     setAiRationale("");
+    setWorkoutPlan("");
     setEditingLineup(null);
     setCreateOpen(true);
   }
@@ -177,6 +207,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
     setSeats(basedSeats);
     setBalanceScore(null);
     setAiRationale(lineup.ai_rationale || "");
+    setWorkoutPlan(lineup.workout_plan || "");
     setEditingLineup(lineup);
     setCreateOpen(true);
   }
@@ -260,6 +291,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
         practice_start_time: practiceTime || null,
         ai_suggestion_used: !!aiRationale,
         ai_rationale: aiRationale || null,
+        workout_plan: workoutPlan || null,
         updated_at: new Date().toISOString(),
         created_by: profile.id,
       };
@@ -449,10 +481,26 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                         {seatsArr.filter(s => s.user_id).map(s => {
                           const rec = attendance.find(a => a.user_id === s.user_id);
                           const status = rec?.status || "no_response";
+                          const wellness = lineup.practice_date
+                            ? (wellnessMap as any)[lineup.practice_date]?.[s.user_id!]
+                            : null;
+                          const lowEnergy = wellness?.energy != null && wellness.energy < 5;
+                          const highSoreness = wellness?.soreness != null && wellness.soreness > 7;
+                          const poorSleep = wellness?.sleep_hours != null && wellness.sleep_hours < 6;
+                          const hasFlag = lowEnergy || highSoreness || poorSleep;
                           return (
                             <div key={s.seat_number} className="flex items-center gap-1">
                               <AttendanceDot status={status} />
                               <span className="text-[11px]">{s.name || "?"}</span>
+                              {isCoach && hasFlag && (
+                                <span
+                                  title={[
+                                    lowEnergy ? `⚡ Energy: ${wellness.energy}/10` : null,
+                                    highSoreness ? `💪 Soreness: ${wellness.soreness}/10` : null,
+                                    poorSleep ? `😴 Sleep: ${wellness.sleep_hours}h` : null,
+                                  ].filter(Boolean).join(" | ")}
+                                  className="text-amber-500 text-[10px]">⚠</span>
+                              )}
                               {isCoach && (
                                 <select
                                   className="text-[10px] border rounded px-0.5 py-0 bg-background"
@@ -479,6 +527,12 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                     </div>
                   ))}
                   {seatsArr.length > 4 && <p className="text-xs text-muted-foreground mt-1">+{seatsArr.length - 4} more seats</p>}
+                  {lineup.published_at && lineup.workout_plan && (
+                    <div className="mt-3 p-2 rounded bg-muted/50 border-l-2 border-primary/40">
+                      <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">WORKOUT</p>
+                      <p className="text-xs whitespace-pre-wrap line-clamp-4">{lineup.workout_plan}</p>
+                    </div>
+                  )}
                   {lineup.ai_rationale && (
                     <p className="text-xs text-muted-foreground mt-2 italic line-clamp-2">{lineup.ai_rationale}</p>
                   )}
@@ -579,6 +633,17 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                   </div>
                 </SortableContext>
               </DndContext>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Workout Plan <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea
+                className="text-sm min-h-[100px] resize-none font-mono"
+                placeholder={"e.g.\n4x1000m @ race pace, 2' rest\n3x500m rate 26, 2' rest\nLong row home steady state"}
+                value={workoutPlan}
+                onChange={e => setWorkoutPlan(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Free-form — write it exactly as you'd put it on the whiteboard. Published with the lineup.</p>
             </div>
 
             <Button

@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import AttendancePrompt from "./team-optimization/AttendancePrompt";
+import WellnessCheckin from "./team-optimization/WellnessCheckin";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface TeamsSectionProps {
@@ -432,6 +433,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
 
+                  <WellnessCheckin teamId={team.id} userId={profile.id} />
                   <AttendancePrompt teamId={team.id} userId={profile.id} />
 
                   <div className="grid gap-4 md:grid-cols-2">

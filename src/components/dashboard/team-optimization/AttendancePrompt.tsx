@@ -2,9 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle, HelpCircle, Clock } from "lucide-react";
+import { CheckCircle, XCircle, HelpCircle } from "lucide-react";
 
 interface Props {
   teamId: string;
@@ -18,25 +17,25 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
   const { data: pendingLineups = [] } = useQuery({
     queryKey: ["attendance-pending", teamId, userId],
     queryFn: async () => {
-      // Get published lineups for this team where athlete is in the lineup and hasn't responded (or is no_response)
       const { data: lineups } = await supabase
         .from("boat_lineups")
-        .select("id, name, boat_class, practice_date, practice_start_time, seats, published_at")
+        .select("id, name, boat_class, practice_date, practice_start_time, seats, published_at, workout_plan")
         .eq("team_id", teamId)
         .not("published_at", "is", null)
         .order("practice_date", { ascending: true });
 
       if (!lineups) return [];
 
-      // Filter to lineups where this athlete is seated
       const relevant = lineups.filter((l: any) => {
         const seats = Array.isArray(l.seats) ? l.seats : [];
         return seats.some((s: any) => s.user_id === userId);
       });
 
-      if (relevant.length === 0) return [];
+      if (relevant.length === 0) {
+        console.log(`[attendance] No lineups found for user ${userId} in team ${teamId}`);
+        return [];
+      }
 
-      // Get their attendance records
       const ids = relevant.map((l: any) => l.id);
       const { data: attendance } = await supabase
         .from("practice_attendance")
@@ -47,23 +46,15 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
       const attMap: Record<string, any> = {};
       for (const a of attendance || []) attMap[a.lineup_id] = a;
 
-      // Return lineups with attendance status, filter to those needing response
-      return relevant.map((l: any) => ({
-        ...l,
-        attendance: attMap[l.id] || null,
-      })).filter((l: any) => {
-        // Show if no response or no_response status
-        const status = l.attendance?.status || "no_response";
-        // Check if deadline passed (2 hours before practice)
-        if (l.practice_date && l.practice_start_time) {
-          const [h, m] = l.practice_start_time.split(":").map(Number);
-          const practiceTime = new Date(l.practice_date);
-          practiceTime.setHours(h, m, 0, 0);
-          const deadline = new Date(practiceTime.getTime() - 2 * 60 * 60 * 1000);
-          if (new Date() > deadline) return false;
-        }
-        return status === "no_response" || !l.attendance;
-      });
+      const pending = relevant
+        .map((l: any) => ({ ...l, attendance: attMap[l.id] || null }))
+        .filter((l: any) => {
+          const status = l.attendance?.status || "no_response";
+          return status === "no_response" || !l.attendance;
+        });
+
+      console.log(`[attendance] ${pending.length} pending attendance request(s) for user ${userId} in team ${teamId}`);
+      return pending;
     },
     enabled: !!teamId && !!userId,
     refetchInterval: 30000,
@@ -93,16 +84,22 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
       <h4 className="text-sm font-semibold">Practice Attendance</h4>
       {pendingLineups.map((lineup: any) => {
         const dateStr = lineup.practice_date
-          ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
+          ? new Date(lineup.practice_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
           : "Upcoming practice";
         const timeStr = lineup.practice_start_time ? lineup.practice_start_time.slice(0, 5) : "";
         return (
           <Card key={lineup.id} className="border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/20">
             <CardContent className="py-3 px-4">
-              <p className="text-sm font-medium mb-1">Are you attending practice?</p>
-              <p className="text-xs text-muted-foreground mb-3">
-                {dateStr}{timeStr ? ` at ${timeStr}` : ""} — {lineup.name} ({lineup.boat_class})
+              <p className="text-sm font-medium mb-1">Are you attending practice on {dateStr}?</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                {timeStr ? `${timeStr} — ` : ""}{lineup.name} ({lineup.boat_class})
               </p>
+              {lineup.workout_plan && (
+                <div className="mb-3 p-2 rounded bg-white/50 dark:bg-black/20 border-l-2 border-primary/40">
+                  <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">PLANNED WORKOUT</p>
+                  <p className="text-xs whitespace-pre-wrap">{lineup.workout_plan}</p>
+                </div>
+              )}
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"

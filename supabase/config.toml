@@ -1,5 +1,20 @@
 project_id = "lezqonvzqwpdpmyvpuvd"
 
+[functions.sync-whoop]
+verify_jwt = false
+
+[functions.whoop-connect]
+verify_jwt = false
+
+[functions.whoop-callback]
+verify_jwt = false
+
+[functions.whoop-disconnect]
+verify_jwt = false
+
+[functions.daily-whoop-sync]
+verify_jwt = false
+
 [functions.generate-workout]
 verify_jwt = false
 

@@ -13,8 +13,18 @@ export default function WhoopConnectSection() {
   const { toast } = useToast();
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [lastAutoSync, setLastAutoSync] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  function formatAutoSync(ts: string): string {
+    const date = new Date(ts);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase();
+    if (isToday) return `today at ${timeStr}`;
+    return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at ${timeStr}`;
+  }
 
   const checkWhoop = useCallback(async () => {
     try {
@@ -22,11 +32,12 @@ export default function WhoopConnectSection() {
       if (!user) return;
       const { data } = await supabase
         .from("whoop_connections")
-        .select("last_sync_at")
+        .select("last_sync_at, last_auto_sync_at")
         .eq("user_id", user.id)
         .maybeSingle();
       setConnected(!!data);
       setLastSync(data?.last_sync_at ?? null);
+      setLastAutoSync((data as any)?.last_auto_sync_at ?? null);
     } catch {}
   }, []);
 
@@ -137,6 +148,11 @@ export default function WhoopConnectSection() {
               {connected && lastSync && (
                 <p className="text-xs text-muted-foreground">
                   Last sync: {new Date(lastSync).toLocaleDateString()}
+                </p>
+              )}
+              {connected && lastAutoSync && (
+                <p className="text-xs text-muted-foreground">
+                  Last auto-synced {formatAutoSync(lastAutoSync)}
                 </p>
               )}
             </div>

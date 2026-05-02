@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ProfileEditPanel } from "./ProfileEditPanel";
 import { DashboardCommunityFeed } from "./DashboardCommunityFeed";
+import AttendancePrompt from "./team-optimization/AttendancePrompt";
 import { c2Sync } from "@/lib/api";
 import { getLocalDate } from "@/lib/dateUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -218,6 +219,21 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
         .maybeSingle();
       return data;
     },
+  });
+
+  // Team memberships for attendance prompts
+  const { data: teamMemberships = [] } = useQuery({
+    queryKey: ["user-team-memberships-dashboard", profile?.id],
+    queryFn: async () => {
+      const user = await getSessionUser();
+      if (!user) return [];
+      const { data } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id);
+      return data || [];
+    },
+    enabled: !!profile?.id,
   });
 
   // Weekly challenge
@@ -446,6 +462,15 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
             </Card>
           </div>
         </div>
+
+        {/* Practice Attendance Prompts */}
+        {(teamMemberships as any[]).length > 0 && (
+          <div className="space-y-2">
+            {(teamMemberships as any[]).map((m: any) => (
+              <AttendancePrompt key={m.team_id} teamId={m.team_id} userId={profile.id} />
+            ))}
+          </div>
+        )}
 
         {/* Recovery Score Widget */}
         <button

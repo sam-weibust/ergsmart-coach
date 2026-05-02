@@ -23,6 +23,7 @@ serve(async (req) => {
   }
 
   let synced = 0, errors = 0;
+  const now = new Date().toISOString();
 
   for (const { user_id } of connections) {
     try {
@@ -31,8 +32,15 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
         body: JSON.stringify({ user_id }),
       });
-      if (res.ok) synced++;
-      else errors++;
+      if (res.ok) {
+        synced++;
+        await supabase
+          .from("whoop_connections")
+          .update({ last_auto_sync_at: now })
+          .eq("user_id", user_id);
+      } else {
+        errors++;
+      }
     } catch {
       errors++;
     }
