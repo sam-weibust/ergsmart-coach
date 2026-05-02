@@ -28,6 +28,7 @@ import BoatManager from "./BoatManager";
 import LineupHistory from "./LineupHistory";
 import BoatPerformanceHistory from "./BoatPerformanceHistory";
 import PracticeDetail from "./PracticeDetail";
+import CoachManagement from "./CoachManagement";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
@@ -97,6 +98,9 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       case "training_plan": return <TeamTrainingPlanSection {...commonProps} />;
       case "leaderboard": return <TeamErgLeaderboard {...commonProps} />;
       case "board": return <TeamMessageBoard {...commonProps} />;
+      case "coaches": return (
+        <CoachManagement teamId={teamId} teamName={teamName} isCoach={isCoach} profile={profile} />
+      );
       case "settings": return (
         <div className="space-y-8">
           <SeasonManager teamId={teamId} isCoach={isCoach} />

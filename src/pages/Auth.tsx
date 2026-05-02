@@ -10,11 +10,19 @@ import { toast } from "sonner";
 import { Loader2, ArrowLeft, Mail, Lock, User, Sparkles, Heart } from "lucide-react";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 
+const SIGNUP_ROLES = [
+  { value: "athlete", label: "Athlete", desc: "I compete and train" },
+  { value: "coxswain", label: "Coxswain", desc: "I cox a boat" },
+  { value: "coach", label: "Coach", desc: "I coach a team" },
+  { value: "organizer", label: "Organizer", desc: "I manage a program or club" },
+] as const;
+
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [signupRole, setSignupRole] = useState("athlete");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const referralCode = searchParams.get("ref");
@@ -30,6 +38,7 @@ const Auth = () => {
         options: {
           data: {
             full_name: fullName,
+            role: signupRole,
           },
         },
       });
@@ -241,6 +250,24 @@ const Auth = () => {
                   </TabsContent>
 
                   <TabsContent value="signup" className="mt-0">
+                    {/* Role selector */}
+                    <div className="grid grid-cols-2 gap-2 mb-5">
+                      {SIGNUP_ROLES.map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          onClick={() => setSignupRole(r.value)}
+                          className={`p-3 rounded-lg border text-left transition-colors ${
+                            signupRole === r.value
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <p className={`text-sm font-semibold ${signupRole === r.value ? "text-blue-700 dark:text-blue-400" : ""}`}>{r.label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{r.desc}</p>
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       onClick={handleGoogleSignIn}

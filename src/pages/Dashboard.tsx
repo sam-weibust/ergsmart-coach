@@ -62,6 +62,7 @@ import {
   X,
   ChevronUp,
   Shield,
+  Building2,
 } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
@@ -111,9 +112,11 @@ import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 import { getSessionUser } from '@/lib/getUser';
+import { toast } from "sonner";
 import { getLocalDate } from "@/lib/dateUtils";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
 import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
+import OrganizationSection from "@/components/dashboard/OrganizationSection";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -128,6 +131,7 @@ interface SubSection {
 interface NavSection {
   id: string;
   label: string;
+  orgOnly?: boolean;
   icon: React.ElementType;
   subs: SubSection[];
   coachOnly?: boolean;
@@ -225,6 +229,13 @@ const NAV_CONFIG: NavSection[] = [
       { id: "contacts", label: "Contact History", description: "Log of outreach to recruits", icon: Mail },
       { id: "program", label: "My Program", description: "Your program profile and recruiting targets", icon: School },
     ],
+  },
+  {
+    id: "organization",
+    label: "Organization",
+    icon: Building2,
+    coachOnly: true,
+    subs: [],
   },
   {
     id: "recruiting",
@@ -571,6 +582,60 @@ const Dashboard = () => {
     profile != null &&
     ((profile as any)?.role === "coach" || (profile as any)?.user_type === "coach" || (Array.isArray(coachTeams) && coachTeams.length > 0));
 
+  const isOrganizer = profile != null && (profile as any)?.role === "organizer";
+
+  // Accept coach invite from URL token
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("accept_coach_invite");
+    if (!inviteToken || !profile) return;
+
+    (async () => {
+      const user = await getSessionUser();
+      if (!user) return;
+
+      const { data: invite } = await supabase
+        .from("coach_invites")
+        .select("*")
+        .eq("token", inviteToken)
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+
+      if (!invite) return;
+
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!userProfile?.email || userProfile.email.toLowerCase() !== invite.email.toLowerCase()) return;
+
+      // Add to team_coaches
+      const { error } = await supabase.from("team_coaches").insert({
+        team_id: invite.team_id,
+        user_id: user.id,
+        role: invite.role,
+        invited_by: invite.invited_by,
+        joined_at: new Date().toISOString(),
+      });
+
+      if (!error) {
+        await supabase
+          .from("coach_invites")
+          .update({ accepted_at: new Date().toISOString() })
+          .eq("id", invite.id);
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete("accept_coach_invite");
+        window.history.replaceState({}, "", url.toString());
+
+        toast({ title: "Welcome to the coaching staff!", description: "You now have coach access to this team." });
+      }
+    })();
+  }, [profile]);
+
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
     queryFn: async () => {
@@ -616,6 +681,12 @@ const Dashboard = () => {
     if (activeSection === "coaches-hub") {
       if (!isCoach) return null;
       return <CoachesHub initialTab={activeSub ?? undefined} />;
+    }
+
+    // Organization dashboard
+    if (activeSection === "organization") {
+      if (!isCoach && !isOrganizer) return null;
+      return <OrganizationSection profile={profile} />;
     }
 
     // Regattas — manages its own internal tabs
@@ -827,8 +898,10 @@ const Dashboard = () => {
     { id: "performance", label: "Performance", icon: BarChart3 },
   ];
 
+  const navVisible = (s: NavSection) => !s.coachOnly || isCoach || isOrganizer;
+
   const moreNavSections = NAV_CONFIG.filter(
-    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && (!s.coachOnly || isCoach)
+    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && navVisible(s)
   );
 
   return (
@@ -867,7 +940,7 @@ const Dashboard = () => {
         {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
         <aside className="hidden md:flex flex-col w-60 shrink-0 bg-[#0a1628] border-r border-white/10 overflow-y-auto">
           <nav className="flex-1 px-3 py-4 space-y-0.5">
-            {NAV_CONFIG.filter((s) => !s.coachOnly || isCoach).map((section) => (
+            {NAV_CONFIG.filter(navVisible).map((section) => (
               <div key={section.id}>
                 <button
                   onClick={() => navTo(section.id)}
@@ -886,7 +959,7 @@ const Dashboard = () => {
                 </button>
                 {activeSection === section.id && section.subs.length > 0 && (
                   <div className="ml-4 mt-1 space-y-0.5">
-                    {section.subs.filter((s) => !s.coachOnly || isCoach).map((sub) => (
+                    {section.subs.filter((s) => !s.coachOnly || isCoach || isOrganizer).map((sub) => (
                       <button
                         key={sub.id}
                         onClick={() => navTo(section.id, sub.id)}
@@ -1013,7 +1086,7 @@ const Dashboard = () => {
                     </button>
                     {activeSection === section.id && section.subs.length > 0 && (
                       <div className="ml-4 mt-1 space-y-0.5">
-                        {section.subs.filter((s) => !s.coachOnly || isCoach).map((sub) => (
+                        {section.subs.filter((s) => !s.coachOnly || isCoach || isOrganizer).map((sub) => (
                           <button
                             key={sub.id}
                             onClick={() => navTo(section.id, sub.id)}

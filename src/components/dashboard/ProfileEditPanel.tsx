@@ -54,7 +54,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Role — drives which fields show
-  const [role, setRole] = useState<"athlete" | "coxswain" | "coach">("athlete");
+  const [role, setRole] = useState<"athlete" | "coxswain" | "coach" | "organizer">("athlete");
 
   // Shared fields (all roles)
   const [fullName, setFullName] = useState("");
@@ -104,6 +104,10 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
   const [coachingLevel, setCoachingLevel] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
+  // Organizer-only fields
+  const [orgOrgName, setOrgOrgName] = useState("");
+  const [orgTitle, setOrgTitle] = useState("");
+
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: async () => {
@@ -141,8 +145,9 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
     if (!profile) return;
     // Derive role: prefer new role column, fall back to legacy fields
     const p = profile as any;
-    const derivedRole: "athlete" | "coxswain" | "coach" =
-      p.role === "coxswain" ? "coxswain"
+    const derivedRole: "athlete" | "coxswain" | "coach" | "organizer" =
+      p.role === "organizer" ? "organizer"
+      : p.role === "coxswain" ? "coxswain"
       : p.role === "coach" ? "coach"
       : p.is_coxswain ? "coxswain"
       : p.user_type === "coach" ? "coach"
@@ -192,6 +197,10 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
     setYearsCoaching((p.years_coaching || "").toString());
     setCoachingLevel(p.coaching_level || "");
     setContactPhone(p.contact_phone || "");
+
+    // Organizer fields
+    setOrgOrgName(p.org_name || "");
+    setOrgTitle(p.org_title || "");
   }, [profile]);
 
   useEffect(() => {
@@ -225,7 +234,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
         id: user.id,
         role,
         // Keep legacy fields in sync for backwards compat
-        user_type: role === "coach" ? "coach" : "rower",
+        user_type: role === "coach" || role === "organizer" ? "coach" : "rower",
         is_coxswain: role === "coxswain",
         full_name: fullName || null,
         username: username || null,
@@ -279,13 +288,26 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
           cox_weight_lbs: null, cox_experience: null, cox_steering_pref: null,
           cox_voice_level: null, cox_years_coxing: null, cox_notes: null,
         } : {}),
+        // Organizer-only
+        ...(role === "organizer" ? {
+          org_name: orgOrgName || null,
+          org_title: orgTitle || null,
+          contact_phone: contactPhone || null,
+          // Clear athlete/cox/coach fields
+          weight: null, height: null, experience_level: null, goals: null, diet_goal: null,
+          enable_strength_training: false, enable_meal_plans: false,
+          side_preference: null, years_rowing: null, best_2k_seconds: null, best_6k_seconds: null,
+          cox_weight_lbs: null, cox_experience: null, cox_steering_pref: null,
+          cox_voice_level: null, cox_years_coxing: null, cox_notes: null,
+          coach_city: null, coach_state: null, years_coaching: null, coaching_level: null,
+        } : {}),
       } as any, { onConflict: "id" });
 
       console.log("[ProfileSave] role:", role, "error:", profileError);
       if (profileError) throw profileError;
 
       // athlete_profiles stores public profile for athletes + coxswains
-      if (role !== "coach") {
+      if (role !== "coach" && role !== "organizer") {
         await supabase.from("athlete_profiles").upsert({
           user_id: user.id,
           bio,
@@ -304,12 +326,12 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
           goal_2k_time: role === "athlete" ? parseTimeToInterval(goal2k) : null,
         } as any);
       } else {
-        // Coach uses athlete_profiles for bio/photo storage
+        // Coach + Organizer use athlete_profiles for bio/photo storage
         await supabase.from("athlete_profiles").upsert({
           user_id: user.id,
           bio,
-          school,
-          location: `${coachCity}${coachCity && coachState ? ", " : ""}${coachState}`,
+          school: role === "organizer" ? (orgOrgName || null) : school,
+          location: role === "organizer" ? location : `${coachCity}${coachCity && coachState ? ", " : ""}${coachState}`,
           contact_email: contactEmail,
           is_public: isPublic,
           updated_at: new Date().toISOString(),
@@ -402,6 +424,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
                     <SelectItem value="athlete">Athlete</SelectItem>
                     <SelectItem value="coxswain">Coxswain</SelectItem>
                     <SelectItem value="coach">Coach</SelectItem>
+                    <SelectItem value="organizer">Organizer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -620,8 +643,48 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
             </div>
           )}
 
+          {/* ── ORGANIZER FIELDS ── */}
+          {role === "organizer" && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground border-b pb-1">Organizer Info</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Organization Name</Label>
+                  <Input value={orgOrgName} onChange={(e) => setOrgOrgName(e.target.value)} placeholder="e.g., CRI Rowing" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Title / Position</Label>
+                  <Input value={orgTitle} onChange={(e) => setOrgTitle(e.target.value)} placeholder="e.g., Program Director, Athletic Director" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Contact Email</Label>
+                  <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="director@program.org" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Contact Phone</Label>
+                  <Input type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="555-555-5555" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Washington, DC" />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Bio</Label>
+                  <Textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Your background and role..." rows={3} maxLength={500} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t pt-3">
+                <Label className="text-xs text-muted-foreground">Public profile</Label>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{isPublic ? "Public" : "Private"}</span>
+                  <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Public profile — athlete + coxswain */}
-          {role !== "coach" && (
+          {role !== "coach" && role !== "organizer" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b pb-1">
                 <h3 className="text-sm font-semibold text-foreground">Public Profile</h3>
@@ -660,7 +723,7 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
           )}
 
           {/* Coach public visibility */}
-          {role === "coach" && (
+          {role === "coach" && role !== "organizer" && (
             <div className="flex items-center justify-between border-t pt-3">
               <Label className="text-xs text-muted-foreground">Public profile</Label>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

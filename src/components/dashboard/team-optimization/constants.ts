@@ -77,5 +77,6 @@ export const SIDEBAR_ITEMS = [
   { key: "training_plan", label: "Training Plan", icon: "Calendar" },
   { key: "leaderboard", label: "Leaderboard", icon: "Medal" },
   { key: "board", label: "Message Board", icon: "MessageSquare" },
+  { key: "coaches", label: "Coaching Staff", icon: "Users" },
   { key: "settings", label: "Team Settings", icon: "Settings" },
 ] as const;
