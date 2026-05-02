@@ -422,6 +422,12 @@ export default function PricingPage() {
 
         {/* Hero */}
         <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <span className="inline-flex items-center gap-1.5 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full border border-green-200 dark:border-green-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+              Nonprofits always free
+            </span>
+          </div>
           <h1 className="text-4xl sm:text-5xl font-black text-foreground">Simple, transparent pricing</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Free forever for individual athletes. Powerful AI tools for those who want an edge. Team plans for coaches who want to run a world-class program.
@@ -526,6 +532,25 @@ export default function PricingPage() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Nonprofit callout */}
+        <div className="bg-[#0a1628] rounded-2xl p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center gap-6">
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-white/70 shrink-0" />
+              <h2 className="text-xl font-bold text-white">Nonprofit and Community Rowing Programs</h2>
+            </div>
+            <p className="text-white/75 text-sm leading-relaxed max-w-2xl">
+              CrewSync is completely free for nonprofit rowing clubs and community programs — forever. We believe every program deserves access to professional coaching tools regardless of budget.
+            </p>
+          </div>
+          <a
+            href="mailto:sam.weibust@gmail.com"
+            className="shrink-0 inline-block bg-white text-[#0a1628] font-bold px-6 py-3 rounded-xl text-sm hover:bg-white/90 transition-colors whitespace-nowrap"
+          >
+            Contact Us for Free Access
+          </a>
         </div>
 
         {/* FAQ */}
