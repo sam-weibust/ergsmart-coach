@@ -55,7 +55,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           team_members(
             id,
             user_id,
-            profile:profiles(id, full_name, email, username, role, is_coxswain)
+            profile:profiles(id, full_name, email, username, role, is_coxswain, best_2k_seconds, best_2k_date, best_6k_seconds, best_6k_date, years_rowing, cox_years_coxing)
           )
         `)
         .eq("coach_id", profile.id);
@@ -69,7 +69,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
             team_members(
               id,
               user_id,
-              profile:profiles(id, full_name, email, username, role, is_coxswain)
+              profile:profiles(id, full_name, email, username, role, is_coxswain, best_2k_seconds, best_2k_date, best_6k_seconds, best_6k_date, years_rowing, cox_years_coxing)
             )
           )
         `)
@@ -285,9 +285,9 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                             key={member.id}
                             className="flex items-center justify-between p-2 border rounded-lg text-sm"
                           >
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="font-medium">
                                     {member.profile?.full_name || member.profile?.username || "Unknown"}
                                   </p>
@@ -301,7 +301,27 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                                     <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
                                   )}
                                 </div>
-                                <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                                <div className="flex flex-wrap gap-3 mt-0.5">
+                                  <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                                  {member.profile?.best_2k_seconds && (
+                                    <span className="text-xs font-mono text-primary font-medium">
+                                      2K: {Math.floor(member.profile.best_2k_seconds / 60)}:{String(Math.round(member.profile.best_2k_seconds % 60)).padStart(2, "0")}
+                                      {member.profile.best_2k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_2k_date})</span>}
+                                    </span>
+                                  )}
+                                  {member.profile?.best_6k_seconds && (
+                                    <span className="text-xs font-mono text-blue-500 font-medium">
+                                      6K: {Math.floor(member.profile.best_6k_seconds / 60)}:{String(Math.round(member.profile.best_6k_seconds % 60)).padStart(2, "0")}
+                                      {member.profile.best_6k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_6k_date})</span>}
+                                    </span>
+                                  )}
+                                  {member.profile?.years_rowing != null && member.profile.role === "athlete" && (
+                                    <span className="text-xs text-muted-foreground">{member.profile.years_rowing} seasons rowing</span>
+                                  )}
+                                  {member.profile?.cox_years_coxing != null && (member.profile.role === "coxswain" || member.profile.is_coxswain) && (
+                                    <span className="text-xs text-muted-foreground">{member.profile.cox_years_coxing} seasons coxing</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <AlertDialog>

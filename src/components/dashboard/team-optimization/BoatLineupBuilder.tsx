@@ -311,6 +311,24 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
         }));
         await supabase.from("notifications").insert(notifRecords as any);
       }
+
+      // Auto-create practice entry if it doesn't already exist
+      if (lineup.practice_date) {
+        const { data: existingEntry } = await supabase
+          .from("practice_entries")
+          .select("id")
+          .eq("lineup_id", lineup.id)
+          .maybeSingle();
+        if (!existingEntry) {
+          await supabase.from("practice_entries").insert({
+            team_id: lineup.team_id,
+            lineup_id: lineup.id,
+            practice_date: lineup.practice_date,
+            boat_id: lineup.boat_id || null,
+            status: "pending",
+          } as any);
+        }
+      }
     },
     onSuccess: () => {
       toast({ title: "Lineup published! Athletes notified." });

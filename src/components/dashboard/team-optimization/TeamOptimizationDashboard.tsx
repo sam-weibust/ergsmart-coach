@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings,
+  CalendarDays, History, Settings, TrendingDown,
 } from "lucide-react";
 import { SIDEBAR_ITEMS } from "./constants";
 import TeamOverview from "./TeamOverview";
@@ -25,11 +25,13 @@ import TeamCalendar from "./TeamCalendar";
 import WorkoutHistory from "./WorkoutHistory";
 import SeasonManager from "./SeasonManager";
 import BoatManager from "./BoatManager";
+import LineupHistory from "./LineupHistory";
+import BoatPerformanceHistory from "./BoatPerformanceHistory";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings,
+  CalendarDays, History, Settings, TrendingDown,
 };
 
 interface Props {
@@ -80,6 +82,8 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       case "overview": return <TeamOverview {...commonProps} />;
       case "calendar": return <TeamCalendar {...commonProps} />;
       case "lineups": return <BoatLineupBuilder {...commonProps} />;
+      case "lineup_history": return <LineupHistory teamId={teamId} isCoach={isCoach} boats={boats} />;
+      case "boat_perf": return <BoatPerformanceHistory teamId={teamId} isCoach={isCoach} boats={boats} seasonId={effectiveSeasonId} />;
       case "history": return <WorkoutHistory {...commonProps} />;
       case "erg_scores": return <ErgScoreManager {...commonProps} />;
       case "onwater": return <OnWaterResults {...commonProps} />;

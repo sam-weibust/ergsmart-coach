@@ -82,13 +82,13 @@ export default function AthleteProfile() {
     queryFn: async () => {
       const { data: baseProfile } = await supabase
         .from("profiles")
-        .select("id, full_name, username, height, weight, user_type, role, is_coxswain, cox_weight_lbs, cox_experience, cox_steering_pref, cox_voice_level, cox_years_coxing, cox_notes, coach_city, coach_state, years_coaching, coaching_level, contact_phone")
+        .select("id, full_name, username, height, weight, user_type, role, is_coxswain, cox_weight_lbs, cox_experience, cox_steering_pref, cox_voice_level, cox_years_coxing, cox_notes, coach_city, coach_state, years_coaching, coaching_level, contact_phone, best_2k_seconds, best_6k_seconds, best_2k_date, best_6k_date, years_rowing")
         .eq("username", username)
         .maybeSingle();
 
       if (!baseProfile) return null;
 
-      const [apRes, ergRes, strengthRes, followersRes, followingRes, combineRes, academicsRes] = await Promise.all([
+      const [apRes, ergRes, strengthRes, followersRes, followingRes, combineRes, academicsRes, ergScores2kRes, ergScores6kRes] = await Promise.all([
         supabase.from("athlete_profiles").select("*").eq("user_id", baseProfile.id).maybeSingle(),
         supabase.from("erg_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(20),
         supabase.from("strength_workouts").select("*").eq("user_id", baseProfile.id).order("workout_date", { ascending: false }).limit(10),
@@ -96,6 +96,8 @@ export default function AthleteProfile() {
         supabase.from("profile_follows").select("id").eq("follower_id", baseProfile.id),
         (supabase as any).from("combine_entries").select("combine_score, two_k_seconds, six_k_seconds, two_k_watts").eq("user_id", baseProfile.id).maybeSingle(),
         supabase.from("athlete_academics").select("*").eq("user_id", baseProfile.id).maybeSingle(),
+        supabase.from("erg_scores").select("time_seconds, recorded_at").eq("user_id", baseProfile.id).eq("test_type", "2k").order("time_seconds", { ascending: true }).limit(1),
+        supabase.from("erg_scores").select("time_seconds, recorded_at").eq("user_id", baseProfile.id).eq("test_type", "6k").order("time_seconds", { ascending: true }).limit(1),
       ]);
 
       const ap = apRes.data;
@@ -115,6 +117,14 @@ export default function AthleteProfile() {
       });
       const totalVolume = recentMonth.reduce((sum: number, w: any) => sum + (w.distance || 0), 0);
 
+      // Best 2k: prefer erg_scores auto-calculated, fall back to profile manual
+      const best2kScore = (ergScores2kRes.data || [])[0];
+      const best6kScore = (ergScores6kRes.data || [])[0];
+      const best2kSeconds = best2kScore?.time_seconds ?? (baseProfile as any).best_2k_seconds ?? null;
+      const best2kDate = best2kScore?.recorded_at ? best2kScore.recorded_at.split("T")[0] : (baseProfile as any).best_2k_date ?? null;
+      const best6kSeconds = best6kScore?.time_seconds ?? (baseProfile as any).best_6k_seconds ?? null;
+      const best6kDate = best6kScore?.recorded_at ? best6kScore.recorded_at.split("T")[0] : (baseProfile as any).best_6k_date ?? null;
+
       return {
         base: baseProfile,
         ap,
@@ -126,6 +136,10 @@ export default function AthleteProfile() {
         following: (followingRes.data || []).length,
         combine: combineRes.data || null,
         academics: academicsRes.data || null,
+        best2kSeconds,
+        best2kDate,
+        best6kSeconds,
+        best6kDate,
       };
     },
   });
@@ -244,7 +258,7 @@ export default function AthleteProfile() {
     );
   }
 
-  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine, academics } = profileData;
+  const { base, ap, bestErg, ergs, strengthCount, totalVolume, followers, combine, academics, best2kSeconds, best2kDate, best6kSeconds, best6kDate } = profileData;
   // Derive role from new column, falling back to legacy fields
   const profileRole: "athlete" | "coxswain" | "coach" =
     (base as any).role === "coxswain" || (base as any).is_coxswain ? "coxswain"
@@ -599,6 +613,25 @@ export default function AthleteProfile() {
                 <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" />Performance</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Best 2k/6k prominently */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <div className="text-2xl font-bold font-mono text-primary">
+                      {best2kSeconds ? `${Math.floor(best2kSeconds / 60)}:${String(Math.round(best2kSeconds % 60)).padStart(2, "0")}` : "—"}
+                    </div>
+                    <div className="text-xs font-semibold mt-0.5">Best 2K</div>
+                    {best2kDate && <div className="text-[11px] text-muted-foreground">{best2kDate}</div>}
+                    {!best2kSeconds && <div className="text-[11px] text-muted-foreground italic">Not set</div>}
+                  </div>
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <div className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
+                      {best6kSeconds ? `${Math.floor(best6kSeconds / 60)}:${String(Math.round(best6kSeconds % 60)).padStart(2, "0")}` : "—"}
+                    </div>
+                    <div className="text-xs font-semibold mt-0.5">Best 6K</div>
+                    {best6kDate && <div className="text-[11px] text-muted-foreground">{best6kDate}</div>}
+                    {!best6kSeconds && <div className="text-[11px] text-muted-foreground italic">Not set</div>}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <div className="text-xl font-bold text-primary">{fmtSplit(bestErg?.avg_split)}</div>
@@ -684,6 +717,25 @@ export default function AthleteProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {/* Best times prominently in recruiting */}
+                  {profileRole === "athlete" && (best2kSeconds || best6kSeconds) && (
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      <div className="p-2.5 bg-primary/10 border border-primary/20 rounded-lg">
+                        <div className="text-lg font-bold font-mono text-primary">
+                          {best2kSeconds ? `${Math.floor(best2kSeconds / 60)}:${String(Math.round(best2kSeconds % 60)).padStart(2, "0")}` : "—"}
+                        </div>
+                        <div className="text-[11px] font-semibold">Best 2K</div>
+                        {best2kDate && <div className="text-[10px] text-muted-foreground">{best2kDate}</div>}
+                      </div>
+                      <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                        <div className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400">
+                          {best6kSeconds ? `${Math.floor(best6kSeconds / 60)}:${String(Math.round(best6kSeconds % 60)).padStart(2, "0")}` : "—"}
+                        </div>
+                        <div className="text-[11px] font-semibold">Best 6K</div>
+                        {best6kDate && <div className="text-[10px] text-muted-foreground">{best6kDate}</div>}
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     {ap.division_interest && (
                       <div>
@@ -782,6 +834,18 @@ export default function AthleteProfile() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Grad Year</span>
                     <span className="font-medium">{ap.grad_year}</span>
+                  </div>
+                )}
+                {profileRole === "athlete" && (base as any).years_rowing != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Seasons Rowing</span>
+                    <span className="font-medium">{(base as any).years_rowing}</span>
+                  </div>
+                )}
+                {profileRole === "coxswain" && (base as any).cox_years_coxing != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Seasons Coxing</span>
+                    <span className="font-medium">{(base as any).cox_years_coxing}</span>
                   </div>
                 )}
                 {profileRole === "athlete" && strengthCount > 0 && (

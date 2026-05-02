@@ -456,8 +456,8 @@ export function ProfileEditPanel({ open, onClose }: ProfileEditPanelProps) {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Years Rowing</Label>
-                    <Input type="number" value={yearsRowing} onChange={e => setYearsRowing(e.target.value)} placeholder="3" min="0" max="30" />
+                    <Label className="text-xs">Seasons Rowing</Label>
+                    <Input type="number" value={yearsRowing} onChange={e => setYearsRowing(e.target.value)} placeholder="e.g. 6 for 3 years of fall and spring" min="0" max="60" />
                   </div>
                 </div>
               </div>

@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Wind, Waves, Users, LayoutGrid, List } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ChevronLeft, ChevronRight, Wind, Waves, Users, LayoutGrid, List, Save, AlertCircle } from "lucide-react";
 import { formatSplit } from "./constants";
+import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   teamId: string;
@@ -27,6 +29,7 @@ function formatSplitSec(s: number) {
 }
 
 function windIcon(w: string) {
+  if (w === "calm") return "— Calm";
   if (w === "light") return "🌬️ Light";
   if (w === "moderate") return "💨 Moderate";
   if (w === "heavy") return "🌪️ Heavy";
@@ -41,11 +44,14 @@ function waterIcon(w: string) {
 
 const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
   const today = new Date();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [activeBoatFilter, setActiveBoatFilter] = useState<string[]>([]);
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
 
   const startOfMonth = new Date(year, month, 1);
   const endOfMonth = new Date(year, month + 1, 0);
@@ -94,6 +100,45 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
     },
     enabled: lineups.length > 0,
   });
+
+  const { data: practiceEntries = [] } = useQuery({
+    queryKey: ["practice-entries-calendar", teamId, year, month],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("practice_entries")
+        .select("*")
+        .eq("team_id", teamId)
+        .gte("practice_date", rangeStart)
+        .lte("practice_date", rangeEnd);
+      return data || [];
+    },
+  });
+
+  const saveCoachNotes = useMutation({
+    mutationFn: async ({ entryId, notes }: { entryId: string; notes: string }) => {
+      const { error } = await supabase
+        .from("practice_entries")
+        .update({ coach_notes: notes, updated_at: new Date().toISOString() })
+        .eq("id", entryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Notes saved" });
+      queryClient.invalidateQueries({ queryKey: ["practice-entries-calendar", teamId] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  // Group practice entries by date
+  const entriesByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const e of practiceEntries) {
+      if (!e.practice_date) continue;
+      if (!map[e.practice_date]) map[e.practice_date] = [];
+      map[e.practice_date].push(e);
+    }
+    return map;
+  }, [practiceEntries]);
 
   // Filter results for athlete (only their boat)
   const visibleResults = useMemo(() => {
@@ -159,6 +204,7 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
 
   const selectedResults = selectedDay ? filterByBoat(resultsByDate[selectedDay] || []) : [];
   const selectedLineups = selectedDay ? filterByBoat(lineupsByDate[selectedDay] || []) : [];
+  const selectedEntries = selectedDay ? (entriesByDate[selectedDay] || []) : [];
   const todayStr = today.toISOString().split("T")[0];
 
   return (
@@ -219,6 +265,7 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
               const dateStr = toDateStr(day);
               const hasResults = (filterByBoat(resultsByDate[dateStr] || [])).length > 0;
               const hasLineup = (filterByBoat(lineupsByDate[dateStr] || [])).length > 0;
+              const hasPendingEntry = (entriesByDate[dateStr] || []).some((e: any) => e.status === "pending");
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDay;
               return (
@@ -233,14 +280,16 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                   <div className="flex flex-wrap gap-0.5">
                     {hasResults && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
                     {hasLineup && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+                    {hasPendingEntry && !hasResults && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
                   </div>
                 </button>
               );
             })}
           </div>
-          <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
+          <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />On-water session</span>
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />Published lineup</span>
+            <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />Pending entry</span>
           </div>
         </CardContent>
       </Card>
@@ -307,6 +356,12 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                     )}
 
                     {/* Workout data */}
+                    {boatResults.length === 0 && lineup && (
+                      <div className="flex items-center gap-1.5 text-xs text-orange-500">
+                        <AlertCircle className="h-3 w-3" />
+                        <span>Pending — no workout logged yet</span>
+                      </div>
+                    )}
                     {boatResults.map((r: any) => (
                       <div key={r.id} className="space-y-2">
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -355,6 +410,39 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                         )}
                       </div>
                     ))}
+
+                    {/* Coach notes — coaches only */}
+                    {isCoach && (() => {
+                      const entry = selectedEntries.find((e: any) => e.lineup_id === lineup?.id || (lineup?.boat_id && e.boat_id === lineup.boat_id));
+                      if (!entry) return null;
+                      const noteKey = entry.id;
+                      const currentNote = noteKey in editingNotes ? editingNotes[noteKey] : (entry.coach_notes || "");
+                      return (
+                        <div className="space-y-1.5 border-t pt-3 mt-1">
+                          <p className="text-xs font-medium text-muted-foreground">Coach Notes (private)</p>
+                          <Textarea
+                            value={currentNote}
+                            onChange={e => setEditingNotes(prev => ({ ...prev, [noteKey]: e.target.value }))}
+                            placeholder="What worked, what to focus on next session, observations..."
+                            rows={3}
+                            className="text-xs resize-none"
+                          />
+                          {noteKey in editingNotes && editingNotes[noteKey] !== (entry.coach_notes || "") && (
+                            <Button
+                              size="sm"
+                              className="gap-1 h-7 px-2 text-xs"
+                              onClick={() => {
+                                saveCoachNotes.mutate({ entryId: entry.id, notes: editingNotes[noteKey] });
+                                setEditingNotes(prev => { const n = { ...prev }; delete n[noteKey]; return n; });
+                              }}
+                              disabled={saveCoachNotes.isPending}
+                            >
+                              <Save className="h-3 w-3" />Save notes
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               );

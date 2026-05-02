@@ -127,6 +127,24 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
         to_leaderboard: false,
       });
       if (error) throw error;
+
+      // Auto-update best_2k_seconds or best_6k_seconds on profile if this is a new PR
+      if (time_seconds && (data.test_type === "2k" || data.test_type === "6k")) {
+        const profileField = data.test_type === "2k" ? "best_2k_seconds" : "best_6k_seconds";
+        const dateField = data.test_type === "2k" ? "best_2k_date" : "best_6k_date";
+        const { data: currentProfile } = await supabase
+          .from("profiles")
+          .select(profileField)
+          .eq("id", data.user_id)
+          .maybeSingle();
+        const current = (currentProfile as any)?.[profileField];
+        if (!current || time_seconds < current) {
+          await supabase.from("profiles").update({
+            [profileField]: time_seconds,
+            [dateField]: new Date().toISOString().split("T")[0],
+          }).eq("id", data.user_id);
+        }
+      }
     },
     onSuccess: () => {
       toast({ title: "Erg score logged!" });
