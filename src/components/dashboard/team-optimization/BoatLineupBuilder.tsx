@@ -6,14 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2, Send, CheckCircle, XCircle, Clock, HelpCircle } from "lucide-react";
+import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2, Send, CheckCircle, XCircle, Clock, HelpCircle, BookTemplate, FolderOpen } from "lucide-react";
 import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName } from "./constants";
 
 interface Props {
@@ -96,12 +97,28 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
   const [balanceScore, setBalanceScore] = useState<number | null>(null);
   const [aiRationale, setAiRationale] = useState<string>("");
   const [workoutPlan, setWorkoutPlan] = useState<string>("");
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [loadTemplateOpen, setLoadTemplateOpen] = useState(false);
 
   const allAthletes = teamMembers.map((m: any) => m.profile || m).filter((a: any) => a?.id);
   // role-based filtering: coxswain seat gets only coxswains, rowing seats get athletes (not coaches)
   const coxswains = allAthletes.filter((a: any) => a.role === "coxswain" || a.is_coxswain);
   const rowers = allAthletes.filter((a: any) => a.role !== "coach");
   const activeBoats = boats.filter((b: any) => b.is_active);
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["lineup-templates", teamId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lineup_templates" as any)
+        .select("*")
+        .eq("team_id", teamId)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const { data: lineups = [], isLoading } = useQuery({
     queryKey: ["boat-lineups", teamId, seasonId],
@@ -332,16 +349,17 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
         }));
         await supabase.from("practice_attendance").upsert(records, { onConflict: "lineup_id,user_id" });
 
-        // Send in-app notifications
+        // Send push + in-app notifications
         const dateStr = lineup.practice_date ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "upcoming practice";
-        const notifRecords = athleteIds.map(uid => ({
-          user_id: uid,
-          type: "plan_shared",
-          title: "Are you attending practice?",
-          body: `${profile.full_name || profile.username || "Your coach"} published the lineup for ${dateStr}. Tap to confirm your attendance.`,
-          data: JSON.stringify({ lineup_id: lineup.id, action: "attendance" }),
-        }));
-        await supabase.from("notifications").insert(notifRecords as any);
+        supabase.functions.invoke("send-notification", {
+          body: {
+            user_ids: athleteIds,
+            type: "lineup_published",
+            title: "Lineup Posted",
+            body: `Your lineup for ${dateStr} has been posted. Tap to view your seat.`,
+            data: { lineup_id: lineup.id, action: "attendance" },
+          },
+        }).catch((e) => console.error("send-notification error:", e));
       }
 
       // Auto-create practice entry if it doesn't already exist
@@ -399,6 +417,59 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const saveTemplate = useMutation({
+    mutationFn: async ({ name, overwriteId }: { name: string; overwriteId?: string }) => {
+      const payload = {
+        team_id: teamId,
+        coach_id: profile.id,
+        name,
+        boat_id: selectedBoatId || null,
+        boat_class: newBoatClass,
+        seats,
+        updated_at: new Date().toISOString(),
+      };
+      if (overwriteId) {
+        const { error } = await supabase.from("lineup_templates" as any).update(payload).eq("id", overwriteId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("lineup_templates" as any).insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Template saved!" });
+      queryClient.invalidateQueries({ queryKey: ["lineup-templates", teamId] });
+      setSaveTemplateOpen(false);
+      setTemplateName("");
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteTemplate = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("lineup_templates" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Template deleted" });
+      queryClient.invalidateQueries({ queryKey: ["lineup-templates", teamId] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function loadTemplate(template: any) {
+    setNewBoatClass(template.boat_class);
+    setSelectedBoatId(template.boat_id || "");
+    const templateSeats: SeatAssignment[] = Array.isArray(template.seats) ? template.seats : [];
+    const baseSeats = initSeats(template.boat_class).map((s: SeatAssignment) => {
+      const saved = templateSeats.find((ts: any) => ts.seat_number === s.seat_number);
+      return saved ? { ...s, ...saved } : s;
+    });
+    setSeats(baseSeats);
+    setLoadTemplateOpen(false);
+    toast({ title: `Loaded template: ${template.name}` });
+  }
+
   if (isLoading) return <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin h-6 w-6" /></div>;
 
   return (
@@ -413,6 +484,75 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
         )}
       </div>
 
+      <Tabs defaultValue="lineups">
+        <TabsList className="mb-4">
+          <TabsTrigger value="lineups">Lineups</TabsTrigger>
+          <TabsTrigger value="templates">
+            Templates
+            {templates.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{templates.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="templates">
+          <div className="space-y-3">
+            {templates.length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center">
+                  <BookTemplate className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No templates yet. Save a lineup as a template to reuse it.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {templates.map((t: any) => {
+                  const tSeats: SeatAssignment[] = Array.isArray(t.seats) ? t.seats : [];
+                  const filled = tSeats.filter(s => s.user_id).length;
+                  return (
+                    <Card key={t.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-sm">{t.name}</CardTitle>
+                            <CardDescription className="flex items-center gap-1.5 mt-1">
+                              <Badge variant="outline" className="text-xs">{t.boat_class}</Badge>
+                              <span className="text-xs text-muted-foreground">{filled} athletes</span>
+                              <span className="text-xs text-muted-foreground">
+                                Last used {new Date(t.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                            </CardDescription>
+                          </div>
+                          {isCoach && (
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={() => { openCreate(); loadTemplate(t); }}>
+                                <FolderOpen className="h-3 w-3" />Load
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={() => deleteTemplate.mutate(t.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {tSeats.slice(0, 4).map((s: any) => (
+                          <div key={s.seat_number} className="flex gap-2 text-xs py-0.5">
+                            <span className="text-muted-foreground w-12 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
+                            <span className="font-medium">{s.name || "—"}</span>
+                          </div>
+                        ))}
+                        {tSeats.length > 4 && <p className="text-xs text-muted-foreground mt-1">+{tSeats.length - 4} more</p>}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="lineups">
       {lineups.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -543,6 +683,9 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
         </div>
       )}
 
+        </TabsContent>
+      </Tabs>
+
       {/* Create/Edit Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -550,6 +693,13 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
             <DialogTitle>{editingLineup ? "Edit Lineup" : "New Boat Lineup"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Template actions */}
+            {isCoach && templates.length > 0 && (
+              <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={() => setLoadTemplateOpen(true)}>
+                <FolderOpen className="h-4 w-4" />Load Template
+              </Button>
+            )}
+
             <div className="space-y-3">
               {activeBoats.length > 0 && (
                 <div className="space-y-1">
@@ -646,14 +796,98 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
               <p className="text-xs text-muted-foreground">Free-form — write it exactly as you'd put it on the whiteboard. Published with the lineup.</p>
             </div>
 
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => saveLineup.mutate()}
+                disabled={saveLineup.isPending || !newName}
+              >
+                {saveLineup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {editingLineup ? "Update Lineup" : "Save Lineup"}
+              </Button>
+              {isCoach && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => { setTemplateName(newName || ""); setSaveTemplateOpen(true); }}
+                >
+                  <BookTemplate className="h-4 w-4" />Save as Template
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Template Dialog */}
+      <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Template Name</Label>
+              <Input
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                placeholder="e.g. Varsity 8 Race Day"
+                autoFocus
+              />
+            </div>
+            {templates.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Or overwrite an existing template:</p>
+                {templates.map((t: any) => (
+                  <Button
+                    key={t.id}
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start text-xs h-8"
+                    onClick={() => saveTemplate.mutate({ name: t.name, overwriteId: t.id })}
+                    disabled={saveTemplate.isPending}
+                  >
+                    Overwrite "{t.name}"
+                  </Button>
+                ))}
+              </div>
+            )}
             <Button
               className="w-full gap-2"
-              onClick={() => saveLineup.mutate()}
-              disabled={saveLineup.isPending || !newName}
+              onClick={() => saveTemplate.mutate({ name: templateName })}
+              disabled={!templateName.trim() || saveTemplate.isPending}
             >
-              {saveLineup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {editingLineup ? "Update Lineup" : "Save Lineup"}
+              {saveTemplate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save New Template
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load Template Dialog */}
+      <Dialog open={loadTemplateOpen} onOpenChange={setLoadTemplateOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Load Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {templates.map((t: any) => {
+              const tSeats: SeatAssignment[] = Array.isArray(t.seats) ? t.seats : [];
+              return (
+                <button
+                  key={t.id}
+                  className="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors"
+                  onClick={() => loadTemplate(t)}
+                >
+                  <p className="text-sm font-medium">{t.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t.boat_class} · {tSeats.filter((s: any) => s.user_id).length} athletes ·
+                    Updated {new Date(t.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>

@@ -65,6 +65,8 @@
 	<string>CrewSync uses Bluetooth to connect to your Concept2 PM5 erg and heart rate monitor for live performance tracking.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>CrewSync uses Bluetooth to connect to your Concept2 PM5 erg and heart rate monitor.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>CrewSync uses notifications to alert you about lineups, messages, and training updates.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>CrewSync uses the camera to scan food barcodes for calorie tracking.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

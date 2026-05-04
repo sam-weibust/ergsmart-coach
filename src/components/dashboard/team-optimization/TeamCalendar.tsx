@@ -76,13 +76,14 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
   const { data: lineups = [] } = useQuery({
     queryKey: ["lineups-calendar", teamId, year, month],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("boat_lineups")
         .select("*")
         .eq("team_id", teamId)
         .gte("practice_date", rangeStart)
-        .lte("practice_date", rangeEnd)
-        .not("published_at", "is", null);
+        .lte("practice_date", rangeEnd);
+      // Coaches see all published + unpublished future lineups; athletes see only published
+      const { data } = isCoach ? await q : await q.not("published_at", "is", null);
       return data || [];
     },
   });
@@ -263,9 +264,12 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
             {cells.map((day, i) => {
               if (!day) return <div key={i} />;
               const dateStr = toDateStr(day);
+              const dayLineups = filterByBoat(lineupsByDate[dateStr] || []);
               const hasResults = (filterByBoat(resultsByDate[dateStr] || [])).length > 0;
-              const hasLineup = (filterByBoat(lineupsByDate[dateStr] || [])).length > 0;
+              const hasPublishedLineup = dayLineups.some((l: any) => l.published_at);
+              const hasScheduledLineup = dayLineups.some((l: any) => !l.published_at && dateStr > todayStr);
               const hasPendingEntry = (entriesByDate[dateStr] || []).some((e: any) => e.status === "pending");
+              const isFuture = dateStr > todayStr;
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDay;
               return (
@@ -273,14 +277,15 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                   key={i}
                   onClick={() => setSelectedDay(isSelected ? null : dateStr)}
                   className={`relative rounded-lg p-1 min-h-[48px] sm:min-h-[60px] flex flex-col items-start transition-colors text-left
-                    ${isSelected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 hover:bg-primary/20" : "hover:bg-muted"}
+                    ${isSelected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 hover:bg-primary/20" : isFuture && (hasPublishedLineup || hasScheduledLineup) ? "bg-blue-50/30 dark:bg-blue-950/20 hover:bg-blue-50/50 dark:hover:bg-blue-950/30" : "hover:bg-muted"}
                   `}
                 >
                   <span className={`text-xs font-medium mb-1 ${isToday && !isSelected ? "text-primary" : ""}`}>{day}</span>
                   <div className="flex flex-wrap gap-0.5">
                     {hasResults && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                    {hasLineup && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
-                    {hasPendingEntry && !hasResults && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
+                    {hasPublishedLineup && !isFuture && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+                    {(hasPublishedLineup || hasScheduledLineup) && isFuture && <span className="h-1.5 w-1.5 rounded-full bg-blue-400 ring-1 ring-blue-400/50" />}
+                    {hasPendingEntry && !hasResults && !isFuture && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
                   </div>
                 </button>
               );
@@ -289,6 +294,7 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
           <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />On-water session</span>
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />Published lineup</span>
+            <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-400 inline-block" />Scheduled</span>
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />Pending entry</span>
           </div>
         </CardContent>
@@ -303,6 +309,12 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
 
           {selectedResults.length === 0 && selectedLineups.length === 0 && (
             <p className="text-sm text-muted-foreground">No practice data for this day.</p>
+          )}
+          {selectedDay && selectedDay > todayStr && selectedLineups.length > 0 && (
+            <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+              <span className="text-xs text-blue-700 dark:text-blue-300 font-medium">Scheduled practice</span>
+              <span className="text-xs text-blue-600/70 dark:text-blue-400/70">Athletes will be notified when the lineup is published.</span>
+            </div>
           )}
 
           {/* Group by boat */}
@@ -331,6 +343,9 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                       {boatName}
                       {lineup && (
                         <Badge variant="outline" className="text-xs">{lineup.boat_class || ""}</Badge>
+                      )}
+                      {lineup && !lineup.published_at && selectedDay && selectedDay > todayStr && (
+                        <Badge className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-0">Scheduled</Badge>
                       )}
                       {total > 0 && (
                         <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">

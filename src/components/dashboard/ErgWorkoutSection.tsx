@@ -113,12 +113,20 @@ async function checkAndUpdatePR(userId: string, distanceM: number | null, splitS
     } else {
       toast.success(`🏆 First ${distanceLabel} recorded!`);
     }
-    // Non-blocking email notification
+    // Non-blocking notifications
     supabase.functions.invoke("send-notification-email", {
+      body: { type: "new_pr", recipientUserId: userId, distanceLabel },
+    }).catch(() => {});
+    const mm = Math.floor(timeSec / 60);
+    const ss = String(timeSec % 60).padStart(2, "0");
+    const label = distanceLabel === "2000m" ? "2k" : distanceLabel;
+    supabase.functions.invoke("send-notification", {
       body: {
-        type: "new_pr",
-        recipientUserId: userId,
-        distanceLabel,
+        user_id: userId,
+        type: "personal_best",
+        title: "New Personal Best",
+        body: `You just set a new ${label} PR of ${mm}:${ss}. Keep it up!`,
+        data: { distance_label: distanceLabel },
       },
     }).catch(() => {});
   } catch {

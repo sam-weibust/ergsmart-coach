@@ -84,18 +84,28 @@ const WeeklyChallengeSection = () => {
       const challengeData = await res.json().catch(() => ({}));
       queryClient.invalidateQueries({ queryKey: ["weekly-challenge", weekStart] });
       toast.success("This week's challenge is ready!");
-      // Non-blocking: notify the user who generated the challenge
+      const challengeName = challengeData?.challenge_type
+        ? challengeData.challenge_type.replace(/_/g, " ")
+        : "This week's challenge";
       if (user?.id) {
         supabase.functions.invoke("send-notification-email", {
           body: {
             type: "weekly_challenge",
             recipientUserId: user.id,
-            challengeName: challengeData?.challenge_type
-              ? challengeData.challenge_type.replace(/_/g, " ")
-              : "This week's challenge",
+            challengeName,
           },
         }).catch(() => {});
       }
+      // Notify all users about the new weekly challenge
+      supabase.functions.invoke("send-notification", {
+        body: {
+          notify_all: true,
+          type: "weekly_challenge",
+          title: "New Weekly Challenge",
+          body: `This week's challenge: ${challengeName}. Tap to join.`,
+          data: { week_start: weekStart },
+        },
+      }).catch(() => {});
     } catch (e: any) {
       toast.error(e.message);
     } finally {

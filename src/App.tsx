@@ -22,6 +22,7 @@ import LeaderboardPage from "./pages/LeaderboardPage";
 import PricingPage from "./pages/PricingPage";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 import { Capacitor } from "@capacitor/core";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +66,7 @@ function AppRouter() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const initialized = useRef(false);
+  usePushNotifications();
 
   useEffect(() => {
     if (initialized.current) return;

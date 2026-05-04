@@ -99,8 +99,8 @@ const TeamMessageBoard = ({ teamId, teamName, isCoach, profile }: Props) => {
         parent_id: parentId || null,
       });
       if (error) throw error;
-      // Non-blocking: email team members for top-level posts only
       if (!parentId) {
+        // Email notification
         supabase.functions.invoke("send-notification-email", {
           body: {
             type: "team_board_post",
@@ -110,6 +110,24 @@ const TeamMessageBoard = ({ teamId, teamName, isCoach, profile }: Props) => {
             postContent: content,
           },
         }).catch((e) => console.error("Email notification error:", e));
+        // Push notification to all team members except sender
+        if (isCoach) {
+          const recipientIds = teamMembers
+            .map((m: any) => m.profile?.id || m.id)
+            .filter((id: string) => id && id !== profile.id);
+          if (recipientIds.length > 0) {
+            const coachName = profile.full_name || profile.username || "Coach";
+            supabase.functions.invoke("send-notification", {
+              body: {
+                user_ids: recipientIds,
+                type: "team_board_post",
+                title: "New Team Post",
+                body: `Coach ${coachName} posted an update.`,
+                data: { team_id: teamId },
+              },
+            }).catch((e) => console.error("send-notification error:", e));
+          }
+        }
       }
     },
     onSuccess: (_, vars) => {

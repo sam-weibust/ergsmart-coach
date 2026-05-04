@@ -247,7 +247,29 @@ serve(async (req) => {
           blood_oxygen_percentage: score.spo2_percentage ?? null,
         }, { onConflict: "user_id,date" });
         if (recErr) console.error("[sync-whoop] whoop_recovery upsert error:", recErr.message, "code:", recErr.code, "details:", recErr.details);
-        else { console.log("[sync-whoop] whoop_recovery upsert OK for date:", date); synced++; recoveryRowsSaved++; }
+        else {
+          console.log("[sync-whoop] whoop_recovery upsert OK for date:", date);
+          synced++;
+          recoveryRowsSaved++;
+          // Send low recovery notification for today's record
+          const today = new Date().toISOString().substring(0, 10);
+          if (!isUnscorable && recoveryScore !== null && recoveryScore < 33 && date === today) {
+            fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({
+                user_id,
+                type: "whoop_low_recovery",
+                title: "Low Recovery Today",
+                body: `Your recovery score is ${recoveryScore}. Consider a lighter session today.`,
+                data: { recovery_score: recoveryScore, date },
+              }),
+            }).catch((e: Error) => console.error("[sync-whoop] low recovery notification error:", e.message));
+          }
+        }
       }
     } else {
       console.error("[sync-whoop] recovery fetch failed:", recoveryData.reason);
