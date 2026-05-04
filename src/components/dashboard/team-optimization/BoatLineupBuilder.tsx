@@ -278,7 +278,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
           if (s.seat_number === 0 && data.cox) {
             return { ...s, user_id: data.cox.user_id, name: data.cox.name || "", rationale: data.cox.rationale };
           }
-          const suggested = data.seats.find((ss: any) => ss.seat_number === s.seat_number);
+          const suggested = (data.seats ?? []).find((ss: any) => ss.seat_number === s.seat_number);
           return suggested ? { ...s, user_id: suggested.user_id, name: suggested.name || "", rationale: suggested.rationale } : s;
         });
         setSeats(updatedSeats);
