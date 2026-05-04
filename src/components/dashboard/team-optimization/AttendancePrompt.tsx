@@ -61,7 +61,7 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
   });
 
   const respond = useMutation({
-    mutationFn: async ({ lineupId, status }: { lineupId: string; status: string }) => {
+    mutationFn: async ({ lineupId, status, practiceDate, lineup }: { lineupId: string; status: string; practiceDate?: string; lineup?: any }) => {
       const { error } = await supabase.from("practice_attendance").upsert({
         lineup_id: lineupId,
         user_id: userId,
@@ -69,6 +69,38 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
         responded_at: new Date().toISOString(),
       }, { onConflict: "lineup_id,user_id" });
       if (error) throw error;
+
+      if (status === "no") {
+        const { data: memberProfile } = await supabase
+          .from("profiles")
+          .select("full_name, username")
+          .eq("id", userId)
+          .single();
+        const athleteName = memberProfile?.full_name || memberProfile?.username || "An athlete";
+        const dateLabel = practiceDate
+          ? new Date(practiceDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+          : "upcoming practice";
+
+        const { data: coaches } = await supabase
+          .from("team_coaches" as any)
+          .select("coach_id")
+          .eq("team_id", teamId);
+        const coachIds = (coaches ?? []).map((c: any) => c.coach_id);
+
+        const { data: team } = await supabase.from("teams").select("coach_id").eq("id", teamId).single();
+        if (team?.coach_id && !coachIds.includes(team.coach_id)) coachIds.push(team.coach_id);
+
+        if (coachIds.length > 0) {
+          await supabase.functions.invoke("send-notification", {
+            body: {
+              user_ids: coachIds,
+              title: "Athlete Absent",
+              body: `${athleteName} marked themselves absent for ${dateLabel} practice`,
+              type: "practice_reminder",
+            },
+          });
+        }
+      }
     },
     onSuccess: () => {
       toast({ title: "Response recorded!" });
@@ -104,7 +136,7 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
                 <Button
                   size="sm"
                   className="gap-1.5 bg-green-600 hover:bg-green-700 text-white h-8"
-                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "yes" })}
+                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "yes", practiceDate: lineup.practice_date, lineup })}
                   disabled={respond.isPending}
                 >
                   <CheckCircle className="h-3.5 w-3.5" />Yes
@@ -113,7 +145,7 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
                   size="sm"
                   variant="outline"
                   className="gap-1.5 border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8"
-                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "no" })}
+                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "no", practiceDate: lineup.practice_date, lineup })}
                   disabled={respond.isPending}
                 >
                   <XCircle className="h-3.5 w-3.5" />No
@@ -122,7 +154,7 @@ const AttendancePrompt = ({ teamId, userId }: Props) => {
                   size="sm"
                   variant="outline"
                   className="gap-1.5 border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30 h-8"
-                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "maybe" })}
+                  onClick={() => respond.mutate({ lineupId: lineup.id, status: "maybe", practiceDate: lineup.practice_date, lineup })}
                   disabled={respond.isPending}
                 >
                   <HelpCircle className="h-3.5 w-3.5" />Maybe

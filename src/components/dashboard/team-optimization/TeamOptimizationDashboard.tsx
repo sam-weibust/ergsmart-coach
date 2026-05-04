@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare,
+  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SIDEBAR_ITEMS } from "./constants";
@@ -32,11 +32,12 @@ import PracticeDetail from "./PracticeDetail";
 import CoachManagement from "./CoachManagement";
 import DirectMessages from "./DirectMessages";
 import WorkoutComparison from "./WorkoutComparison";
+import TodayTab from "./TodayTab";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare,
+  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun,
 };
 
 interface Props {
@@ -83,6 +84,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
   const { data: unreadMessageCount = 0 } = useQuery({
     queryKey: ["unread-messages", teamId, profile?.id],
     queryFn: async () => {
+      if (!profile?.id) return 0;
       const { count } = await supabase
         .from("direct_messages" as any)
         .select("*", { count: "exact", head: true })
@@ -92,12 +94,14 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       return count || 0;
     },
     refetchInterval: 30000,
+    enabled: !!profile?.id,
   });
 
   const commonProps = { teamId, teamName, teamMembers, isCoach, profile, seasonId: effectiveSeasonId, boats };
 
   const renderSection = () => {
     switch (activeSection) {
+      case "today": return <TodayTab {...commonProps} onNavigate={(s) => setActiveSection(s)} />;
       case "overview": return <TeamOverview {...commonProps} />;
       case "calendar": return <TeamCalendar {...commonProps} />;
       case "lineups": return <BoatLineupBuilder {...commonProps} />;
