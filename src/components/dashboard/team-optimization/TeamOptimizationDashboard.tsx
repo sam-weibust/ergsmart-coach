@@ -133,7 +133,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
   return (
     <div className="flex flex-col md:flex-row gap-4 min-h-[600px]">
       {/* Sidebar — desktop only */}
-      <div className="hidden md:flex flex-col w-52 shrink-0 gap-2">
+      <div className="hidden md:flex flex-col w-52 shrink-0 gap-2 sticky top-4 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
         {/* Season selector */}
         {seasons.length > 0 && (
           <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
