@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id } = await req.json();
+    const { user_id, redirect_uri } = await req.json();
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -27,7 +27,7 @@ serve(async (req) => {
     const params = new URLSearchParams({
       client_id: CLIENT_ID,
       response_type: "code",
-      redirect_uri: "https://crewsync.app/auth/whoop/callback",
+      redirect_uri: redirect_uri ?? "https://crewsync.app/auth/whoop/callback",
       scope: "read:recovery read:sleep read:workout read:profile read:cycles offline",
       state: encodeURIComponent(user_id),
     });

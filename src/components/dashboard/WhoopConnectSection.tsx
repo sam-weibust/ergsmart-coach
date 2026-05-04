@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -56,10 +57,18 @@ export default function WhoopConnectSection() {
     try {
       const user = await getSessionUser();
       if (!user) { setIsConnecting(false); return; }
-      const res = await whoopConnect({ user_id: user.id });
+      const isNative = Capacitor.isNativePlatform();
+      const redirectUri = isNative
+        ? "crewsync://auth/whoop/callback"
+        : "https://crewsync.app/auth/whoop/callback";
+      const res = await whoopConnect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      window.location.href = data.url;
+      if (isNative) {
+        await Browser.open({ url: data.url, presentationStyle: "popover" });
+      } else {
+        window.location.href = data.url;
+      }
     } catch (e: any) {
       setIsConnecting(false);
       toast({ title: "Failed to connect Whoop", description: e.message, variant: "destructive" });

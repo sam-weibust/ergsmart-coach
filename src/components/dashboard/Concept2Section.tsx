@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, Link } from "lucide-react";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import { getSessionUser } from '@/lib/getUser';
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 export default function Concept2Section() {
   const { toast } = useToast();
@@ -30,7 +32,7 @@ export default function Concept2Section() {
 
   useEffect(() => {
     checkC2();
-    const handler = (e: MessageEvent) => {
+    const msgHandler = (e: MessageEvent) => {
       if (e.data?.type === "c2_auth_success") {
         setIsConnectingC2(false);
         checkC2();
@@ -40,8 +42,17 @@ export default function Concept2Section() {
         toast({ title: "C2 Auth Failed", description: e.data.error || "Unknown error", variant: "destructive" });
       }
     };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    const nativeHandler = () => {
+      setIsConnectingC2(false);
+      checkC2();
+      toast({ title: "Concept2 Connected!" });
+    };
+    window.addEventListener("message", msgHandler);
+    window.addEventListener("c2_connected", nativeHandler);
+    return () => {
+      window.removeEventListener("message", msgHandler);
+      window.removeEventListener("c2_connected", nativeHandler);
+    };
   }, [checkC2, toast]);
 
   const connectC2 = async () => {
@@ -50,26 +61,28 @@ export default function Concept2Section() {
       const user = await getSessionUser();
       if (!user) { setIsConnectingC2(false); return; }
 
-      // Safari requires window.open() to be called synchronously within a user gesture.
-      // Open a blank popup NOW before any async work, then navigate it once we have the URL.
-      // On mobile Safari, window.open returns null or doesn't support window.opener —
-      // fall back to a same-tab redirect in that case.
-      const isMobileSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-      let popup: Window | null = null;
-      if (!isMobileSafari) {
-        popup = window.open("about:blank", "c2_oauth", "width=520,height=620,left=200,top=100");
-      }
+      const isNative = Capacitor.isNativePlatform();
+      const redirectUri = isNative
+        ? "crewsync://auth/concept2/callback"
+        : "https://crewsync.app/auth/concept2/callback";
 
-      const res = await c2Connect({ user_id: user.id });
+      const res = await c2Connect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      if (popup && !popup.closed) {
-        // Desktop: navigate the already-open popup to the auth URL
-        popup.location.href = data.url;
+      if (isNative) {
+        await Browser.open({ url: data.url, presentationStyle: "popover" });
       } else {
-        // Mobile Safari or popup was blocked: full-page redirect, callback returns to same tab
-        window.location.href = data.url;
+        const isMobileSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        let popup: Window | null = null;
+        if (!isMobileSafari) {
+          popup = window.open("about:blank", "c2_oauth", "width=520,height=620,left=200,top=100");
+        }
+        if (popup && !popup.closed) {
+          popup.location.href = data.url;
+        } else {
+          window.location.href = data.url;
+        }
       }
     } catch (e: any) {
       setIsConnectingC2(false);

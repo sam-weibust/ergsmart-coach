@@ -22,6 +22,9 @@ import LeaderboardPage from "./pages/LeaderboardPage";
 import PricingPage from "./pages/PricingPage";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
+import { c2Callback, whoopCallback } from "@/lib/api";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const queryClient = new QueryClient({
@@ -67,6 +70,36 @@ function AppRouter() {
   const [ready, setReady] = useState(false);
   const initialized = useRef(false);
   usePushNotifications();
+
+  // Handle deep link OAuth callbacks on iOS native (crewsync://auth/*/callback?code=...&state=...)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = CapacitorApp.addListener("appUrlOpen", async ({ url }) => {
+      try {
+        const parsed = new URL(url);
+        const code = parsed.searchParams.get("code");
+        const state = parsed.searchParams.get("state");
+        if (!code || !state) return;
+
+        await Browser.close();
+
+        if (url.includes("auth/concept2/callback")) {
+          await c2Callback({ code, user_id: decodeURIComponent(state) });
+          navigate("/dashboard", { replace: true });
+          // Signal the dashboard to refresh c2 connection status
+          window.dispatchEvent(new CustomEvent("c2_connected"));
+        } else if (url.includes("auth/whoop/callback")) {
+          await whoopCallback({ code, user_id: decodeURIComponent(state) });
+          navigate("/dashboard", { replace: true });
+          window.dispatchEvent(new CustomEvent("whoop_connected"));
+        }
+      } catch (e) {
+        console.error("[appUrlOpen] OAuth callback failed:", e);
+        navigate("/dashboard", { replace: true });
+      }
+    });
+    return () => { listener.then(h => h.remove()); };
+  }, [navigate]);
 
   useEffect(() => {
     if (initialized.current) return;

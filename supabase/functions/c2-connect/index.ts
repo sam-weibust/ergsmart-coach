@@ -19,7 +19,7 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id } = await req.json();
+    const { user_id, redirect_uri } = await req.json();
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
@@ -27,7 +27,7 @@ serve(async (req) => {
       });
     }
 
-    const redirectUri = "https://crewsync.app/auth/concept2/callback";
+    const redirectUri = redirect_uri ?? "https://crewsync.app/auth/concept2/callback";
     const state = encodeURIComponent(user_id);
 
     const params = new URLSearchParams({
