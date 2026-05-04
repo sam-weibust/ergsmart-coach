@@ -131,6 +131,10 @@ const OrganizationSection = ({ profile }: Props) => {
         .select()
         .single();
       if (error) throw error;
+      const { error: adminError } = await supabase
+        .from("organization_admins")
+        .insert({ organization_id: org.id, user_id: user.id, role: "admin" });
+      if (adminError) throw adminError;
       return org;
     },
     onSuccess: (org) => {
