@@ -37,7 +37,7 @@ function AttendanceDot({ status }: { status?: string }) {
   return <span className="h-2.5 w-2.5 rounded-full bg-gray-500 inline-block shrink-0" title="No response" />;
 }
 
-const TodayTab = ({ teamId, teamName, teamMembers, isCoach, profile, boats = [], onNavigate }: Props) => {
+const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats = [], onNavigate }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const todayStr = new Date().toISOString().split("T")[0];
@@ -158,20 +158,21 @@ const TodayTab = ({ teamId, teamName, teamMembers, isCoach, profile, boats = [],
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const attendanceByUser = Object.fromEntries(todayAttendance.map((a: any) => [a.user_id, a]));
+  const attendanceByUser = Object.fromEntries((todayAttendance ?? []).map((a: any) => [a.user_id, a]));
 
-  const absentMembers = teamMembers.filter((m: any) => attendanceByUser[m.id]?.status === "no");
-  const confirmedCount = todayAttendance.filter((a: any) => a.status === "yes").length;
-  const totalSeats = todayLineups.reduce((sum: number, l: any) => {
-    return sum + (Array.isArray(l.seats) ? l.seats.filter((s: any) => s.user_id).length : 0);
+  const safeMembers = teamMembers ?? [];
+  const absentMembers = safeMembers.filter((m: any) => attendanceByUser[m?.id]?.status === "no");
+  const confirmedCount = (todayAttendance ?? []).filter((a: any) => a.status === "yes").length;
+  const totalSeats = (todayLineups ?? []).reduce((sum: number, l: any) => {
+    return sum + (Array.isArray(l?.seats) ? l.seats.filter((s: any) => s?.user_id).length : 0);
   }, 0);
 
-  const myLineup = todayLineups.find((l: any) =>
-    Array.isArray(l.seats) && l.seats.some((s: any) => s.user_id === profile?.id)
+  const myLineup = (todayLineups ?? []).find((l: any) =>
+    Array.isArray(l?.seats) && l.seats.some((s: any) => s?.user_id === profile?.id)
   );
-  const mySeat = myLineup?.seats?.find((s: any) => s.user_id === profile?.id);
+  const mySeat = myLineup?.seats?.find((s: any) => s?.user_id === profile?.id);
 
-  return (
+  try { return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <Sun className="h-5 w-5 text-yellow-400" />
@@ -281,10 +282,10 @@ const TodayTab = ({ teamId, teamName, teamMembers, isCoach, profile, boats = [],
                 })}
               </div>
             )}
-            {teamMembers.filter((m: any) => attendanceByUser[m.id]?.status !== "no").map((m: any) => {
-              const rec = attendanceByUser[m.id];
+            {safeMembers.filter((m: any) => attendanceByUser[m?.id]?.status !== "no").map((m: any) => {
+              const rec = attendanceByUser[m?.id];
               return (
-                <div key={m.id} className="flex items-center gap-2 text-xs text-white/70 py-0.5">
+                <div key={m?.id} className="flex items-center gap-2 text-xs text-white/70 py-0.5">
                   <AttendanceDot status={rec?.status} />
                   <span>{displayName(m)}</span>
                   {rec?.responded_at && (
@@ -293,7 +294,7 @@ const TodayTab = ({ teamId, teamName, teamMembers, isCoach, profile, boats = [],
                 </div>
               );
             })}
-            {teamMembers.length === 0 && <p className="text-xs text-white/40">No team members.</p>}
+            {safeMembers.length === 0 && <p className="text-xs text-white/40">No team members.</p>}
           </CardContent>
         </Card>
       )}
@@ -399,7 +400,20 @@ const TodayTab = ({ teamId, teamName, teamMembers, isCoach, profile, boats = [],
         </Card>
       )}
     </div>
-  );
+  ); } catch (err) {
+    console.error("TodayTab render error:", err);
+    return (
+      <div className="p-6 text-center space-y-3">
+        <p className="text-white/60 text-sm">Something went wrong loading today's view.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="text-xs text-blue-400 underline"
+        >
+          Tap to refresh
+        </button>
+      </div>
+    );
+  }
 };
 
 export default TodayTab;

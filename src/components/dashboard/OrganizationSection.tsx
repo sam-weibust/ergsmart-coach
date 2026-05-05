@@ -125,15 +125,27 @@ const OrganizationSection = ({ profile }: Props) => {
       if (!orgName.trim()) throw new Error("Organization name is required");
       const user = await getSessionUser();
       if (!user) throw new Error("Not authenticated");
+
+      const orgPayload = { name: orgName.trim(), description: orgDesc.trim() || null, created_by: user.id };
+      console.log("[createOrg] inserting org:", orgPayload, "user uid:", user.id);
+
       const { data: org, error } = await supabase
         .from("organizations")
-        .insert({ name: orgName.trim(), description: orgDesc.trim() || null, created_by: user.id })
+        .insert(orgPayload)
         .select()
         .single();
+
+      console.log("[createOrg] org result:", { org, error: error ? { code: error.code, message: error.message, details: error.details, hint: error.hint } : null });
       if (error) throw error;
+
+      const adminPayload = { organization_id: org.id, user_id: user.id, role: "admin" };
+      console.log("[createOrg] inserting org_admin:", adminPayload);
+
       const { error: adminError } = await supabase
         .from("organization_admins")
-        .insert({ organization_id: org.id, user_id: user.id, role: "admin" });
+        .insert(adminPayload);
+
+      console.log("[createOrg] admin result:", { adminError: adminError ? { code: adminError.code, message: adminError.message, details: adminError.details, hint: adminError.hint } : null });
       if (adminError) throw adminError;
       return org;
     },
@@ -143,7 +155,10 @@ const OrganizationSection = ({ profile }: Props) => {
       setSelectedOrgId(org.id);
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      console.error("[createOrg] full error:", e);
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
   });
 
   const addTeamByCode = useMutation({
