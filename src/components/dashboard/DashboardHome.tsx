@@ -464,7 +464,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
         </div>
 
         {/* Practice Attendance Prompts */}
-        {(teamMemberships as any[]).length > 0 && (
+        {profile?.id && (teamMemberships as any[]).length > 0 && (
           <div className="space-y-2">
             {(teamMemberships as any[]).map((m: any) => (
               <AttendancePrompt key={m.team_id} teamId={m.team_id} userId={profile.id} />

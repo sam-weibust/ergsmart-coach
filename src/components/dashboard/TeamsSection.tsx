@@ -433,8 +433,8 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
 
-                  <WellnessCheckin teamId={team.id} userId={profile.id} />
-                  <AttendancePrompt teamId={team.id} userId={profile.id} />
+                  {profile?.id && <WellnessCheckin teamId={team.id} userId={profile.id} />}
+                  {profile?.id && <AttendancePrompt teamId={team.id} userId={profile.id} />}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <Leaderboard teamId={team.id} teamName={team.name} />
