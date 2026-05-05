@@ -86,22 +86,6 @@ const INDIVIDUAL_PLANS = [
       "Multi-season tracking",
       "Priority AI responses",
       "Early feature access",
-    ],
-  },
-  {
-    id: "elite-plus",
-    name: "Elite+",
-    price: 25,
-    betaPrice: 20,
-    perAthletePrice: null,
-    betaPerAthletePrice: null,
-    badge: "For Serious Athletes",
-    badgeColor: "bg-amber-500",
-    cta: "Coming Fall 2026",
-    ctaHref: null,
-    isCurrent: false,
-    features: [
-      "Everything in Elite",
       "Dedicated AI coaching assistant with full training history context",
       "White-glove onboarding",
       "API access for personal data export",
@@ -166,25 +150,6 @@ const TEAM_PLANS = [
       "Parent weekly email reports",
       "Athletic director dashboard",
       "Head-to-head racing for whole team",
-    ],
-  },
-  {
-    id: "elite-plus-team",
-    name: "Elite+ Team",
-    price: 500,
-    betaPrice: 400,
-    perAthletePrice: 15,
-    betaPerAthletePrice: 12,
-    badge: "For Elite Programs",
-    badgeColor: "bg-amber-500",
-    cta: "Coming Fall 2026",
-    ctaHref: null,
-    athleteInherits: "Elite+",
-    maxAthletes: "Unlimited athletes",
-    features: [
-      "Athletes inherit Elite+ individual benefits",
-      "Unlimited athletes",
-      "Everything in Elite Team",
       "Custom team branding (logo and colors)",
       "Branded team portal",
       "Coach AI assistant across all team data",
@@ -203,84 +168,84 @@ const COMPARISON_GROUPS = [
   {
     label: "AI Features",
     rows: [
-      { feature: "AI workout feedback", free: false, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Daily AI suggestions", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "AI training plan generator", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Unlimited AI requests", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Dedicated AI coaching assistant", free: false, pro: false, elite: false, elitePlus: true, team: false, eliteTeam: false, elitePlusTeam: true },
-      { feature: "AI coaching assistant chat", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Team-wide AI coach", free: false, pro: false, elite: false, elitePlus: false, team: "Limited", eliteTeam: true, elitePlusTeam: true },
+      { feature: "AI workout feedback", free: false, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Daily AI suggestions", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "AI training plan generator", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Unlimited AI requests", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Dedicated AI coaching assistant", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "AI coaching assistant chat", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Team-wide AI coach", free: false, pro: false, elite: false, team: "Limited", eliteTeam: true },
     ],
   },
   {
     label: "Analytics",
     rows: [
-      { feature: "Erg logging and history", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "2K predictor and timeline", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Advanced recovery modeling", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Long-term development projections", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Multi-season tracking", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Load management and fatigue heatmap", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
+      { feature: "Erg logging and history", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "2K predictor and timeline", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Advanced recovery modeling", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Long-term development projections", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Multi-season tracking", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Load management and fatigue heatmap", free: false, pro: false, elite: false, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Recruiting",
     rows: [
-      { feature: "Public athlete profile", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "AI recruiting profile + shareable link", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "College target list with fit scores", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Recruiting email generator", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "PDF export + national ranking", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Recruiting gap analysis", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "White-label recruiting portal", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: false, elitePlusTeam: true },
+      { feature: "Public athlete profile", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "AI recruiting profile + shareable link", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "College target list with fit scores", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Recruiting email generator", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "PDF export + national ranking", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Recruiting gap analysis", free: false, pro: false, elite: false, team: false, eliteTeam: true },
+      { feature: "White-label recruiting portal", free: false, pro: false, elite: false, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Team Tools",
     rows: [
-      { feature: "Team access as athlete", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Roster management", free: false, pro: false, elite: false, elitePlus: false, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Lineup builder and seat racing", free: false, pro: false, elite: false, elitePlus: false, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Workout assignment", free: false, pro: false, elite: false, elitePlus: false, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Race lineup optimizer", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Season recap AI report", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Custom team branding", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: false, elitePlusTeam: true },
+      { feature: "Team access as athlete", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Roster management", free: false, pro: false, elite: false, team: true, eliteTeam: true },
+      { feature: "Lineup builder and seat racing", free: false, pro: false, elite: false, team: true, eliteTeam: true },
+      { feature: "Workout assignment", free: false, pro: false, elite: false, team: true, eliteTeam: true },
+      { feature: "Race lineup optimizer", free: false, pro: false, elite: false, team: false, eliteTeam: true },
+      { feature: "Season recap AI report", free: false, pro: false, elite: false, team: false, eliteTeam: true },
+      { feature: "Custom team branding", free: false, pro: false, elite: false, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Live Tracking",
     rows: [
-      { feature: "Head-to-head racing", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Stroke Watch", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Live erg view (PM5 BLE)", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Team H2H racing", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
+      { feature: "Head-to-head racing", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Stroke Watch", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Live erg view (PM5 BLE)", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Team H2H racing", free: false, pro: false, elite: false, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Recovery & Health",
     rows: [
-      { feature: "Manual sleep / water / weight logging", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Whoop sync", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Recovery insight generator", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Injury risk scoring", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Advanced recovery modeling", free: false, pro: false, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Athlete check-in system", free: false, pro: false, elite: false, elitePlus: false, team: false, eliteTeam: true, elitePlusTeam: true },
+      { feature: "Manual sleep / water / weight logging", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Whoop sync", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "Recovery insight generator", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Injury risk scoring", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Advanced recovery modeling", free: false, pro: false, elite: true, team: false, eliteTeam: true },
+      { feature: "Athlete check-in system", free: false, pro: false, elite: false, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Exports & API",
     rows: [
-      { feature: "Shareable workout cards", free: true, pro: true, elite: true, elitePlus: true, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "PDF recruiting export", free: false, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: true, elitePlusTeam: true },
-      { feature: "Spreadsheet import", free: false, pro: false, elite: false, elitePlus: false, team: true, eliteTeam: true, elitePlusTeam: true },
-      { feature: "API access", free: false, pro: false, elite: false, elitePlus: true, team: false, eliteTeam: false, elitePlusTeam: true },
+      { feature: "Shareable workout cards", free: true, pro: true, elite: true, team: true, eliteTeam: true },
+      { feature: "PDF recruiting export", free: false, pro: true, elite: true, team: false, eliteTeam: true },
+      { feature: "Spreadsheet import", free: false, pro: false, elite: false, team: true, eliteTeam: true },
+      { feature: "API access", free: false, pro: false, elite: true, team: false, eliteTeam: true },
     ],
   },
   {
     label: "Athlete Limits",
     rows: [
-      { feature: "Individual use", free: true, pro: true, elite: true, elitePlus: true, team: false, eliteTeam: false, elitePlusTeam: false },
-      { feature: "Max athletes on team", free: "—", pro: "—", elite: "—", elitePlus: "—", team: "50", eliteTeam: "Unlimited", elitePlusTeam: "Unlimited" },
+      { feature: "Individual use", free: true, pro: true, elite: true, team: false, eliteTeam: false },
+      { feature: "Max athletes on team", free: "—", pro: "—", elite: "—", team: "50", eliteTeam: "Unlimited" },
     ],
   },
 ];
@@ -290,7 +255,7 @@ const FAQ_ITEMS = [
   { q: "Will my data be saved when paid plans launch?", a: "Yes — all your workouts, history, profile, and settings carry over automatically. Nothing changes except billing." },
   { q: "How does the 20% beta discount work?", a: "It applies automatically to your account forever when billing launches. No coupon needed — your account is already flagged as a beta user." },
   { q: "Can I switch plans after launch?", a: "Yes, anytime. You can upgrade or downgrade and billing adjusts pro-rata." },
-  { q: "Do athletes on a team need their own paid plan?", a: "No. Free users get full team participation as athletes. Team plans cover the coach — athletes on Elite Team and Elite+ Team plans inherit those individual benefits automatically." },
+  { q: "Do athletes on a team need their own paid plan?", a: "No. Free users get full team participation as athletes. Team plans cover the coach — athletes on Elite Team plans inherit those individual benefits automatically." },
   { q: "How does per-athlete pricing work?", a: "You pay the base team price plus a per-athlete fee for each active athlete on your roster. Athletes you remove are no longer billed." },
 ];
 
@@ -451,7 +416,7 @@ export default function PricingPage() {
 
         {/* Plan cards */}
         {planType === "individual" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mt-2">
             {INDIVIDUAL_PLANS.map(p => <PlanCard key={p.id} plan={p} />)}
           </div>
         ) : (
@@ -494,24 +459,22 @@ export default function PricingPage() {
         <div className="space-y-6">
           <h2 className="text-3xl font-black text-center text-foreground">Full feature comparison</h2>
           <div className="overflow-x-auto rounded-2xl border border-border">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="bg-[#0a1628] text-white">
                   <th className="text-left py-4 px-4 font-semibold w-52">Feature</th>
                   <th className="text-center py-4 px-3 font-semibold">Free</th>
                   <th className="text-center py-4 px-3 font-semibold">Pro</th>
                   <th className="text-center py-4 px-3 font-semibold">Elite</th>
-                  <th className="text-center py-4 px-3 font-semibold">Elite+</th>
                   <th className="text-center py-4 px-3 font-semibold border-l border-white/20">Team</th>
                   <th className="text-center py-4 px-3 font-semibold">Elite Team</th>
-                  <th className="text-center py-4 px-3 font-semibold">Elite+ Team</th>
                 </tr>
               </thead>
               <tbody>
                 {COMPARISON_GROUPS.map((group) => (
                   <>
                     <tr key={group.label} className="bg-muted/60">
-                      <td colSpan={8} className="py-2 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      <td colSpan={6} className="py-2 px-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         {group.label}
                       </td>
                     </tr>
@@ -521,10 +484,8 @@ export default function PricingPage() {
                         <td className="py-2.5 px-3"><Cell value={row.free} /></td>
                         <td className="py-2.5 px-3"><Cell value={row.pro} /></td>
                         <td className="py-2.5 px-3"><Cell value={row.elite} /></td>
-                        <td className="py-2.5 px-3"><Cell value={row.elitePlus} /></td>
                         <td className="py-2.5 px-3 border-l border-border"><Cell value={row.team} /></td>
                         <td className="py-2.5 px-3"><Cell value={row.eliteTeam} /></td>
-                        <td className="py-2.5 px-3"><Cell value={row.elitePlusTeam} /></td>
                       </tr>
                     ))}
                   </>

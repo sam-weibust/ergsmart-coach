@@ -330,18 +330,8 @@ function BillingTab() {
       betaPrice: 12,
       betaAnnual: 9.60,
       color: "border-purple-500",
-      badge: null,
-      features: ["Everything in Pro", "Video critique", "Recruiting profile", "Regatta tracking", "Priority support"],
-    },
-    {
-      name: "Elite+",
-      price: 25,
-      annualPrice: 20,
-      betaPrice: 20,
-      betaAnnual: 16,
-      color: "border-amber-500",
       badge: "Best Value",
-      features: ["Everything in Elite", "Head-to-Head racing", "Force curve analysis", "College targeting", "Early feature access"],
+      features: ["Everything in Pro", "Unlimited AI requests", "Dedicated AI coaching assistant", "Advanced recovery modeling", "Multi-season tracking", "API access", "Early feature access"],
     },
   ];
 
