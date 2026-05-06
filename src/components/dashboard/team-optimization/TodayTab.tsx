@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { displayName } from "./constants";
 
 interface Props {
   teamId: string;
@@ -195,7 +194,7 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
   const attendanceByUser = Object.fromEntries((todayAttendance ?? []).map((a: any) => [a.user_id, a]));
 
   const safeMembers = teamMembers ?? [];
-  const absentMembers = safeMembers.filter((m: any) => attendanceByUser[m?.id]?.status === "no");
+  const absentMembers = safeMembers.filter((m: any) => attendanceByUser[m?.user_id]?.status === "no");
   const confirmedCount = (todayAttendance ?? []).filter((a: any) => a.status === "yes").length;
   const totalSeats = (todayLineups ?? []).reduce((sum: number, l: any) => {
     return sum + (Array.isArray(l?.seats) ? l.seats.filter((s: any) => s?.user_id).length : 0);
@@ -333,7 +332,7 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                   return (
                     <div key={m.id} className="flex items-center gap-2 text-xs text-red-300 py-0.5">
                       <AttendanceDot status="no" />
-                      <span>{displayName(m)}</span>
+                      <span>{m.profile?.full_name || m.profile?.username || m.profile?.email?.split("@")[0] || "Unnamed Athlete"}</span>
                       {rec?.responded_at && (
                         <span className="text-red-400/60 ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
                       )}
@@ -342,12 +341,12 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                 })}
               </div>
             )}
-            {safeMembers.filter((m: any) => attendanceByUser[m?.id]?.status !== "no").map((m: any) => {
-              const rec = attendanceByUser[m?.id];
+            {safeMembers.filter((m: any) => attendanceByUser[m?.user_id]?.status !== "no").map((m: any) => {
+              const rec = attendanceByUser[m?.user_id];
               return (
                 <div key={m?.id} className="flex items-center gap-2 text-xs text-white/70 py-0.5">
                   <AttendanceDot status={rec?.status} />
-                  <span>{displayName(m)}</span>
+                  <span>{m.profile?.full_name || m.profile?.username || m.profile?.email?.split("@")[0] || "Unnamed Athlete"}</span>
                   {rec?.responded_at && (
                     <span className="text-white/40 ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
                   )}
