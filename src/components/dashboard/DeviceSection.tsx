@@ -289,10 +289,16 @@ const DeviceSection = () => {
     try {
       const user = await getSessionUser();
       if (!user) { setIsConnectingC2(false); return; }
-      const res = await c2Connect({ user_id: user.id });
+      const redirectUri = "https://clmesnkdwohtvduzdgex.supabase.co/functions/v1/c2-logbook-auth";
+      const res = await c2Connect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      window.open(data.url, "c2_oauth", "width=520,height=620,left=200,top=100");
+      const popup = window.open(data.url, "c2_auth", "width=500,height=600,scrollbars=yes");
+      if (!popup) {
+        toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
+        setIsConnectingC2(false);
+        return;
+      }
     } catch (e: any) {
       setIsConnectingC2(false);
       toast({ title: "Failed to open Concept2 auth", description: e.message, variant: "destructive" });
