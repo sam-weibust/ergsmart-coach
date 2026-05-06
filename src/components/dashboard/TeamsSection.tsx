@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
+import { Users, UserPlus, Trash2, ChevronDown, ChevronUp, BarChart3, Copy, Check } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +43,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   const [teamDescription, setTeamDescription] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
 
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
@@ -253,6 +254,35 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
               
               {expandedTeam === team.id && (
                 <CardContent className="space-y-6">
+                  {/* Invite code — coach only */}
+                  {team.join_code && (
+                    <div className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-foreground mb-2">Team Join Code</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl font-mono font-bold tracking-widest text-foreground">
+                          {team.join_code}
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(team.join_code);
+                            setCopiedTeamId(team.id);
+                            setTimeout(() => setCopiedTeamId(null), 2000);
+                          }}
+                        >
+                          {copiedTeamId === team.id
+                            ? <Check className="h-4 w-4 text-green-500" />
+                            : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Share this code with athletes to join your team.
+                      </p>
+                    </div>
+                  )}
+
                   {team.description && (
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}

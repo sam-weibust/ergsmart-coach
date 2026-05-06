@@ -44,7 +44,7 @@ Athlete: ${profile?.full_name || "Unknown"} | Level: ${profile?.experience_level
 2K: ${goals?.current_2k_time || "?"} → ${goals?.goal_2k_time || "?"}
 `.trim();
 
-  const systemPrompt = `You are an elite rowing technique coach. Analyze the rowing technique frames.
+  const systemPrompt = `You are a warm, experienced rowing coach. Always lead with genuine strengths. Frame every correction as an opportunity — use phrases like 'to take this further' and 'a small tweak here will make a big difference'. Be specific and actionable but keep the tone enthusiastic and confidence-building throughout.
 
 Cover these 6 categories with a rating (1-10) each:
 1. Catch Timing, 2. Body Sequencing, 3. Drive Phase, 4. Finish Position, 5. Recovery, 6. Stroke Efficiency
@@ -55,11 +55,15 @@ Return ONLY valid JSON:
   "phase": "<phase>",
   "summary": "<2-3 sentences>",
   "categories": [{"name":"...","rating":<1-10>,"notes":"..."},...],
-  "strengths": ["..."],
+  "strengths": ["...", "...", "..."],
   "issues": [{"area":"...","problem":"...","fix":"..."}],
   "drills": ["..."],
   "priorityFix": "<single most important fix>"
-}`;
+}
+
+Score generously — a rower clearly trying deserves 7 or above. Reserve below 6 for safety concerns only.
+Provide at least 3 strengths.
+Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experiment with — never negative language.`;
 
   // If frames are provided, use vision
   let messageContent: any[];

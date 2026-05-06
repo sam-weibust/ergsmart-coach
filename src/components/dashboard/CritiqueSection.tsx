@@ -333,15 +333,15 @@ const CritiqueSection = () => {
   };
 
   const scoreColor = (score: number) =>
-    score >= 8 ? "text-green-600 dark:text-green-400"
-    : score >= 5 ? "text-yellow-600 dark:text-yellow-400"
+    score >= 6 ? "text-green-600 dark:text-green-400"
+    : score >= 4 ? "text-yellow-600 dark:text-yellow-400"
     : "text-red-600 dark:text-red-400";
 
   const ratingBar = (rating: number) => (
     <div className="flex items-center gap-2">
       <div className="flex-1 bg-muted rounded-full h-1.5">
         <div
-          className={`h-1.5 rounded-full transition-all ${rating >= 8 ? "bg-green-500" : rating >= 5 ? "bg-yellow-500" : "bg-red-500"}`}
+          className={`h-1.5 rounded-full transition-all ${rating >= 6 ? "bg-green-500" : rating >= 4 ? "bg-yellow-500" : "bg-red-500"}`}
           style={{ width: `${rating * 10}%` }}
         />
       </div>
