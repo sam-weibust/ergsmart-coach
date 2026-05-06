@@ -26,12 +26,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Frontend must send: { user_id }
-    const { user_id } = await req.json();
-
+    // Extract user_id from the Authorization header (Bearer JWT)
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "");
+    if (!jwt) {
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const jwtPayload = JSON.parse(atob(jwt.split(".")[1]));
+    const user_id: string = jwtPayload.sub;
     if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
-        status: 400,
+      return new Response(JSON.stringify({ error: "Could not determine user_id from token" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

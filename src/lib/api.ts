@@ -102,8 +102,8 @@ export function c2LogbookAuth(payload: object) {
   return callFunction("c2-logbook-auth", payload);
 }
 
-export function c2LogbookSync(payload: object) {
-  return callFunction("c2-logbook-sync", payload);
+export function c2LogbookSync() {
+  return callFunction("c2-logbook-sync", {});
 }
 
 export function createNotification(payload: object) {
