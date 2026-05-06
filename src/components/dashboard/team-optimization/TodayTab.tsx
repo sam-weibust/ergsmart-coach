@@ -157,6 +157,19 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const { data: dailyWorkout } = useQuery({
+    queryKey: ["team-daily-workout", teamId, todayStr],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("team_daily_workouts")
+        .select("*")
+        .eq("team_id", teamId)
+        .eq("date", todayStr)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   // Athlete simple check-in (attendance table)
   const { data: myCheckIn } = useQuery({
     queryKey: ["my-team-checkin", teamId, todayStr, profile?.id],
@@ -389,6 +402,38 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                 </Button>
                 <Button size="sm" variant="ghost" className="h-8 text-xs text-white/60" onClick={() => setEditingWorkout(false)}>Cancel</Button>
               </div>
+            </div>
+          ) : dailyWorkout?.workout_data ? (
+            <div className="space-y-2">
+              {dailyWorkout.workout_data.name && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-white/70 uppercase tracking-wide">{dailyWorkout.workout_data.name}</span>
+                  {dailyWorkout.workout_data.boat_class && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">{dailyWorkout.workout_data.boat_class}</span>
+                  )}
+                  {dailyWorkout.workout_data.zone && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">{dailyWorkout.workout_data.zone}</span>
+                  )}
+                </div>
+              )}
+              {dailyWorkout.workout_data.warmup && (
+                <div>
+                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-0.5">Warmup</p>
+                  <p className="text-xs text-white/70 whitespace-pre-wrap">{dailyWorkout.workout_data.warmup}</p>
+                </div>
+              )}
+              {dailyWorkout.workout_data.description && (
+                <p className="text-sm text-white/80 whitespace-pre-wrap">{dailyWorkout.workout_data.description}</p>
+              )}
+              {dailyWorkout.workout_data.cooldown && (
+                <div>
+                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-0.5">Cooldown</p>
+                  <p className="text-xs text-white/70 whitespace-pre-wrap">{dailyWorkout.workout_data.cooldown}</p>
+                </div>
+              )}
+              {dailyWorkout.workout_data.notes && (
+                <p className="text-xs text-white/50 italic">{dailyWorkout.workout_data.notes}</p>
+              )}
             </div>
           ) : practiceEntry?.workout_description ? (
             <p className="text-sm text-white/80 whitespace-pre-wrap">{practiceEntry.workout_description}</p>

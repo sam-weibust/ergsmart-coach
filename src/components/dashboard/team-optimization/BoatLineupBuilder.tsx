@@ -379,6 +379,27 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
           } as any);
         }
       }
+
+      // Upsert workout data so athletes can see it in the Today tab
+      if (lineup.workout_plan) {
+        const workoutDate = lineup.practice_date || new Date().toISOString().split("T")[0];
+        await (supabase as any)
+          .from("team_daily_workouts")
+          .upsert(
+            {
+              team_id: lineup.team_id,
+              date: workoutDate,
+              workout_data: {
+                description: lineup.workout_plan,
+                name: lineup.name,
+                boat_class: lineup.boat_class,
+              },
+              pushed_by: profile.id,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "team_id,date" }
+          );
+      }
     },
     onSuccess: () => {
       toast({ title: "Lineup published! Athletes notified." });
@@ -667,12 +688,6 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                     </div>
                   ))}
                   {seatsArr.length > 4 && <p className="text-xs text-muted-foreground mt-1">+{seatsArr.length - 4} more seats</p>}
-                  {lineup.published_at && lineup.workout_plan && (
-                    <div className="mt-3 p-2 rounded bg-muted/50 border-l-2 border-primary/40">
-                      <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">WORKOUT</p>
-                      <p className="text-xs whitespace-pre-wrap line-clamp-4">{lineup.workout_plan}</p>
-                    </div>
-                  )}
                   {lineup.ai_rationale && (
                     <p className="text-xs text-muted-foreground mt-2 italic line-clamp-2">{lineup.ai_rationale}</p>
                   )}
