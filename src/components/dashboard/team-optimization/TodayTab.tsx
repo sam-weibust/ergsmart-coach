@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2 } from "lucide-react";
+import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -24,16 +24,16 @@ function weatherLabel(code: number): { label: string; icon: React.ReactNode } {
   if (code <= 3) return { label: "Partly Cloudy", icon: <Cloud className="h-5 w-5 text-gray-400" /> };
   if (code <= 48) return { label: "Foggy", icon: <Wind className="h-5 w-5 text-gray-400" /> };
   if (code <= 67) return { label: "Rainy", icon: <CloudRain className="h-5 w-5 text-blue-400" /> };
-  if (code <= 77) return { label: "Snowy", icon: <CloudSnow className="h-5 w-5 text-blue-200" /> };
+  if (code <= 77) return { label: "Snowy", icon: <CloudSnow className="h-5 w-5 text-blue-400" /> };
   if (code <= 82) return { label: "Rainy", icon: <CloudRain className="h-5 w-5 text-blue-400" /> };
-  return { label: "Stormy", icon: <CloudRain className="h-5 w-5 text-purple-400" /> };
+  return { label: "Stormy", icon: <CloudRain className="h-5 w-5 text-purple-500" /> };
 }
 
 function AttendanceDot({ status }: { status?: string }) {
   if (status === "yes") return <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block shrink-0" title="Confirmed" />;
   if (status === "no") return <span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block shrink-0" title="Absent" />;
   if (status === "maybe") return <span className="h-2.5 w-2.5 rounded-full bg-yellow-400 inline-block shrink-0" title="Maybe" />;
-  return <span className="h-2.5 w-2.5 rounded-full bg-gray-500 inline-block shrink-0" title="No response" />;
+  return <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block shrink-0" title="No response" />;
 }
 
 const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats = [], onNavigate }: Props) => {
@@ -222,22 +222,22 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <Sun className="h-5 w-5 text-yellow-400" />
-        <h2 className="text-lg font-bold text-white">Today — {new Date(todayStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</h2>
+        <h2 className="text-lg font-bold text-foreground">Today — {new Date(todayStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</h2>
       </div>
 
       {/* Weather */}
       {weather && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardContent className="py-3 px-4">
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 {weatherLabel(weather.weather_code ?? 0).icon}
-                <span className="text-white font-medium">{weatherLabel(weather.weather_code ?? 0).label}</span>
+                <span className="text-foreground font-medium">{weatherLabel(weather.weather_code ?? 0).label}</span>
               </div>
-              <span className="text-white/80 text-sm">{Math.round(weather.temperature_2m ?? 0)}°F</span>
-              <span className="text-white/60 text-sm flex items-center gap-1"><Wind className="h-3.5 w-3.5" />{Math.round(weather.wind_speed_10m ?? 0)} mph</span>
+              <span className="text-foreground text-sm">{Math.round(weather.temperature_2m ?? 0)}°F</span>
+              <span className="text-muted-foreground text-sm flex items-center gap-1"><Wind className="h-3.5 w-3.5" />{Math.round(weather.wind_speed_10m ?? 0)} mph</span>
               {weather.precipitation_probability != null && (
-                <span className="text-white/60 text-sm">💧 {weather.precipitation_probability}% precip</span>
+                <span className="text-muted-foreground text-sm">💧 {weather.precipitation_probability}% precip</span>
               )}
             </div>
           </CardContent>
@@ -246,16 +246,16 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
 
       {/* Athlete view: my seat */}
       {!isCoach && myLineup && mySeat && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white flex items-center gap-2"><Ship className="h-4 w-4 text-blue-400" />Your Seat Today</CardTitle>
+            <CardTitle className="text-sm text-foreground flex items-center gap-2"><Ship className="h-4 w-4 text-primary" />Your Seat Today</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold text-white">{mySeat.seat_number === 0 ? "Cox" : `Seat ${mySeat.seat_number}`}</div>
+              <div className="text-2xl font-bold text-foreground">{mySeat.seat_number === 0 ? "Cox" : `Seat ${mySeat.seat_number}`}</div>
               <div>
-                <p className="text-white/80 text-sm">{myLineup.name}</p>
-                <Badge variant="outline" className="text-xs border-white/20 text-white/60">{myLineup.boat_class}</Badge>
+                <p className="text-foreground text-sm">{myLineup.name}</p>
+                <Badge variant="outline" className="text-xs">{myLineup.boat_class}</Badge>
               </div>
             </div>
           </CardContent>
@@ -264,14 +264,14 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
 
       {/* Athlete check-in */}
       {!isCoach && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardContent className="py-4 px-4 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-white">Practice Attendance</p>
-              <p className="text-xs text-white/50 mt-0.5">Let your coach know you're here today.</p>
+              <p className="text-sm font-semibold text-foreground">Practice Attendance</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Let your coach know you're here today.</p>
             </div>
             {myCheckIn ? (
-              <Badge className="bg-green-500/20 text-green-400 border border-green-500/40 gap-1.5 px-3 py-1.5 text-sm shrink-0">
+              <Badge className="bg-green-500/20 text-green-600 border border-green-500/40 gap-1.5 px-3 py-1.5 text-sm shrink-0">
                 <CheckCircle2 className="h-4 w-4" /> Checked In
               </Badge>
             ) : (
@@ -290,12 +290,12 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
 
       {/* Today's Lineups */}
       {todayLineups.length > 0 && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white flex items-center gap-2">
-              <Ship className="h-4 w-4 text-blue-400" />Today's Lineups
+            <CardTitle className="text-sm text-foreground flex items-center gap-2">
+              <Ship className="h-4 w-4 text-primary" />Today's Lineups
               {totalSeats > 0 && (
-                <span className="ml-auto text-xs text-white/60">{confirmedCount}/{totalSeats} confirmed</span>
+                <span className="ml-auto text-xs text-muted-foreground">{confirmedCount}/{totalSeats} confirmed</span>
               )}
             </CardTitle>
           </CardHeader>
@@ -308,20 +308,20 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
               return (
                 <div key={lineup.id} className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-white/90 font-medium text-sm">{boat?.name || lineup.name}</span>
-                    <Badge variant="outline" className="text-xs border-white/20 text-white/50">{lineup.boat_class}</Badge>
+                    <span className="text-foreground font-medium text-sm">{boat?.name || lineup.name}</span>
+                    <Badge variant="outline" className="text-xs">{lineup.boat_class}</Badge>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {seats.map((s: any) => (
-                      <div key={s.seat_number} className={`flex items-center gap-1.5 text-xs p-1.5 rounded ${!isCoach && s.user_id === profile?.id ? "bg-blue-500/20 border border-blue-500/40" : "bg-white/5"}`}>
+                      <div key={s.seat_number} className={`flex items-center gap-1.5 text-xs p-1.5 rounded ${!isCoach && s.user_id === profile?.id ? "bg-primary/10 border border-primary/30" : "bg-muted/30"}`}>
                         <AttendanceDot status={s.user_id ? attMap[s.user_id] : undefined} />
-                        <span className="text-white/50 shrink-0 w-10">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
-                        <span className="text-white/80 truncate">{s.name || "—"}</span>
+                        <span className="text-muted-foreground shrink-0 w-10">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
+                        <span className="text-foreground truncate">{s.name || "—"}</span>
                       </div>
                     ))}
                   </div>
                   {lineup.workout_plan && (
-                    <p className="text-xs text-white/60 pt-1 border-t border-white/10">{lineup.workout_plan}</p>
+                    <p className="text-xs text-muted-foreground pt-1 border-t border-border">{lineup.workout_plan}</p>
                   )}
                 </div>
               );
@@ -332,22 +332,22 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
 
       {/* Attendance breakdown (coach) */}
       {isCoach && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white flex items-center gap-2"><Users className="h-4 w-4 text-blue-400" />Attendance</CardTitle>
+            <CardTitle className="text-sm text-foreground flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Attendance</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5">
             {absentMembers.length > 0 && (
               <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/30">
-                <p className="text-xs text-red-400 font-medium mb-1">Absent ({absentMembers.length})</p>
+                <p className="text-xs text-red-600 font-medium mb-1">Absent ({absentMembers.length})</p>
                 {absentMembers.map((m: any) => {
-                  const rec = attendanceByUser[m.id];
+                  const rec = attendanceByUser[m.user_id];
                   return (
-                    <div key={m.id} className="flex items-center gap-2 text-xs text-red-300 py-0.5">
+                    <div key={m.id} className="flex items-center gap-2 text-xs text-red-600 py-0.5">
                       <AttendanceDot status="no" />
                       <span>{m.profile?.full_name || m.profile?.username || m.profile?.email?.split("@")[0] || "Unnamed Athlete"}</span>
                       {rec?.responded_at && (
-                        <span className="text-red-400/60 ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                        <span className="text-red-500/60 ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
                       )}
                     </div>
                   );
@@ -357,29 +357,29 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
             {safeMembers.filter((m: any) => attendanceByUser[m?.user_id]?.status !== "no").map((m: any) => {
               const rec = attendanceByUser[m?.user_id];
               return (
-                <div key={m?.id} className="flex items-center gap-2 text-xs text-white/70 py-0.5">
+                <div key={m?.id} className="flex items-center gap-2 text-xs text-foreground py-0.5">
                   <AttendanceDot status={rec?.status} />
                   <span>{m.profile?.full_name || m.profile?.username || m.profile?.email?.split("@")[0] || "Unnamed Athlete"}</span>
                   {rec?.responded_at && (
-                    <span className="text-white/40 ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                    <span className="text-muted-foreground ml-auto">{new Date(rec.responded_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
                   )}
                 </div>
               );
             })}
-            {safeMembers.length === 0 && <p className="text-xs text-white/40">No team members.</p>}
+            {safeMembers.length === 0 && <p className="text-xs text-muted-foreground">No team members.</p>}
           </CardContent>
         </Card>
       )}
 
       {/* Today's Workout */}
-      <Card className="bg-[#0f1e35] border-white/10">
+      <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-white flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-blue-400" />Today's Workout
+          <CardTitle className="text-sm text-foreground flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" />Today's Workout
             {isCoach && practiceEntry && !editingWorkout && (
               <button
                 onClick={() => { setWorkoutText(practiceEntry.workout_description || ""); setEditingWorkout(true); }}
-                className="ml-auto text-white/40 hover:text-white/80 transition-colors"
+                className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
@@ -394,84 +394,91 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                 onChange={e => setWorkoutText(e.target.value)}
                 placeholder="Describe today's practice plan..."
                 rows={4}
-                className="text-sm bg-white/5 border-white/20 text-white placeholder:text-white/30 resize-none"
+                className="text-sm resize-none"
               />
               <div className="flex gap-2">
                 <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => saveWorkout.mutate(workoutText)} disabled={saveWorkout.isPending}>
                   {saveWorkout.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}Save
                 </Button>
-                <Button size="sm" variant="ghost" className="h-8 text-xs text-white/60" onClick={() => setEditingWorkout(false)}>Cancel</Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditingWorkout(false)}>Cancel</Button>
               </div>
             </div>
           ) : dailyWorkout?.workout_data ? (
             <div className="space-y-2">
               {dailyWorkout.workout_data.name && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-white/70 uppercase tracking-wide">{dailyWorkout.workout_data.name}</span>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{dailyWorkout.workout_data.name}</span>
                   {dailyWorkout.workout_data.boat_class && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">{dailyWorkout.workout_data.boat_class}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">{dailyWorkout.workout_data.boat_class}</span>
                   )}
                   {dailyWorkout.workout_data.zone && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">{dailyWorkout.workout_data.zone}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">{dailyWorkout.workout_data.zone}</span>
                   )}
                 </div>
               )}
               {dailyWorkout.workout_data.warmup && (
                 <div>
-                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-0.5">Warmup</p>
-                  <p className="text-xs text-white/70 whitespace-pre-wrap">{dailyWorkout.workout_data.warmup}</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Warmup</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.warmup}</p>
                 </div>
               )}
               {dailyWorkout.workout_data.description && (
-                <p className="text-sm text-white/80 whitespace-pre-wrap">{dailyWorkout.workout_data.description}</p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.description}</p>
               )}
               {dailyWorkout.workout_data.cooldown && (
                 <div>
-                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-0.5">Cooldown</p>
-                  <p className="text-xs text-white/70 whitespace-pre-wrap">{dailyWorkout.workout_data.cooldown}</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Cooldown</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.cooldown}</p>
                 </div>
               )}
               {dailyWorkout.workout_data.notes && (
-                <p className="text-xs text-white/50 italic">{dailyWorkout.workout_data.notes}</p>
+                <p className="text-xs text-muted-foreground italic">{dailyWorkout.workout_data.notes}</p>
               )}
             </div>
           ) : practiceEntry?.workout_description ? (
-            <p className="text-sm text-white/80 whitespace-pre-wrap">{practiceEntry.workout_description}</p>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{practiceEntry.workout_description}</p>
           ) : isCoach ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-white/20 text-white/70 hover:bg-white/10 text-xs"
-              onClick={() => { setWorkoutText(""); setEditingWorkout(true); }}
-            >
-              Write Today's Workout
-            </Button>
+            <div className="space-y-3">
+              <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                <Dumbbell className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm font-medium text-foreground">No workout pushed yet today</p>
+                <p className="text-xs mt-1">Push a lineup with a workout to show it here.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => { setWorkoutText(""); setEditingWorkout(true); }}
+              >
+                Write Today's Workout
+              </Button>
+            </div>
           ) : (
-            <p className="text-xs text-white/40">No workout posted yet.</p>
+            <p className="text-xs text-muted-foreground">No workout posted yet.</p>
           )}
         </CardContent>
       </Card>
 
       {/* Upcoming Regattas */}
-      <Card className="bg-[#0f1e35] border-white/10">
+      <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-white flex items-center gap-2"><MapPin className="h-4 w-4 text-blue-400" />Upcoming Regattas (30 days)</CardTitle>
+          <CardTitle className="text-sm text-foreground flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />Upcoming Regattas (30 days)</CardTitle>
         </CardHeader>
         <CardContent>
           {regattas.length === 0 ? (
-            <p className="text-xs text-white/40">No regattas scheduled in the next 30 days.</p>
+            <p className="text-xs text-muted-foreground">No regattas scheduled in the next 30 days.</p>
           ) : (
             <div className="space-y-2">
               {regattas.map((r: any) => {
                 const days = Math.round((new Date(r.date).getTime() - new Date(todayStr).getTime()) / 86400000);
                 return (
                   <div key={r.id} className="flex items-center gap-3 text-sm">
-                    <div className="text-center bg-blue-500/20 rounded px-2 py-1 min-w-[48px]">
-                      <p className="text-blue-400 font-bold text-sm leading-none">{days === 0 ? "Today" : `${days}d`}</p>
+                    <div className="text-center bg-primary/10 rounded px-2 py-1 min-w-[48px]">
+                      <p className="text-primary font-bold text-sm leading-none">{days === 0 ? "Today" : `${days}d`}</p>
                     </div>
                     <div>
-                      <p className="text-white/90 font-medium">{r.name}</p>
-                      <p className="text-white/50 text-xs">
+                      <p className="text-foreground font-medium">{r.name}</p>
+                      <p className="text-muted-foreground text-xs">
                         {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                         {r.location ? ` — ${r.location}` : ""}
                       </p>
@@ -486,18 +493,18 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
 
       {/* Quick actions — coach only */}
       {isCoach && (
-        <Card className="bg-[#0f1e35] border-white/10">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-white">Quick Actions</CardTitle>
+            <CardTitle className="text-sm text-foreground">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" className="border-white/20 text-white/70 hover:bg-white/10 text-xs gap-1.5" onClick={() => onNavigate("lineups")}>
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 text-foreground" onClick={() => onNavigate("lineups")}>
               <Ship className="h-3.5 w-3.5" />Publish Lineup
             </Button>
-            <Button size="sm" variant="outline" className="border-white/20 text-white/70 hover:bg-white/10 text-xs gap-1.5" onClick={() => onNavigate("calendar")}>
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 text-foreground" onClick={() => onNavigate("calendar")}>
               <Calendar className="h-3.5 w-3.5" />Log Workout
             </Button>
-            <Button size="sm" variant="outline" className="border-white/20 text-white/70 hover:bg-white/10 text-xs gap-1.5" onClick={() => onNavigate("board")}>
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 text-foreground" onClick={() => onNavigate("board")}>
               <MessageSquare className="h-3.5 w-3.5" />Message Team
             </Button>
           </CardContent>
@@ -508,10 +515,10 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     console.error("TodayTab render error:", err);
     return (
       <div className="p-6 text-center space-y-3">
-        <p className="text-white/60 text-sm">Something went wrong loading today's view.</p>
+        <p className="text-muted-foreground text-sm">Something went wrong loading today's view.</p>
         <button
           onClick={() => window.location.reload()}
-          className="text-xs text-blue-400 underline"
+          className="text-xs text-primary underline"
         >
           Tap to refresh
         </button>
