@@ -53,49 +53,60 @@ serve(async (req) => {
       );
     }
 
-    let { access_token, refresh_token } = tokenRow;
+    let { access_token, refresh_token, expires_at } = tokenRow;
 
-    // Refresh token if needed
-    const refreshResponse = await fetch(
-      "https://log.concept2.com/oauth/token",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
+    // Refresh token if expired or expiring within 5 minutes
+    const isExpired = !expires_at || new Date(expires_at) <= new Date(Date.now() + 5 * 60 * 1000);
+    if (isExpired && refresh_token) {
+      console.log("[c2-logbook-sync] Token expired or expiring soon, refreshing...");
+      const refreshResponse = await fetch(
+        "https://log.concept2.com/oauth/token",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token,
+            client_id: C2_CLIENT_ID,
+            client_secret: C2_CLIENT_SECRET,
+          }),
+        }
+      );
+
+      if (refreshResponse.ok) {
+        const refreshed = await refreshResponse.json();
+        access_token = refreshed.access_token;
+        refresh_token = refreshed.refresh_token ?? refresh_token;
+        expires_at = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString();
+
+        await supabase.from("c2_tokens").update({
+          access_token,
           refresh_token,
-          client_id: C2_CLIENT_ID,
-          client_secret: C2_CLIENT_SECRET,
-        }),
+          expires_at,
+          updated_at: new Date().toISOString(),
+        }).eq("user_id", user_id);
+        console.log("[c2-logbook-sync] Token refreshed, new expires_at:", expires_at);
+      } else {
+        const errText = await refreshResponse.text();
+        console.error("[c2-logbook-sync] Token refresh failed:", refreshResponse.status, errText);
       }
-    );
-
-    if (refreshResponse.ok) {
-      const refreshed = await refreshResponse.json();
-      access_token = refreshed.access_token;
-      refresh_token = refreshed.refresh_token;
-
-      // Store updated tokens
-      await supabase.from("c2_tokens").update({
-        access_token,
-        refresh_token,
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", user_id);
     }
 
     // Fetch workouts from Concept2 Logbook
-    const workoutsResponse = await fetch(
-      "https://log.concept2.com/api/users/me/results?per_page=50",
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      }
-    );
+    const fromDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const toDate = new Date().toISOString().split("T")[0];
+    const apiUrl = `https://log.concept2.com/api/users/me/results?per_page=50&from=${fromDate}&to=${toDate}`;
+    console.log(`[c2-logbook-sync] Fetching workouts for user ${user_id}, date range: ${fromDate} → ${toDate}`);
+
+    const workoutsResponse = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+      },
+    });
 
     if (!workoutsResponse.ok) {
       const t = await workoutsResponse.text();
-      console.error("C2 sync error:", workoutsResponse.status, t);
+      console.error("[c2-logbook-sync] C2 API error:", workoutsResponse.status, t);
       return new Response(JSON.stringify({ error: "Failed to fetch workouts" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -103,6 +114,7 @@ serve(async (req) => {
     }
 
     const workouts = await workoutsResponse.json();
+    console.log(`[c2-logbook-sync] C2 API returned ${workouts.data?.length ?? 0} workouts (date range: ${fromDate} → ${toDate})`);
 
     // Insert or update workouts in Supabase
     const formatted = workouts.data.map((w) => ({

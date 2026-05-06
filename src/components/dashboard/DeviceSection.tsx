@@ -9,7 +9,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/config/supabase";
 import {
   Bluetooth, Heart, Activity, Smartphone, CheckCircle2, XCircle,
   Loader2, Zap, Timer, Gauge, RotateCcw, Link, RefreshCw,
-  Scan, Radio, WifiOff, AlertTriangle,
+  Scan, Radio, WifiOff, AlertTriangle, Construction,
 } from "lucide-react";
 import {
   initBle, listDevices, connectToDevice, startStreaming, disconnectDevice,
@@ -406,58 +406,10 @@ const DeviceSection = () => {
           </CardTitle>
           <CardDescription>Connect via Bluetooth for real-time splits, power, and stroke rate.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full ${ergConnected ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40"}`} />
-              <span className="font-medium text-sm">{ergConnected ? (ergDeviceName || "Concept2 Erg") : "Not connected"}</span>
-              {ergConnected && (
-                <Badge variant="outline" className={isRowing ? "border-green-500/40 bg-green-500/10 text-green-600" : "border-muted text-muted-foreground"}>
-                  {stateLabel}
-                </Badge>
-              )}
-            </div>
-            {ergConnected ? (
-              <Button variant="outline" size="sm" onClick={disconnectErg}>Disconnect</Button>
-            ) : (
-              <Button size="sm" onClick={() => openScanner("erg")} disabled={ergConnecting || btScanDisabled}>
-                {ergConnecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting…</> : <><Scan className="h-4 w-4 mr-2" />Connect PM5</>}
-              </Button>
-            )}
-          </div>
-
-          {ergConnected && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t">
-              {[
-                { label: "Time",        icon: <Timer className="h-3 w-3" />,            value: ergData.elapsedTime ? formatTime(ergData.elapsedTime) : "--:--",     accent: false },
-                { label: "Distance",    icon: <Activity className="h-3 w-3" />,         value: ergData.distance ? `${Math.round(ergData.distance)}m` : "---m",       accent: false },
-                { label: "Split /500m", icon: <Gauge className="h-3 w-3" />,            value: formatPace(ergData.splitPace ?? 0),                                   accent: true  },
-                { label: "Stroke Rate", icon: <RotateCcw className="h-3 w-3" />,        value: ergData.strokeRate ? `${ergData.strokeRate} spm` : "-- spm",          accent: false },
-                { label: "Power",       icon: <Zap className="h-3 w-3" />,              value: ergData.power ? `${ergData.power} W` : "-- W",                        accent: false },
-                { label: "Heart Rate",  icon: <Heart className="h-3 w-3 text-red-500" />, value: (ergData.heartRate || heartRate) ? `${ergData.heartRate || heartRate} bpm` : "-- bpm", accent: false },
-              ].map(({ label, icon, value, accent }) => (
-                <div key={label} className={`p-3 rounded-xl text-center ${accent ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}>
-                  <div className="text-xs text-muted-foreground mb-1 flex items-center justify-center gap-1">{icon} {label}</div>
-                  <div className={`text-xl font-mono font-bold ${accent ? "text-primary" : ""}`}>{value}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {ergConnected && (ergData.driveLength || ergData.driveTime || ergData.recoveryTime) && (
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t">
-              {[
-                { label: "Drive Length", value: ergData.driveLength ? `${(ergData.driveLength / 10).toFixed(1)} m` : "--" },
-                { label: "Drive Time",   value: ergData.driveTime   ? `${ergData.driveTime} ms`  : "--" },
-                { label: "Recovery",     value: ergData.recoveryTime? `${ergData.recoveryTime} ms`: "--" },
-              ].map(({ label, value }) => (
-                <div key={label} className="p-2 rounded-lg bg-muted/50 text-center">
-                  <div className="text-[10px] text-muted-foreground">{label}</div>
-                  <div className="text-sm font-mono font-semibold">{value}</div>
-                </div>
-              ))}
-            </div>
-          )}
+        <CardContent className="flex flex-col items-center justify-center py-10 text-center gap-3">
+          <Construction className="h-10 w-10 text-muted-foreground" />
+          <p className="font-semibold text-foreground">Live Erg Connection — Coming Soon</p>
+          <p className="text-sm text-muted-foreground max-w-sm">Direct PM5 Bluetooth sync is under development. In the meantime, use the camera button in the Log tab to photograph your PM5 screen.</p>
         </CardContent>
       </Card>
 
