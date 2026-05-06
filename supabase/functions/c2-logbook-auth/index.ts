@@ -68,31 +68,19 @@ serve(async (req) => {
         body: JSON.stringify({ user_id }),
       }).catch((e) => console.error("[c2-logbook-auth] Initial sync failed:", e));
 
-      return new Response(
-        `<!DOCTYPE html><html><body><script>
-    if (window.opener) {
-      window.opener.postMessage({ type: "c2_auth_success" }, "*");
-      window.close();
-    } else {
-      window.location.href = "${Deno.env.get("SITE_URL") ?? "https://ergsmart-coach.vercel.app"}";
-    }
-  </script><p>Connected! Closing...</p></body></html>`,
-        { headers: { "Content-Type": "text/html" }, status: 200 }
-      );
+      const siteUrl = Deno.env.get("SITE_URL") ?? "https://ergsmart-coach.vercel.app";
+      return new Response(null, {
+        status: 302,
+        headers: { "Location": `${siteUrl}?c2_connected=1` },
+      });
     } catch (e) {
       errMsg = e instanceof Error ? e.message : "Unknown error";
       console.error("[c2-logbook-auth] OAuth callback error:", errMsg);
-      return new Response(
-        `<!DOCTYPE html><html><body><script>
-    if (window.opener) {
-      window.opener.postMessage({ type: "c2_auth_error", error: ${JSON.stringify(errMsg)} }, "*");
-      window.close();
-    } else {
-      window.location.href = "${Deno.env.get("SITE_URL") ?? "https://ergsmart-coach.vercel.app"}?c2_error=1";
-    }
-  </script><p>Auth failed. Closing...</p></body></html>`,
-        { headers: { "Content-Type": "text/html" }, status: 200 }
-      );
+      const siteUrl = Deno.env.get("SITE_URL") ?? "https://ergsmart-coach.vercel.app";
+      return new Response(null, {
+        status: 302,
+        headers: { "Location": `${siteUrl}?c2_error=${encodeURIComponent(errMsg)}` },
+      });
     }
   }
 

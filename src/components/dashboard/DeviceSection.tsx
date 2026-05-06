@@ -104,19 +104,16 @@ const DeviceSection = () => {
 
   useEffect(() => {
     checkC2();
-    // Listen for OAuth popup success
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === "c2_auth_success") {
-        setIsConnectingC2(false);
-        checkC2();
-        toast({ title: "Concept2 Connected!", description: `Imported ${e.data.imported ?? 0} workouts.` });
-      } else if (e.data?.type === "c2_auth_error") {
-        setIsConnectingC2(false);
-        toast({ title: "C2 Auth Failed", description: e.data.error || "Unknown error", variant: "destructive" });
-      }
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("c2_connected") === "1") {
+      checkC2();
+      toast({ title: "Concept2 Logbook connected!" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("c2_error")) {
+      toast({ title: "C2 connection failed", description: params.get("c2_error"), variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, [checkC2, toast]);
 
   // ── Auto-save when workout finishes ───────────────────────────────────────
@@ -293,12 +290,7 @@ const DeviceSection = () => {
       const res = await c2Connect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const popup = window.open(data.url, "c2_auth", "width=500,height=600,scrollbars=yes");
-      if (!popup) {
-        toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
-        setIsConnectingC2(false);
-        return;
-      }
+      window.location.href = data.url;
     } catch (e: any) {
       setIsConnectingC2(false);
       toast({ title: "Failed to open Concept2 auth", description: e.message, variant: "destructive" });
