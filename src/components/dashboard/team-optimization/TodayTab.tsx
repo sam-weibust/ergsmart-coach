@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2 } from "lucide-react";
+import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { displayName } from "./constants";
 
@@ -158,6 +158,40 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  // Athlete simple check-in (attendance table)
+  const { data: myCheckIn } = useQuery({
+    queryKey: ["my-team-checkin", teamId, todayStr, profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return null;
+      const { data } = await supabase
+        .from("attendance" as any)
+        .select("*")
+        .eq("user_id", profile.id)
+        .eq("team_id", teamId)
+        .eq("date", todayStr)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.id && !isCoach,
+  });
+
+  const checkIn = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("attendance" as any)
+        .upsert(
+          { user_id: profile.id, team_id: teamId, date: todayStr, status: "present" },
+          { onConflict: "user_id,team_id,date" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Checked in!" });
+      queryClient.invalidateQueries({ queryKey: ["my-team-checkin", teamId, todayStr, profile?.id] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const attendanceByUser = Object.fromEntries((todayAttendance ?? []).map((a: any) => [a.user_id, a]));
 
   const safeMembers = teamMembers ?? [];
@@ -212,6 +246,32 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                 <Badge variant="outline" className="text-xs border-white/20 text-white/60">{myLineup.boat_class}</Badge>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Athlete check-in */}
+      {!isCoach && (
+        <Card className="bg-[#0f1e35] border-white/10">
+          <CardContent className="py-4 px-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-white">Practice Attendance</p>
+              <p className="text-xs text-white/50 mt-0.5">Let your coach know you're here today.</p>
+            </div>
+            {myCheckIn ? (
+              <Badge className="bg-green-500/20 text-green-400 border border-green-500/40 gap-1.5 px-3 py-1.5 text-sm shrink-0">
+                <CheckCircle2 className="h-4 w-4" /> Checked In
+              </Badge>
+            ) : (
+              <Button
+                size="sm"
+                className="shrink-0"
+                onClick={() => checkIn.mutate()}
+                disabled={checkIn.isPending}
+              >
+                {checkIn.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check In"}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

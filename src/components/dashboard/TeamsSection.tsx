@@ -30,6 +30,7 @@ import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import AttendancePrompt from "./team-optimization/AttendancePrompt";
 import WellnessCheckin from "./team-optimization/WellnessCheckin";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import TodayTab from "./team-optimization/TodayTab";
 
 interface TeamsSectionProps {
   profile: any;
@@ -463,6 +464,18 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     <p className="text-sm text-muted-foreground">{team.description}</p>
                   )}
 
+                  {/* Today tab — read-only view for athletes */}
+                  <ErrorBoundary>
+                    <TodayTab
+                      teamId={team.id}
+                      teamName={team.name}
+                      teamMembers={team.team_members || []}
+                      isCoach={false}
+                      profile={profile}
+                      onNavigate={() => {}}
+                    />
+                  </ErrorBoundary>
+
                   {profile?.id && <WellnessCheckin teamId={team.id} userId={profile.id} />}
                   {profile?.id && <AttendancePrompt teamId={team.id} userId={profile.id} />}
 
@@ -488,7 +501,9 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
       {(!teams?.coached?.length && !teams?.member?.length) && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            {isCoach ? "Create your first team above!" : "You're not part of any teams yet."}
+            {isCoach
+              ? "Create your first team above!"
+              : "Join a team to see today's workout and lineup. Ask your coach for the team join code."}
           </CardContent>
         </Card>
       )}
