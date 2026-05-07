@@ -91,6 +91,9 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
   const [deletingAll, setDeletingAll] = useState(false);
   const [ergPage, setErgPage] = useState(0);
   const [strengthPage, setStrengthPage] = useState(0);
+  const [historyTab, setHistoryTab] = useState<string>(() => {
+    try { return localStorage.getItem("historyActiveTab") || "erg"; } catch { return "erg"; }
+  });
 
   const { data: coachInfo } = useQuery({
     queryKey: ["coach-check", profile?.id],
@@ -416,7 +419,10 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="erg">
+        <Tabs value={historyTab} onValueChange={(v) => {
+            setHistoryTab(v);
+            try { localStorage.setItem("historyActiveTab", v); } catch {}
+          }}>
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="erg">
               <Activity className="h-4 w-4 mr-2" />

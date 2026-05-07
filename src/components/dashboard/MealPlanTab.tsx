@@ -25,6 +25,9 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
+  const [openMealDate, setOpenMealDate] = useState<string>(() => {
+    try { return localStorage.getItem("lastMealTab") || ""; } catch { return ""; }
+  });
 
   // Food preferences
   const [newPreference, setNewPreference] = useState("");
@@ -568,7 +571,16 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
             <CardDescription>Your saved meals — tap ❤️ to favorite</CardDescription>
           </CardHeader>
           <CardContent>
-            <Accordion type="single" collapsible className="w-full">
+            <Accordion
+              type="single"
+              collapsible
+              className="w-full"
+              value={openMealDate}
+              onValueChange={(v) => {
+                setOpenMealDate(v);
+                try { localStorage.setItem("lastMealTab", v); } catch {}
+              }}
+            >
               {dailyTotals.slice(0, 14).map((day) => (
                 <AccordionItem key={day.date} value={day.date}>
                   <AccordionTrigger className="hover:no-underline">

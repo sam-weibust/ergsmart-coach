@@ -112,11 +112,20 @@ import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 import { getSessionUser } from '@/lib/getUser';
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getLocalDate } from "@/lib/dateUtils";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
 import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
 import OrganizationSection from "@/components/dashboard/OrganizationSection";
+import { ProfileSection } from "@/components/dashboard/ProfileSection";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -431,18 +440,53 @@ function BillingTab() {
   );
 }
 
+// ─── ROLE CONSTANTS & VISIBILITY ─────────────────────────────────────────────
+
+const ROLES = [
+  { value: "rower",     label: "Athlete",   description: "I train and compete",           icon: "🚣" },
+  { value: "coxswain",  label: "Coxswain",  description: "I steer and call",              icon: "🎙️" },
+  { value: "coach",     label: "Coach",     description: "I coach a team",                icon: "📋" },
+  { value: "organizer", label: "Organizer", description: "I manage regattas and clubs",   icon: "🏆" },
+] as const;
+
+/** Returns true when the section/sub should be hidden for the given role. */
+const hiddenForRole = (sectionId: string, subId: string | null, role: string | null): boolean => {
+  if (!role || role === "rower") return false;
+
+  if (role === "organizer") {
+    if (!["dashboard", "teams", "competition", "performance", "settings"].includes(sectionId)) return true;
+    if (sectionId === "performance" && subId && subId !== "ask") return true;
+    if (sectionId === "competition" && subId && subId !== "leaderboard") return true;
+    return false;
+  }
+
+  if (role === "coxswain") {
+    if (["recruiting", "live", "calculators", "coaches-hub"].includes(sectionId)) return true;
+    if (sectionId === "training" && subId && ["erg", "nutrition", "cross-training"].includes(subId)) return true;
+    if (sectionId === "performance" && subId === "technique") return true;
+    if (sectionId === "competition" && subId && !["leaderboard", "achievements"].includes(subId)) return true;
+    return false;
+  }
+
+  return false;
+};
+
 // ─── SECTION LANDING PAGE ─────────────────────────────────────────────────────
 
 function SectionLanding({
   section,
   navTo,
   isCoach,
+  userRole,
 }: {
   section: NavSection;
   navTo: (s: string, sub?: string) => void;
   isCoach: boolean;
+  userRole: string | null;
 }) {
-  const visibleSubs = section.subs.filter((s) => !s.coachOnly || isCoach);
+  const visibleSubs = section.subs.filter(
+    (s) => (!s.coachOnly || isCoach) && !hiddenForRole(section.id, s.id, userRole)
+  );
   return (
     <div className="space-y-4">
       <div>
@@ -480,6 +524,13 @@ const Dashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSub, setActiveSub] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [onboardingProfile, setOnboardingProfile] = useState<{
+    full_name: string | null;
+    experience_level: string | null;
+    goals: string | null;
+  } | null>(null);
 
   const navTo = (s: string, sub?: string) => {
     setActiveSection(s);
@@ -516,6 +567,33 @@ const Dashboard = () => {
 
     return () => subscription.unsubscribe();
   }, [navigate, queryClient]);
+
+  // ── First-time onboarding check ────────────────────────────────────────────
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      try {
+        const dismissed = localStorage.getItem("onboardingDismissed");
+        if (dismissed && Date.now() - parseInt(dismissed) < 24 * 60 * 60 * 1000) return;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("full_name, age, weight, height, experience_level, goals")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (!p) return;
+        const incomplete = !p.full_name || !p.experience_level || !p.goals;
+        if (incomplete) {
+          setOnboardingProfile({ full_name: p.full_name, experience_level: p.experience_level, goals: p.goals });
+          setShowOnboarding(true);
+        }
+      } catch {}
+    })();
+  }, [loading]);
 
   // ── Midnight date-change detector ─────────────────────────────────────────
   useEffect(() => {
@@ -567,12 +645,28 @@ const Dashboard = () => {
     enabled: !loading,
   });
 
-  // Coach = role is "coach" OR legacy user_type "coach" OR they have created a team
+  const userRole: string | null = (profile as any)?.user_type ?? null;
+
+  // Coach = role/user_type is "coach" OR they have created a team
   const isCoach =
     profile != null &&
-    ((profile as any)?.role === "coach" || (profile as any)?.user_type === "coach" || (Array.isArray(coachTeams) && coachTeams.length > 0));
+    (
+      (profile as any)?.role === "coach" ||
+      userRole === "coach" ||
+      (Array.isArray(coachTeams) && coachTeams.length > 0)
+    );
 
-  const isOrganizer = profile != null && (profile as any)?.role === "organizer";
+  const isCox =
+    profile != null &&
+    (
+      (profile as any)?.role === "coxswain" ||
+      userRole === "coxswain" ||
+      (profile as any)?.is_coxswain === true
+    );
+
+  const isOrganizer =
+    profile != null &&
+    ((profile as any)?.role === "organizer" || userRole === "organizer");
 
   // Accept coach invite from URL token
   useEffect(() => {
@@ -686,7 +780,7 @@ const Dashboard = () => {
 
     // Section with no sub selected → landing grid
     if (!activeSub && section && section.subs.length > 0) {
-      return <SectionLanding section={section} navTo={navTo} isCoach={isCoach} />;
+      return <SectionLanding section={section} navTo={navTo} isCoach={isCoach} userRole={userRole} />;
     }
 
     // ── Training ──────────────────────────────────────────────────────────────
@@ -854,6 +948,8 @@ const Dashboard = () => {
     // ── Settings ──────────────────────────────────────────────────────────────
     if (activeSection === "settings") {
       switch (activeSub) {
+        case "profile":
+          return <ProfileSection />;
         case "account":
           return <AccountSection />;
         case "notifications":
@@ -880,15 +976,16 @@ const Dashboard = () => {
     return null;
   };
 
-  // Mobile bottom nav sections
+  // Mobile bottom nav sections (filter hidden-for-role entries)
   const mobileBottomNav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "training", label: "Training", icon: Dumbbell },
     { id: "teams", label: "Teams", icon: Users },
     { id: "performance", label: "Performance", icon: BarChart3 },
-  ];
+  ].filter((item) => !hiddenForRole(item.id, null, userRole));
 
-  const navVisible = (s: NavSection) => !s.coachOnly || isCoach || isOrganizer;
+  const navVisible = (s: NavSection) =>
+    (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(s.id, null, userRole);
 
   const moreNavSections = NAV_CONFIG.filter(
     (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && navVisible(s)
@@ -897,6 +994,96 @@ const Dashboard = () => {
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       <AppStoreBanner />
+
+      {/* ── First-time onboarding dialog ─────────────────────────────────── */}
+      <Dialog open={showOnboarding}>
+        <DialogContent
+          className="sm:max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Welcome to CrewSync 🚣</DialogTitle>
+            <DialogDescription>
+              Complete your profile so your AI coach can personalize your training plans, meal plans, and feedback.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Step 1: Role selection */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">I am a…</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ROLES.map((role) => (
+                <button
+                  key={role.value}
+                  type="button"
+                  onClick={() => setSelectedRole(role.value)}
+                  className={cn(
+                    "cursor-pointer rounded-xl border-2 p-4 text-center transition-all",
+                    selectedRole === role.value
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <div className="text-2xl mb-1">{role.icon}</div>
+                  <p className="text-sm font-semibold">{role.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{role.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Step 2: Missing profile fields */}
+          <div className="space-y-2 py-1">
+            <p className="text-sm text-muted-foreground">Your profile also needs:</p>
+            <ul className="text-sm space-y-1">
+              {!onboardingProfile?.full_name && (
+                <li className="flex items-center gap-2">
+                  <X className="h-3 w-3 text-destructive" /> Name
+                </li>
+              )}
+              {!onboardingProfile?.experience_level && (
+                <li className="flex items-center gap-2">
+                  <X className="h-3 w-3 text-destructive" /> Experience level
+                </li>
+              )}
+              {!onboardingProfile?.goals && (
+                <li className="flex items-center gap-2">
+                  <X className="h-3 w-3 text-destructive" /> Training goals
+                </li>
+              )}
+            </ul>
+          </div>
+
+          <Button
+            className="w-full"
+            disabled={!selectedRole}
+            onClick={async () => {
+              if (!selectedRole) return;
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                  await supabase.from("profiles").upsert({ id: session.user.id, user_type: selectedRole });
+                }
+              } catch {}
+              setShowOnboarding(false);
+              navTo("settings", "profile");
+            }}
+          >
+            Set Up My Profile
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              setShowOnboarding(false);
+              try { localStorage.setItem("onboardingDismissed", Date.now().toString()); } catch {}
+            }}
+          >
+            Remind me later
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="border-b border-white/10 bg-[#0a1628] z-20 shadow-sm shrink-0">
         <div className="px-4 py-3 flex justify-between items-center">
@@ -949,7 +1136,9 @@ const Dashboard = () => {
                 </button>
                 {activeSection === section.id && section.subs.length > 0 && (
                   <div className="ml-4 mt-1 space-y-0.5">
-                    {section.subs.filter((s) => !s.coachOnly || isCoach || isOrganizer).map((sub) => (
+                    {section.subs
+                      .filter((s) => (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(section.id, s.id, userRole))
+                      .map((sub) => (
                       <button
                         key={sub.id}
                         onClick={() => navTo(section.id, sub.id)}
@@ -1076,7 +1265,9 @@ const Dashboard = () => {
                     </button>
                     {activeSection === section.id && section.subs.length > 0 && (
                       <div className="ml-4 mt-1 space-y-0.5">
-                        {section.subs.filter((s) => !s.coachOnly || isCoach || isOrganizer).map((sub) => (
+                        {section.subs
+                          .filter((s) => (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(section.id, s.id, userRole))
+                          .map((sub) => (
                           <button
                             key={sub.id}
                             onClick={() => navTo(section.id, sub.id)}

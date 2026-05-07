@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -156,6 +156,9 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   const [searching, setSearching] = useState(false);
   const [sending, setSending] = useState(false);
   const [dmFriend, setDmFriend] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try { return localStorage.getItem("lastFriendsTab") || "friends"; } catch { return "friends"; }
+  });
 
   // Fetch friendships
   const { data: friendships = [], refetch: refetchFriendships } = useQuery({
@@ -273,6 +276,33 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
     },
     enabled: friendships.length > 0,
   });
+
+  // Restore last DM thread after friendships load
+  useEffect(() => {
+    if (!friendships.length || dmFriend) return;
+    try {
+      const storedId = localStorage.getItem("lastActiveFriendId");
+      if (storedId) {
+        const match = friendships.find((f: any) => f.friend?.id === storedId);
+        if (match) setDmFriend(match.friend);
+      }
+    } catch {}
+  }, [friendships]);
+
+  const openDm = (friend: any) => {
+    setDmFriend(friend);
+    try { localStorage.setItem("lastActiveFriendId", friend.id); } catch {}
+  };
+
+  const closeDm = () => {
+    setDmFriend(null);
+    try { localStorage.removeItem("lastActiveFriendId"); } catch {}
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    try { localStorage.setItem("lastFriendsTab", value); } catch {}
+  };
 
   const searchUsers = async () => {
     if (!searchTerm.trim() || !profile) return;
@@ -430,7 +460,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
   if (dmFriend) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => setDmFriend(null)} className="gap-2">
+        <Button variant="ghost" onClick={closeDm} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Friends
         </Button>
         <MessageBoard
@@ -444,7 +474,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="friends" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="flex w-full overflow-x-auto">
           <TabsTrigger value="friends" className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 min-w-0">
             <Users className="h-4 w-4 shrink-0" />
@@ -516,7 +546,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-primary"
-                              onClick={() => setDmFriend(friendship.friend)}
+                              onClick={() => openDm(friendship.friend)}
                             >
                               <MessageCircle className="h-4 w-4" />
                             </Button>
@@ -643,7 +673,7 @@ const FriendsSection = ({ profile }: FriendsSectionProps) => {
                 <DmFriendList
                   friendships={friendships}
                   profileId={profile?.id}
-                  onSelectFriend={(friend: any) => setDmFriend(friend)}
+                  onSelectFriend={(friend: any) => openDm(friend)}
                 />
               )}
             </CardContent>

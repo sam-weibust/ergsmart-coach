@@ -230,7 +230,9 @@ export const ProfileSection = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="rower">Rower / Athlete</SelectItem>
+                    <SelectItem value="coxswain">Coxswain</SelectItem>
                     <SelectItem value="coach">Coach</SelectItem>
+                    <SelectItem value="organizer">Organizer</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">

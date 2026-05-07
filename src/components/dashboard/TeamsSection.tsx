@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, ChevronDown, ChevronUp, BarChart3, Copy, Check } from "lucide-react";
+import { Users, UserPlus, Trash2, BarChart3, Copy, Check } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +18,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Leaderboard } from "./Leaderboard";
 import { TeamGoals } from "./TeamGoals";
 import { MessageBoard } from "./MessageBoard";
@@ -43,8 +50,10 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
-  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(() => {
+    return localStorage.getItem("lastActiveTeamId");
+  });
 
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
@@ -190,18 +199,52 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
     },
   });
 
-  const toggleTeam = (teamId: string) => {
-    setExpandedTeam(expandedTeam === teamId ? null : teamId);
+  const allTeams = [
+    ...(teams?.coached || []).map((t: any) => ({ ...t, _role: "coach" as const })),
+    ...(teams?.member || []).map((t: any) => ({ ...t, _role: "member" as const })),
+  ];
+
+  useEffect(() => {
+    if (allTeams.length === 0) return;
+    const valid = allTeams.find((t) => t.id === activeTeamId);
+    if (!valid) {
+      setActiveTeamId(allTeams[0].id);
+    }
+  }, [teams]);
+
+  const handleTeamSelect = (teamId: string) => {
+    setActiveTeamId(teamId);
+    localStorage.setItem("lastActiveTeamId", teamId);
   };
+
+  const activeTeam = allTeams.find((t) => t.id === activeTeamId);
 
   return (
     <div className="space-y-6">
       {/* Coach Comparison Dashboard */}
-      {isCoach && (
-        <CoachComparison />
-      )}
-      
+      {isCoach && <CoachComparison />}
+
+      {/* Header row: title + team selector dropdown */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Teams</h2>
+        {allTeams.length > 0 && (
+          <Select value={activeTeamId || ""} onValueChange={handleTeamSelect}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select a team" />
+            </SelectTrigger>
+            <SelectContent>
+              {allTeams.map((team) => (
+                <SelectItem key={team.id} value={team.id}>
+                  {team.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
       <div className="space-y-4">
+        {/* Create Team form — coaches only */}
         {isCoach && (
           <Card>
             <CardHeader className="pb-3">
@@ -229,285 +272,230 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           </Card>
         )}
 
-      {/* Coached Teams */}
-      {isCoach && teams?.coached && teams.coached.length > 0 && (
-        <div className="space-y-4">
-          {teams.coached.map((team: any) => (
-            <Card key={team.id}>
-              <CardHeader className="pb-3">
-                <div 
-                  className="flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleTeam(team.id)}
-                >
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">{team.name}</CardTitle>
-                    <Badge variant="outline" className="text-xs">
-                      {team.team_members?.length || 0} members
-                    </Badge>
-                  </div>
-                  {expandedTeam === team.id ? (
-                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-              </CardHeader>
-              
-              {expandedTeam === team.id && (
-                <CardContent className="space-y-6">
-                  {/* Invite code — coach only */}
-                  {team.join_code && (
-                    <div className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4">
-                      <p className="text-sm font-semibold text-foreground mb-2">Team Join Code</p>
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl font-mono font-bold tracking-widest text-foreground">
-                          {team.join_code}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(team.join_code);
-                            setCopiedTeamId(team.id);
-                            setTimeout(() => setCopiedTeamId(null), 2000);
-                          }}
-                        >
-                          {copiedTeamId === team.id
-                            ? <Check className="h-4 w-4 text-green-500" />
-                            : <Copy className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Share this code with athletes to join your team.
-                      </p>
-                    </div>
-                  )}
-
-                  {team.description && (
-                    <p className="text-sm text-muted-foreground">{team.description}</p>
-                  )}
-
-                  {/* Add member */}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Add by email or username"
-                      value={memberEmail}
-                      onChange={(e) => setMemberEmail(e.target.value)}
-                      className="flex-1"
-                    />
+        {/* Active team content */}
+        {activeTeam && activeTeam._role === "coach" && (
+          <Card>
+            <CardContent className="pt-6 space-y-6">
+              {/* Invite code */}
+              {activeTeam.join_code && (
+                <div className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-foreground mb-2">Team Join Code</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-mono font-bold tracking-widest text-foreground">
+                      {activeTeam.join_code}
+                    </span>
                     <Button
                       size="icon"
-                      onClick={() => addMember.mutate({ teamId: team.id, teamName: team.name, email: memberEmail })}
-                      disabled={addMember.isPending}
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeTeam.join_code);
+                        setCopiedTeamId(activeTeam.id);
+                        setTimeout(() => setCopiedTeamId(null), 2000);
+                      }}
                     >
-                      <UserPlus className="h-4 w-4" />
+                      {copiedTeamId === activeTeam.id
+                        ? <Check className="h-4 w-4 text-green-500" />
+                        : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
-
-                  {/* Members list */}
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">Members</h4>
-                    {team.team_members?.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No members yet</p>
-                    ) : (
-                      <div className="grid gap-2">
-                        {team.team_members?.map((member: any) => (
-                          <div
-                            key={member.id}
-                            className="flex items-center justify-between p-2 border rounded-lg text-sm"
-                          >
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="font-medium">
-                                    {member.profile?.full_name || member.profile?.username || "Unknown"}
-                                  </p>
-                                  {(member.profile?.role === "coxswain" || member.profile?.is_coxswain) && (
-                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
-                                  )}
-                                  {member.profile?.role === "coach" && (
-                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-600 text-white">COACH</Badge>
-                                  )}
-                                  {member.profile?.role === "athlete" && (
-                                    <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap gap-3 mt-0.5">
-                                  <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
-                                  {member.profile?.best_2k_seconds && (
-                                    <span className="text-xs font-mono text-primary font-medium">
-                                      2K: {Math.floor(member.profile.best_2k_seconds / 60)}:{String(Math.round(member.profile.best_2k_seconds % 60)).padStart(2, "0")}
-                                      {member.profile.best_2k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_2k_date})</span>}
-                                    </span>
-                                  )}
-                                  {member.profile?.best_6k_seconds && (
-                                    <span className="text-xs font-mono text-blue-500 font-medium">
-                                      6K: {Math.floor(member.profile.best_6k_seconds / 60)}:{String(Math.round(member.profile.best_6k_seconds % 60)).padStart(2, "0")}
-                                      {member.profile.best_6k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_6k_date})</span>}
-                                    </span>
-                                  )}
-                                  {member.profile?.years_rowing != null && member.profile.role === "athlete" && (
-                                    <span className="text-xs text-muted-foreground">{member.profile.years_rowing} seasons rowing</span>
-                                  )}
-                                  {member.profile?.cox_years_coxing != null && (member.profile.role === "coxswain" || member.profile.is_coxswain) && (
-                                    <span className="text-xs text-muted-foreground">{member.profile.cox_years_coxing} seasons coxing</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Remove Member</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to remove {member.profile?.full_name || member.profile?.username || "this member"} from the team?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => removeMember.mutate(member.id)}>
-                                    Remove
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Team Optimization Dashboard */}
-                  <ErrorBoundary>
-                    <TeamOptimizationDashboard
-                      teamId={team.id}
-                      teamName={team.name}
-                      teamMembers={team.team_members || []}
-                      isCoach={isCoach}
-                      profile={profile}
-                    />
-                  </ErrorBoundary>
-
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full md:w-auto"
-                      >
-                        Delete Team
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Team</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete "{team.name}"? This will remove all members and cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={() => deleteTeam.mutate(team.id)}
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Teams user is member of */}
-      {teams?.member && teams.member.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="font-semibold text-lg">My Teams</h3>
-          {teams.member.map((team: any) => (
-            <Card key={team.id}>
-              <CardHeader className="pb-3">
-                <div 
-                  className="flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleTeam(team.id)}
-                >
-                  <div>
-                    <CardTitle className="text-base">{team.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Coach: {team.coach?.full_name || team.coach?.username || team.coach?.email}
-                    </p>
-                  </div>
-                  {expandedTeam === team.id ? (
-                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  )}
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Share this code with athletes to join your team.
+                  </p>
                 </div>
-              </CardHeader>
-              
-              {expandedTeam === team.id && (
-                <CardContent className="space-y-4">
-                  {team.description && (
-                    <p className="text-sm text-muted-foreground">{team.description}</p>
-                  )}
-
-                  {/* Today tab — read-only view for athletes */}
-                  <ErrorBoundary>
-                    <TodayTab
-                      teamId={team.id}
-                      teamName={team.name}
-                      teamMembers={team.team_members || []}
-                      isCoach={false}
-                      profile={profile}
-                      onNavigate={() => {}}
-                    />
-                  </ErrorBoundary>
-
-                  {profile?.id && <WellnessCheckin teamId={team.id} userId={profile.id} />}
-                  {profile?.id && <AttendancePrompt teamId={team.id} userId={profile.id} />}
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Leaderboard teamId={team.id} teamName={team.name} />
-                    <TeamGoals teamId={team.id} isCoach={false} currentUserId={profile.id} />
-                  </div>
-
-                  <TeamMessageBoard
-                    teamId={team.id}
-                    teamName={team.name}
-                    teamMembers={team.team_members || []}
-                    isCoach={false}
-                    profile={profile}
-                  />
-                </CardContent>
               )}
-            </Card>
-          ))}
-        </div>
-      )}
 
-      {(!teams?.coached?.length && !teams?.member?.length) && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            {isCoach
-              ? "Create your first team above!"
-              : "Join a team to see today's workout and lineup. Ask your coach for the team join code."}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+              {activeTeam.description && (
+                <p className="text-sm text-muted-foreground">{activeTeam.description}</p>
+              )}
+
+              {/* Add member */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add by email or username"
+                  value={memberEmail}
+                  onChange={(e) => setMemberEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  size="icon"
+                  onClick={() => addMember.mutate({ teamId: activeTeam.id, teamName: activeTeam.name, email: memberEmail })}
+                  disabled={addMember.isPending}
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Members list */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Members</h4>
+                {activeTeam.team_members?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No members yet</p>
+                ) : (
+                  <div className="grid gap-2">
+                    {activeTeam.team_members?.map((member: any) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-2 border rounded-lg text-sm"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-medium">
+                                {member.profile?.full_name || member.profile?.username || "Unknown"}
+                              </p>
+                              {(member.profile?.role === "coxswain" || member.profile?.is_coxswain) && (
+                                <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
+                              )}
+                              {member.profile?.role === "coach" && (
+                                <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-600 text-white">COACH</Badge>
+                              )}
+                              {member.profile?.role === "athlete" && (
+                                <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-3 mt-0.5">
+                              <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                              {member.profile?.best_2k_seconds && (
+                                <span className="text-xs font-mono text-primary font-medium">
+                                  2K: {Math.floor(member.profile.best_2k_seconds / 60)}:{String(Math.round(member.profile.best_2k_seconds % 60)).padStart(2, "0")}
+                                  {member.profile.best_2k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_2k_date})</span>}
+                                </span>
+                              )}
+                              {member.profile?.best_6k_seconds && (
+                                <span className="text-xs font-mono text-blue-500 font-medium">
+                                  6K: {Math.floor(member.profile.best_6k_seconds / 60)}:{String(Math.round(member.profile.best_6k_seconds % 60)).padStart(2, "0")}
+                                  {member.profile.best_6k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_6k_date})</span>}
+                                </span>
+                              )}
+                              {member.profile?.years_rowing != null && member.profile.role === "athlete" && (
+                                <span className="text-xs text-muted-foreground">{member.profile.years_rowing} seasons rowing</span>
+                              )}
+                              {member.profile?.cox_years_coxing != null && (member.profile.role === "coxswain" || member.profile.is_coxswain) && (
+                                <span className="text-xs text-muted-foreground">{member.profile.cox_years_coxing} seasons coxing</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-8 w-8">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to remove {member.profile?.full_name || member.profile?.username || "this member"} from the team?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => removeMember.mutate(member.id)}>
+                                Remove
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Team Optimization Dashboard */}
+              <ErrorBoundary>
+                <TeamOptimizationDashboard
+                  teamId={activeTeam.id}
+                  teamName={activeTeam.name}
+                  teamMembers={activeTeam.team_members || []}
+                  isCoach={isCoach}
+                  profile={profile}
+                />
+              </ErrorBoundary>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" className="w-full md:w-auto">
+                    Delete Team
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Team</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{activeTeam.name}"? This will remove all members and cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={() => deleteTeam.mutate(activeTeam.id)}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTeam && activeTeam._role === "member" && (
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              {activeTeam.description && (
+                <p className="text-sm text-muted-foreground">{activeTeam.description}</p>
+              )}
+              {activeTeam.coach && (
+                <p className="text-xs text-muted-foreground">
+                  Coach: {activeTeam.coach.full_name || activeTeam.coach.username || activeTeam.coach.email}
+                </p>
+              )}
+
+              {/* Today tab — read-only view for athletes */}
+              <ErrorBoundary>
+                <TodayTab
+                  teamId={activeTeam.id}
+                  teamName={activeTeam.name}
+                  teamMembers={activeTeam.team_members || []}
+                  isCoach={false}
+                  profile={profile}
+                  onNavigate={() => {}}
+                />
+              </ErrorBoundary>
+
+              {profile?.id && <WellnessCheckin teamId={activeTeam.id} userId={profile.id} />}
+              {profile?.id && <AttendancePrompt teamId={activeTeam.id} userId={profile.id} />}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Leaderboard teamId={activeTeam.id} teamName={activeTeam.name} />
+                <TeamGoals teamId={activeTeam.id} isCoach={false} currentUserId={profile.id} />
+              </div>
+
+              <TeamMessageBoard
+                teamId={activeTeam.id}
+                teamName={activeTeam.name}
+                teamMembers={activeTeam.team_members || []}
+                isCoach={false}
+                profile={profile}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {allTeams.length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              {isCoach
+                ? "Create your first team above!"
+                : "Join a team to see today's workout and lineup. Ask your coach for the team join code."}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

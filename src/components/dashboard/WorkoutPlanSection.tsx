@@ -630,6 +630,9 @@ const PlanList = ({
   const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(
     new Set()
   );
+  const [activePlanId, setActivePlanId] = useState<string>(() => {
+    try { return localStorage.getItem("lastActivePlanId") || ""; } catch { return ""; }
+  });
 
   if (plansLoading) {
     return (
@@ -681,7 +684,16 @@ const PlanList = ({
         <CardTitle>Your Training Plans</CardTitle>
       </CardHeader>
       <CardContent>
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion
+          type="single"
+          collapsible
+          className="w-full"
+          value={activePlanId}
+          onValueChange={(value) => {
+            setActivePlanId(value);
+            try { localStorage.setItem("lastActivePlanId", value); } catch {}
+          }}
+        >
           {plans.map((plan) => {
             // Safely extract weeks array from any workout_data shape
             const workoutWeeks = extractWorkoutWeeks(plan.workout_data);
