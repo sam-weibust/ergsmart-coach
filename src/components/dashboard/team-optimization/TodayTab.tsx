@@ -404,37 +404,50 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
               </div>
             </div>
           ) : dailyWorkout?.workout_data ? (
-            <div className="space-y-2">
-              {dailyWorkout.workout_data.name && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{dailyWorkout.workout_data.name}</span>
-                  {dailyWorkout.workout_data.boat_class && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">{dailyWorkout.workout_data.boat_class}</span>
+            (() => {
+              const workout = dailyWorkout.workout_data as any;
+              return (
+                <div className="space-y-2">
+                  {(workout.name || workout.boat_class || workout.zone) && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {workout.name && (
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{workout.name}</span>
+                      )}
+                      {workout.boat_class && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">{workout.boat_class}</span>
+                      )}
+                      {workout.zone && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">{workout.zone}</span>
+                      )}
+                      {workout.duration && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">{workout.duration}</span>
+                      )}
+                    </div>
                   )}
-                  {dailyWorkout.workout_data.zone && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">{dailyWorkout.workout_data.zone}</span>
+                  {workout.warmup && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Warmup</p>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{workout.warmup}</p>
+                    </div>
+                  )}
+                  {workout.description && (
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{workout.description}</p>
+                  )}
+                  {workout.rates && (
+                    <p className="text-xs text-muted-foreground">Rates: {workout.rates}</p>
+                  )}
+                  {workout.cooldown && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Cooldown</p>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{workout.cooldown}</p>
+                    </div>
+                  )}
+                  {workout.notes && (
+                    <p className="text-xs text-muted-foreground italic">{workout.notes}</p>
                   )}
                 </div>
-              )}
-              {dailyWorkout.workout_data.warmup && (
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Warmup</p>
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.warmup}</p>
-                </div>
-              )}
-              {dailyWorkout.workout_data.description && (
-                <p className="text-sm text-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.description}</p>
-              )}
-              {dailyWorkout.workout_data.cooldown && (
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Cooldown</p>
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dailyWorkout.workout_data.cooldown}</p>
-                </div>
-              )}
-              {dailyWorkout.workout_data.notes && (
-                <p className="text-xs text-muted-foreground italic">{dailyWorkout.workout_data.notes}</p>
-              )}
-            </div>
+              );
+            })()
           ) : practiceEntry?.workout_description ? (
             <p className="text-sm text-foreground whitespace-pre-wrap">{practiceEntry.workout_description}</p>
           ) : isCoach ? (
