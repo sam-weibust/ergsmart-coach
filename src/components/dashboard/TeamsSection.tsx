@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, BarChart3, Copy, Check } from "lucide-react";
+import { Users, UserPlus, Trash2, BarChart3, Copy, Check, ChevronDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +32,7 @@ import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
 import { CoachComparison } from "./CoachComparison";
 import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import AttendancePrompt from "./team-optimization/AttendancePrompt";
@@ -52,8 +53,9 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   const [memberEmail, setMemberEmail] = useState("");
   const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(() => {
-    return localStorage.getItem("lastActiveTeamId");
+    try { return localStorage.getItem("lastActiveTeamId") || null; } catch { return null; }
   });
+  const [membersOpen, setMembersOpen] = useState(false);
 
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
@@ -212,9 +214,9 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
     }
   }, [teams]);
 
-  const handleTeamSelect = (teamId: string) => {
+  const handleTeamChange = (teamId: string) => {
     setActiveTeamId(teamId);
-    localStorage.setItem("lastActiveTeamId", teamId);
+    try { localStorage.setItem("lastActiveTeamId", teamId); } catch {}
   };
 
   const activeTeam = allTeams.find((t) => t.id === activeTeamId);
@@ -228,7 +230,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Teams</h2>
         {allTeams.length > 0 && (
-          <Select value={activeTeamId || ""} onValueChange={handleTeamSelect}>
+          <Select value={activeTeamId || ""} onValueChange={handleTeamChange}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select a team" />
             </SelectTrigger>
@@ -327,82 +329,89 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
               </div>
 
               {/* Members list */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm">Members</h4>
-                {activeTeam.team_members?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No members yet</p>
-                ) : (
-                  <div className="grid gap-2">
-                    {activeTeam.team_members?.map((member: any) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center justify-between p-2 border rounded-lg text-sm"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="font-medium">
-                                {member.profile?.full_name || member.profile?.username || "Unknown"}
-                              </p>
-                              {(member.profile?.role === "coxswain" || member.profile?.is_coxswain) && (
-                                <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
-                              )}
-                              {member.profile?.role === "coach" && (
-                                <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-600 text-white">COACH</Badge>
-                              )}
-                              {member.profile?.role === "athlete" && (
-                                <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-3 mt-0.5">
-                              <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
-                              {member.profile?.best_2k_seconds && (
-                                <span className="text-xs font-mono text-primary font-medium">
-                                  2K: {Math.floor(member.profile.best_2k_seconds / 60)}:{String(Math.round(member.profile.best_2k_seconds % 60)).padStart(2, "0")}
-                                  {member.profile.best_2k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_2k_date})</span>}
-                                </span>
-                              )}
-                              {member.profile?.best_6k_seconds && (
-                                <span className="text-xs font-mono text-blue-500 font-medium">
-                                  6K: {Math.floor(member.profile.best_6k_seconds / 60)}:{String(Math.round(member.profile.best_6k_seconds % 60)).padStart(2, "0")}
-                                  {member.profile.best_6k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_6k_date})</span>}
-                                </span>
-                              )}
-                              {member.profile?.years_rowing != null && member.profile.role === "athlete" && (
-                                <span className="text-xs text-muted-foreground">{member.profile.years_rowing} seasons rowing</span>
-                              )}
-                              {member.profile?.cox_years_coxing != null && (member.profile.role === "coxswain" || member.profile.is_coxswain) && (
-                                <span className="text-xs text-muted-foreground">{member.profile.cox_years_coxing} seasons coxing</span>
-                              )}
+              <Collapsible open={membersOpen} onOpenChange={setMembersOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full flex items-center justify-between px-0 hover:bg-transparent font-semibold text-sm">
+                    Members ({activeTeam.team_members?.length ?? 0})
+                    <ChevronDown className={`h-4 w-4 transition-transform ${membersOpen ? "rotate-180" : ""}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 mt-2">
+                  {activeTeam.team_members?.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No members yet</p>
+                  ) : (
+                    <div className="grid gap-2">
+                      {activeTeam.team_members?.map((member: any) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between p-2 border rounded-lg text-sm"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-medium">
+                                  {member.profile?.full_name || member.profile?.username || "Unknown"}
+                                </p>
+                                {(member.profile?.role === "coxswain" || member.profile?.is_coxswain) && (
+                                  <Badge className="text-[10px] px-1 py-0 h-4 bg-amber-500 text-white">COX</Badge>
+                                )}
+                                {member.profile?.role === "coach" && (
+                                  <Badge className="text-[10px] px-1 py-0 h-4 bg-blue-600 text-white">COACH</Badge>
+                                )}
+                                {member.profile?.role === "athlete" && (
+                                  <Badge className="text-[10px] px-1 py-0 h-4 bg-gray-200 text-gray-700">ATHLETE</Badge>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-3 mt-0.5">
+                                <p className="text-xs text-muted-foreground">{member.profile?.email}</p>
+                                {member.profile?.best_2k_seconds && (
+                                  <span className="text-xs font-mono text-primary font-medium">
+                                    2K: {Math.floor(member.profile.best_2k_seconds / 60)}:{String(Math.round(member.profile.best_2k_seconds % 60)).padStart(2, "0")}
+                                    {member.profile.best_2k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_2k_date})</span>}
+                                  </span>
+                                )}
+                                {member.profile?.best_6k_seconds && (
+                                  <span className="text-xs font-mono text-blue-500 font-medium">
+                                    6K: {Math.floor(member.profile.best_6k_seconds / 60)}:{String(Math.round(member.profile.best_6k_seconds % 60)).padStart(2, "0")}
+                                    {member.profile.best_6k_date && <span className="text-muted-foreground font-normal ml-1">({member.profile.best_6k_date})</span>}
+                                  </span>
+                                )}
+                                {member.profile?.years_rowing != null && member.profile.role === "athlete" && (
+                                  <span className="text-xs text-muted-foreground">{member.profile.years_rowing} seasons rowing</span>
+                                )}
+                                {member.profile?.cox_years_coxing != null && (member.profile.role === "coxswain" || member.profile.is_coxswain) && (
+                                  <span className="text-xs text-muted-foreground">{member.profile.cox_years_coxing} seasons coxing</span>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-8 w-8">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to remove {member.profile?.full_name || member.profile?.username || "this member"} from the team?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => removeMember.mutate(member.id)}>
+                                  Remove
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Remove Member</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to remove {member.profile?.full_name || member.profile?.username || "this member"} from the team?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => removeMember.mutate(member.id)}>
-                                Remove
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
 
               {/* Team Optimization Dashboard */}
               <ErrorBoundary>
