@@ -88,8 +88,8 @@ const CombineSection = () => {
       const two_k_seconds = form.two_k_split ? splitToSeconds(form.two_k_split) : null;
       const six_k_seconds = form.six_k_split ? splitToSeconds(form.six_k_split) : null;
       // Approx watts from split: watts ≈ (2.8 / (split_s / 500))^3
-      const two_k_watts = two_k_seconds ? Math.round(2.8 ** 3 / Math.pow(two_k_seconds / 500, 3)) : null;
-      const six_k_watts = six_k_seconds ? Math.round(2.8 ** 3 / Math.pow(six_k_seconds / 500, 3)) : null;
+      const two_k_watts = two_k_seconds ? Math.round(Math.pow(2.8 / (two_k_seconds / 500), 3)) : null;
+      const six_k_watts = six_k_seconds ? Math.round(Math.pow(2.8 / (six_k_seconds / 500), 3)) : null;
       const bench = form.bench_press_kg ? parseFloat(form.bench_press_kg) : null;
       const dead = form.deadlift_kg ? parseFloat(form.deadlift_kg) : null;
       const squat = form.squat_kg ? parseFloat(form.squat_kg) : null;

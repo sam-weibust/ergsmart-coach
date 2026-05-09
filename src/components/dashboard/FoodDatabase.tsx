@@ -1246,7 +1246,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{fmtDate(day.date)}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {day.total_calories} / {day.goal_calories} kcal
+                      {day.total_calories ?? 0} / {day.goal_calories ?? 0} kcal
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">

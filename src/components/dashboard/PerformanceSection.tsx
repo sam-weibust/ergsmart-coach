@@ -125,7 +125,7 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
   // 2K Power Curve — strict filter: test_type='2k' OR total_meters=2000
   const powerCurveData = useMemo(() => {
     const filtered = ergScores.filter(
-      (s) => s.test_type === "2k" || s.total_meters === 2000
+      (s) => s.test_type?.toLowerCase() === "2k" || s.total_meters === 2000
     );
     console.log("[PerformanceSection] 2k power curve filtered:", filtered);
     return filtered.map((s) => {

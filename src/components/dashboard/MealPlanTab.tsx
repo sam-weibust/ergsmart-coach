@@ -55,7 +55,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
     if (!savedMeals) return {};
     const grouped: Record<string, any[]> = {};
     for (const meal of savedMeals) {
-      const date = meal.meal_date;
+      const date = meal.meal_date || "unknown";
       if (!grouped[date]) grouped[date] = [];
       grouped[date].push(meal);
     }

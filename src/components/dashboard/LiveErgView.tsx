@@ -76,7 +76,7 @@ function parseGenStatus(dv: DataView): Partial<LiveData> {
   const splitPace    = Math.round(rawSplit * 50);        // → centiseconds
   const strokeRate   = dv.getUint8(8) || 0;
   const workoutState = dv.getUint8(9);
-  const rawHr        = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
+  const rawHr        = dv.byteLength >= 12 ? dv.getUint16(10, true) : 0;
   const heartRate    = rawHr >= 40 && rawHr <= 220 ? rawHr : 0;
   const parsed = { elapsedTime, distance, splitPace, strokeRate, workoutState, heartRate };
   _lev_log('0031', dv, parsed);
@@ -561,9 +561,8 @@ export default function LiveErgView() {
   // ── Projected finish time ─────────────────────────────────────
   const projLabel = targetDist != null ? "Proj. Finish" : "Proj. 2000m";
   const projValue = (() => {
-    const sc = data.strokeCount ?? 0;
     const sp = data.splitPace ?? 0;
-    if (sc < 10 || !sp || sp <= 0 || sp > 100000) return "--:--";
+    if (!sp || sp <= 0 || sp > 100000) return "--:--";
     const effectiveDist = targetDist ?? 2000;
     const totalSecs = (sp / 100) * effectiveDist / 500;
     const m   = Math.floor(totalSecs / 60);

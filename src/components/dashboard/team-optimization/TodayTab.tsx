@@ -252,7 +252,7 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold text-foreground">{mySeat.seat_number === 0 ? "Cox" : `Seat ${mySeat.seat_number}`}</div>
+              <div className="text-2xl font-bold text-foreground">{mySeat?.seat_number === 0 ? "Cox" : `Seat ${mySeat?.seat_number}`}</div>
               <div>
                 <p className="text-foreground text-sm">{myLineup.name}</p>
                 <Badge variant="outline" className="text-xs">{myLineup.boat_class}</Badge>

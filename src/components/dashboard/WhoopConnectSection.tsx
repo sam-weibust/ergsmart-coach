@@ -49,6 +49,9 @@ export default function WhoopConnectSection() {
     if (params.get("whoop") === "connected") {
       setConnected(true);
       toast({ title: "Whoop Connected!", description: "Recovery, sleep, and strain data will sync automatically." });
+      params.delete("whoop");
+      const newSearch = params.toString();
+      window.history.replaceState({}, "", newSearch ? `?${newSearch}` : window.location.pathname);
     }
   }, [checkWhoop, toast]);
 

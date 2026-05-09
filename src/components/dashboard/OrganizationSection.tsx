@@ -135,13 +135,16 @@ const OrganizationSection = ({ profile }: Props) => {
       if (!selectedOrgId) return [];
       const teamIds = orgTeams.map((ot: any) => ot.team?.id).filter(Boolean);
       if (teamIds.length === 0) return [];
+      const { data: memberData } = await supabase
+        .from("team_members")
+        .select("user_id")
+        .in("team_id", teamIds);
+      const userIds = (memberData || []).map((m: any) => m.user_id).filter(Boolean);
+      if (userIds.length === 0) return [];
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, username, best_2k_seconds")
-        .in(
-          "id",
-          (await supabase.from("team_members").select("user_id").in("team_id", teamIds)).data?.map((m: any) => m.user_id) || []
-        )
+        .in("id", userIds)
         .not("best_2k_seconds", "is", null)
         .order("best_2k_seconds", { ascending: true })
         .limit(20);

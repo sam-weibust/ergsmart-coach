@@ -87,7 +87,7 @@ const CoxRatings = ({ sessionId, teamId, userId }: Props) => {
     ? (allRatings as any[]).reduce((sum: number, r: any) => {
         const total = (r.set_and_balance || 0) + (r.timing || 0) + (r.drive_length || 0) + (r.bladework || 0) + (r.focus || 0);
         return sum + total;
-      }, 0) / (allRatings as any[]).length
+      }, 0) / ((allRatings as any[]).length * 5)
     : null;
 
   return (

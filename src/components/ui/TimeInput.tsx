@@ -66,7 +66,7 @@ export function TimeInput({ value, onChange, className = "", disabled }: TimeInp
   }
 
   function handleSeconds(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value.replace(/\D/g, "");
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
     setSeconds(raw);
   }
 

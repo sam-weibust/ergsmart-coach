@@ -67,7 +67,7 @@ export const Leaderboard = ({ teamId, teamName }: LeaderboardProps) => {
         if (!a.time2k && !b.time2k) return 0;
         if (!a.time2k) return 1;
         if (!b.time2k) return -1;
-        return String(a.time2k).localeCompare(String(b.time2k));
+        return Number(a.time2k) - Number(b.time2k);
       });
     },
   });

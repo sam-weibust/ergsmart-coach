@@ -89,7 +89,7 @@ DIET GOAL: ${profile?.diet_goal || "maintain"}
 HYDRATION GOAL: ${hydrationGoal}ml/day
 
 LAST 14 DAYS WEIGHT: ${weightTrend || "No data"}
-WEIGHT CHANGE (${weightEntries.length} entries): ${weightChange ? `${weightChange > "0" ? "+" : ""}${weightChange} ${weightEntries[0]?.unit || "lbs"}` : "Insufficient data"}
+WEIGHT CHANGE (${weightEntries.length} entries): ${weightChange != null ? `${Number(weightChange) > 0 ? "+" : ""}${weightChange} ${weightEntries[0]?.unit || "lbs"}` : "Insufficient data"}
 
 LAST 7 DAYS SLEEP:
 ${sleepEntries.map(s => `  ${s.date}: ${s.duration_hours}hrs${s.quality_score ? `, quality ${s.quality_score}/10` : ""}`).join("\n") || "  No data"}

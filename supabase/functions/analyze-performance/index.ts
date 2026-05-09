@@ -74,6 +74,7 @@ async function analyzeIndividual(supabase: any, userId: string, apiKey: string, 
     supabase
       .from("onwater_results")
       .select("result_date, piece_type, distance_meters, avg_split_seconds, conditions")
+      .eq("user_id", userId)
       .gte("result_date", cutoff90Str)
       .order("result_date", { ascending: true }),
   ]);

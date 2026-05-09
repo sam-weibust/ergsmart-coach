@@ -21,7 +21,10 @@ interface Regatta {
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
-  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+  const eventDate = new Date(dateStr + "T12:00:00");
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  return Math.round((eventDate.getTime() - today.getTime()) / 86400000);
 }
 
 function countdownLabel(days: number | null) {

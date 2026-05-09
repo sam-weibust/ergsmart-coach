@@ -270,7 +270,7 @@ function WeightTab({ profile }: { profile: any }) {
     const days = differenceInDays(parseISO(last.date), parseISO(first.date)) || 1;
     const delta = last.weight - first.weight;
     const perWeek = (delta / days * 7).toFixed(1);
-    const last10 = entries.slice(0, 10);
+    const last10 = [...entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
     if (last10.length >= 10) {
       const max = Math.max(...last10.map(e => e.weight));
       const min = Math.min(...last10.map(e => e.weight));
