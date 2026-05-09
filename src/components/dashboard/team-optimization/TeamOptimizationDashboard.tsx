@@ -86,11 +86,10 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
     queryFn: async () => {
       if (!profile?.id) return 0;
       const { count } = await supabase
-        .from("direct_messages" as any)
+        .from("coach_athlete_messages" as any)
         .select("*", { count: "exact", head: true })
         .eq("team_id", teamId)
-        .eq("recipient_id", profile.id)
-        .eq("read", false);
+        .eq("recipient_athlete_id", profile.id);
       return count || 0;
     },
     refetchInterval: 30000,

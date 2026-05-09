@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, X, ChevronDown, ChevronUp, Sparkles, Users, Zap, Shield } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, Sparkles, Users, Zap, Shield, Building2 } from "lucide-react";
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -113,6 +113,7 @@ const TEAM_PLANS = [
       "Drag-and-drop lineup builder",
       "Seat racing analysis",
       "Attendance tracking",
+      "SafeSport compliant messaging ✓",
       "Team message board with moderation",
       "Workout assignment",
       "Basic team AI (limited usage)",
@@ -138,6 +139,7 @@ const TEAM_PLANS = [
       "Athletes inherit Elite individual benefits",
       "Unlimited athletes",
       "Everything in Team",
+      "SafeSport compliant messaging ✓",
       "Unlimited team AI",
       "Race lineup optimizer",
       "Training plan generator for whole team",
@@ -158,6 +160,42 @@ const TEAM_PLANS = [
       "Dedicated onboarding and migration support",
       "Priority support channel",
       "API access",
+    ],
+  },
+  {
+    id: "organization",
+    name: "Organization",
+    price: 899,
+    betaPrice: 719,
+    perAthletePrice: null,
+    betaPerAthletePrice: null,
+    badge: "Multi-Program",
+    badgeColor: "bg-amber-600",
+    cta: "Coming Fall 2026",
+    ctaHref: null,
+    athleteInherits: "Elite",
+    maxAthletes: "Up to 5 teams · 500 athletes",
+    features: [
+      "Athletes inherit Elite individual benefits",
+      "Up to 5 teams included (+ $100/mo per additional team)",
+      "500 athletes included (+ $2/athlete above 500)",
+      "Everything in Elite Team for all programs",
+      "SafeSport compliant messaging across all programs ✓",
+      "Organization master dashboard",
+      "Cross-program athlete leaderboard",
+      "Org-wide announcements to all teams simultaneously",
+      "Equipment inventory management (shells, oars, ergs, launches)",
+      "Dues and membership collection via Stripe",
+      "Automatic payment reminders via email",
+      "One-click board reporting PDF",
+      "Athlete pathway tracking across programs",
+      "Volunteer hour tracking",
+      "Organization branding (logo, website, contact)",
+      "Org admin multi-team single login",
+      "Athlete retention and season-over-season analytics",
+      "Revenue reporting dashboard",
+      "Dedicated onboarding specialist",
+      "Priority support channel",
     ],
   },
 ];
@@ -358,6 +396,7 @@ function PlanCard({ plan, isTeam = false }: { plan: typeof INDIVIDUAL_PLANS[0] |
 export default function PricingPage() {
   const [planType, setPlanType] = useState<"individual" | "team">("individual");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showOrg, setShowOrg] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -398,34 +437,75 @@ export default function PricingPage() {
             Free forever for individual athletes. Powerful AI tools for those who want an edge. Team plans for coaches who want to run a world-class program.
           </p>
           {/* Toggle */}
+          {/* SafeSport Badge */}
+          <div className="flex justify-center mt-4">
+            <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-full px-4 py-2 text-sm">
+              <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="font-semibold text-blue-700 dark:text-blue-300">SafeSport Compliant Messaging</span>
+              <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+
           <div className="inline-flex items-center bg-muted rounded-xl p-1 mt-6">
             <button
-              onClick={() => setPlanType("individual")}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "individual" ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { setPlanType("individual"); setShowOrg(false); }}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "individual" && !showOrg ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
             >
               Individual
             </button>
             <button
-              onClick={() => setPlanType("team")}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "team" ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { setPlanType("team"); setShowOrg(false); }}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "team" && !showOrg ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
             >
               Team / Coach
+            </button>
+            <button
+              onClick={() => { setPlanType("team"); setShowOrg(true); }}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${showOrg ? "bg-amber-600 text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Building2 className="h-4 w-4" />
+              Organization
             </button>
           </div>
         </div>
 
         {/* Plan cards */}
-        {planType === "individual" ? (
+        {planType === "individual" && !showOrg ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mt-2">
             {INDIVIDUAL_PLANS.map(p => <PlanCard key={p.id} plan={p} />)}
           </div>
+        ) : showOrg ? (
+          <>
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 text-sm text-amber-800 dark:text-amber-300 text-center">
+              <strong>Organization Plan</strong> — manage up to 5 teams and 500 athletes under one roof. Includes SafeSport compliant messaging, equipment inventory, dues collection, and board reporting.
+            </div>
+            <div className="max-w-xl mx-auto">
+              <PlanCard plan={TEAM_PLANS[2]} isTeam />
+            </div>
+            <div className="bg-muted/50 rounded-2xl p-5 text-sm text-muted-foreground space-y-2">
+              <p className="font-semibold text-foreground">Overage pricing</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>Additional teams above 5: $100/month per team</li>
+                <li>Additional athletes above 500: $2/athlete/month</li>
+              </ul>
+            </div>
+          </>
         ) : (
           <>
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 text-sm text-blue-800 dark:text-blue-300 text-center">
               <strong>Athletes don't need a paid plan.</strong> Free users get full team participation. Team plans cover the coach — and athletes automatically inherit individual benefits based on your plan tier.
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {TEAM_PLANS.map(p => <PlanCard key={p.id} plan={p} isTeam />)}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {TEAM_PLANS.slice(0, 2).map(p => <PlanCard key={p.id} plan={p} isTeam />)}
+            </div>
+            <div className="text-center">
+              <button
+                onClick={() => setShowOrg(true)}
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border border-border rounded-xl px-5 py-2.5"
+              >
+                <Building2 className="h-4 w-4" />
+                View Organization Plan ($899/mo) →
+              </button>
             </div>
           </>
         )}

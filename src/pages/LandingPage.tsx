@@ -228,6 +228,7 @@ const LandingPage = () => {
     "Team training plan generator",
     "Load management and fatigue heatmap",
     "Athlete check-in system",
+    "SafeSport compliant messaging — all coach-athlete messages visible to all coaches",
     "Recruiting profiles auto-generated for all athletes",
     "Coaches Hub with recruit discovery and recruiting board",
     "Parent weekly email reports",
@@ -346,6 +347,13 @@ const LandingPage = () => {
                 color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: 500, padding: "7px 16px", borderRadius: "100px",
               }}>{pill}</span>
             ))}
+            <span style={{
+              backgroundColor: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)",
+              color: "#93c5fd", fontSize: "13px", fontWeight: 600, padding: "7px 16px", borderRadius: "100px",
+              display: "flex", alignItems: "center", gap: "6px",
+            }}>
+              <span style={{ fontSize: "11px" }}>🛡</span> SafeSport Compliant
+            </span>
           </div>
         </div>
       </section>

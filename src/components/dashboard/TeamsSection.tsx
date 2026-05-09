@@ -33,6 +33,9 @@ import { CoachComparison } from "./CoachComparison";
 import { TeamAnalytics } from "./TeamAnalytics";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import AttendancePrompt from "./team-optimization/AttendancePrompt";
@@ -56,6 +59,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
     try { return localStorage.getItem("lastActiveTeamId") || null; } catch { return null; }
   });
   const [membersOpen, setMembersOpen] = useState(false);
+  const [safesportMode, setSafesportMode] = useState(true);
 
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
@@ -412,6 +416,30 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                   )}
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* SafeSport Mode toggle */}
+              {isCoach && (
+                <div className="flex items-center justify-between border rounded-xl px-4 py-3 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <div>
+                      <Label htmlFor="safesport-toggle" className="text-sm font-semibold text-blue-800 dark:text-blue-200 cursor-pointer">
+                        SafeSport Mode
+                      </Label>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        {safesportMode
+                          ? "Enabled — all coach-athlete messages are visible to all coaches."
+                          : "Disabled — private messaging allowed (not recommended for youth programs)."}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="safesport-toggle"
+                    checked={safesportMode}
+                    onCheckedChange={setSafesportMode}
+                  />
+                </div>
+              )}
 
               {/* Team Optimization Dashboard */}
               <ErrorBoundary>
