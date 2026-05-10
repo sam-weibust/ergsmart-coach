@@ -147,11 +147,14 @@ function AppRouter() {
     if (initialized.current) return;
     initialized.current = true;
 
+    // Callback pages must complete their own logic — never redirect away from them.
+    const isCallbackPath = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
+
     // Fast session check — reads from localStorage, resolves in <50ms typically.
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
+      if (data.session && !isCallbackPath) {
         navigate("/dashboard", { replace: true });
-      } else if (isNative) {
+      } else if (isNative && !isCallbackPath) {
         // Never show landing page on native — go straight to login.
         navigate("/auth", { replace: true });
       }
@@ -160,7 +163,8 @@ function AppRouter() {
 
     // React to future auth state changes for the lifetime of the app.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
+      const onCallback = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
+      if (event === "SIGNED_IN" && session && !onCallback) {
         navigate("/dashboard", { replace: true });
       } else if (event === "SIGNED_OUT") {
         queryClient.clear();
