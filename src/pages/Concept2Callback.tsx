@@ -36,31 +36,45 @@ export default function Concept2Callback() {
 
         console.log("[Concept2Callback] code:", code.slice(0, 8) + "…", "user_id:", userId);
 
-        const res = await c2Callback({
-          code,
-          user_id: userId,
-          redirect_uri: `${ORIGIN}/auth/concept2/callback`,
-        });
+        // Step 3 — call edge function with a 30 s timeout. Await full response before anything else.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30_000);
+        let res: Response;
+        try {
+          res = await c2Callback({
+            code,
+            user_id: userId,
+            redirect_uri: `${ORIGIN}/auth/concept2/callback`,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
         const data = await res.json();
+        console.log("[Concept2Callback] edge function response:", JSON.stringify(data));
 
         if (data.error) throw new Error(data.error);
 
+        // Step 3 complete — now update UI.
         setImported(data.imported ?? 0);
         setStatus("success");
 
         if (window.opener) {
+          // Step 4 — send postMessage AFTER confirmed success.
           window.opener.postMessage(
             { type: "concept2_connected", success: true, imported: data.imported ?? 0 },
             ORIGIN,
           );
-          setTimeout(() => window.close(), 1200);
+          // Step 5 — wait 1 s so the browser delivers the message, then close.
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          window.close();
         } else {
-          setTimeout(() => {
-            navigate(`/dashboard?c2=connected&imported=${data.imported ?? 0}`, { replace: true });
-          }, 2000);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          navigate(`/dashboard?c2=connected&imported=${data.imported ?? 0}`, { replace: true });
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Connection failed";
+        console.error("[Concept2Callback] error:", msg);
         setStatus("error");
         setErrorMsg(msg);
         if (window.opener) {
