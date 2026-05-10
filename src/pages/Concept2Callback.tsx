@@ -65,13 +65,10 @@ export default function Concept2Callback() {
             { type: "concept2_connected", success: true, imported: data.imported ?? 0 },
             ORIGIN,
           );
-          // Step 5 — wait 1 s so the browser delivers the message, then close.
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          window.close();
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          navigate(`/dashboard?c2=connected&imported=${data.imported ?? 0}`, { replace: true });
         }
+        // Step 5 — show success UI, then close after 500 ms. No navigation = no "canceled".
+        await new Promise(resolve => setTimeout(resolve, 500));
+        window.close();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Connection failed";
         console.error("[Concept2Callback] error:", msg);
@@ -137,12 +134,10 @@ export default function Concept2Callback() {
               </svg>
             </div>
             <h2 className="text-lg font-semibold">Concept2 Connected!</h2>
-            <p className="text-sm text-muted-foreground">
-              {imported > 0
-                ? `Imported ${imported} workout${imported === 1 ? "" : "s"} from your Concept2 logbook.`
-                : "Your account is connected. Workouts will sync shortly."}
-            </p>
-            <p className="text-xs text-muted-foreground">Closing…</p>
+            <p className="text-sm text-muted-foreground">Concept2 connected successfully. You can close this window.</p>
+            <button onClick={() => window.close()} className="text-sm text-primary hover:underline">
+              Close
+            </button>
           </>
         )}
 
