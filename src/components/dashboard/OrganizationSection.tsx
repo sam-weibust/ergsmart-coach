@@ -212,8 +212,10 @@ const OrganizationSection = ({ profile }: Props) => {
   });
 
   const selectedOrg = orgs.find((o: any) => o.id === selectedOrgId);
-  const isAdmin = selectedOrg?.created_by === profile?.id ||
-    orgAdmins.some((a: any) => a.user_id === profile?.id && a.role === "admin");
+  const isAdmin = !!profile?.id && (
+    selectedOrg?.created_by === profile.id ||
+    orgAdmins.some((a: any) => a.user_id === profile.id && a.role === "admin")
+  );
 
   const createOrg = useMutation({
     mutationFn: async () => {

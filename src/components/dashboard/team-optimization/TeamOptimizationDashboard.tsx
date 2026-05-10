@@ -47,9 +47,10 @@ interface Props {
   isCoach: boolean;
   profile: any;
   initialSection?: string;
+  safesportMode?: boolean;
 }
 
-const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection }: Props) => {
+const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection, safesportMode = true }: Props) => {
   const [activeSection, setActiveSection] = useState(initialSection ?? "overview");
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("all");
 
@@ -118,7 +119,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       case "depth": return <ProgramDepth {...commonProps} />;
       case "training_plan": return <TeamTrainingPlanSection {...commonProps} />;
       case "leaderboard": return <TeamErgLeaderboard {...commonProps} />;
-      case "messages": return <DirectMessages teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} />;
+      case "messages": return <DirectMessages teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} safesportMode={safesportMode} />;
       case "board": return <TeamMessageBoard {...commonProps} />;
       case "coaches": return (
         <CoachManagement teamId={teamId} teamName={teamName} isCoach={isCoach} profile={profile} />

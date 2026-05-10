@@ -122,10 +122,12 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
     },
   });
 
-  // 2K Power Curve — strict filter: test_type='2k' OR total_meters=2000
+  // 2K Power Curve — filter: test_type='2k' OR total_meters within ±50m of 2000
   const powerCurveData = useMemo(() => {
     const filtered = ergScores.filter(
-      (s) => s.test_type?.toLowerCase() === "2k" || s.total_meters === 2000
+      (s) =>
+        s.test_type?.toLowerCase() === "2k" ||
+        (s.total_meters != null && s.total_meters >= 1950 && s.total_meters <= 2050)
     );
     console.log("[PerformanceSection] 2k power curve filtered:", filtered);
     return filtered.map((s) => {
@@ -162,19 +164,30 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
 
   // W/kg chart — only if profile has weight_kg
   const hasWeight = profile?.weight_kg != null && Number(profile.weight_kg) > 0;
+  const profileWeightKg = hasWeight ? Number(profile.weight_kg) : 0;
   const wkgData = useMemo(() => {
     if (!hasWeight) return [];
-    const filtered = ergScores.filter((s) => s.watts_per_kg && Number(s.watts_per_kg) > 0);
+    const filtered = ergScores.filter((s) => {
+      // Accept stored watts_per_kg, or compute from watts + profile weight
+      const storedWkg = s.watts_per_kg != null && Number(s.watts_per_kg) > 0;
+      const canCompute = s.watts != null && Number(s.watts) > 0 && profileWeightKg > 0;
+      return storedWkg || canCompute;
+    });
     console.log("[PerformanceSection] W/kg data:", filtered);
     return filtered.map((s) => {
       const localDate = new Date(s.recorded_at + "T12:00:00");
+      // Prefer stored value; fall back to watts / profile weight
+      const wkg =
+        s.watts_per_kg != null && Number(s.watts_per_kg) > 0
+          ? Number(s.watts_per_kg)
+          : Number(s.watts) / profileWeightKg;
       return {
         date: format(localDate, "MMM d"),
-        wkg: Number(s.watts_per_kg),
+        wkg: Math.round(wkg * 100) / 100,
         testType: s.test_type,
       };
     });
-  }, [ergScores, hasWeight]);
+  }, [ergScores, hasWeight, profileWeightKg]);
 
   // Training Load — from weekly_load_logs (erg_meters + on_water_meters)
   const trainingLoadData = useMemo(() => {

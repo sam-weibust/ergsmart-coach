@@ -55,7 +55,11 @@ export function TimeInput({ value, onChange, className = "", disabled }: TimeInp
 
   function handleMinutesBlur() {
     minFocused.current = false;
-    emit(minutes, seconds);
+    // Don't emit while the seconds field is still focused — seconds are mid-edit.
+    // emit() will fire from handleSecondsBlur instead.
+    if (!secFocused.current) {
+      emit(minutes, seconds);
+    }
   }
 
   function handleSecondsFocus() {

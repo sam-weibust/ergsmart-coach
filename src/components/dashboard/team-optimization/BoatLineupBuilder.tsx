@@ -252,7 +252,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
     setSeats(prev => prev.map(s => s.seat_number === seatNum ? {
       ...s,
       user_id: cleanId,
-      name: cleanId ? displayName(allAthletes.find((a: any) => a.id === cleanId)) : "",
+      name: cleanId ? displayName(allAthletes.find((a: any) => a.id === cleanId) ?? null) : "",
     } : s));
   }
 
@@ -347,7 +347,8 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
           user_id: uid,
           status: "no_response",
         }));
-        await supabase.from("practice_attendance").upsert(records, { onConflict: "lineup_id,user_id" });
+        const { error: attErr } = await supabase.from("practice_attendance").upsert(records, { onConflict: "lineup_id,user_id" });
+        if (attErr) throw attErr;
 
         // Send push + in-app notifications
         const dateStr = lineup.practice_date ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "upcoming practice";

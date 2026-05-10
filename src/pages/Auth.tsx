@@ -68,9 +68,16 @@ const Auth = () => {
           // Referral tracking failure shouldn't block signup
         }
       } else {
-        toast.success("Account created successfully! Redirecting...");
+        toast.success("Account created! Check your email to confirm, then sign in.");
       }
-      navigate("/dashboard");
+      // If email confirmation is disabled Supabase returns a session immediately
+      // and onAuthStateChange SIGNED_IN in App.tsx will navigate to /dashboard.
+      // If confirmation is required, we stay on /auth so the user can sign in
+      // after confirming — do NOT navigate() here unconditionally.
+      if (data.session) {
+        // Session already established (email confirmation disabled) — navigate now.
+        navigate("/dashboard", { replace: true });
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to create account");
     } finally {
@@ -82,7 +89,9 @@ const Auth = () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + "/dashboard",
+        // Redirect to origin root — onAuthStateChange SIGNED_IN in App.tsx
+        // will navigate to /dashboard once the session is established.
+        redirectTo: window.location.origin,
       },
     });
   };

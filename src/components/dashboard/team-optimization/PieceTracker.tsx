@@ -168,11 +168,11 @@ const PieceTracker = ({ sessionId, teamId, userId, readOnly = false }: Props) =>
                 </div>
                 {Array.isArray(p.splits) && p.splits.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {p.splits.map((sp: any, i: number) => (
+                    {p.splits.map((sp: any, i: number) => sp != null && sp.split_seconds != null ? (
                       <span key={i} className="font-mono px-1 py-0.5 rounded bg-muted text-[10px]">
                         {formatSplit(sp.split_seconds)}
                       </span>
-                    ))}
+                    ) : null)}
                   </div>
                 )}
                 {p.notes && <p className="text-muted-foreground mt-0.5 line-clamp-1">{p.notes}</p>}

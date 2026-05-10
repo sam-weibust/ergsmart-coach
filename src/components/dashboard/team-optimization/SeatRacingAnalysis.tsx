@@ -277,9 +277,16 @@ const SeatRacingAnalysis = ({ teamId, teamMembers, isCoach, profile }: Props) =>
                   <CardContent>
                     <p className="text-sm font-medium mb-2">AI Rankings</p>
                     <div className="space-y-2">
-                      {(isSelected && aiResult ? aiResult.rankings : rankings).map((r: any) => (
-                        <div key={r.rank} className="flex items-center gap-3">
-                          <span className="text-sm font-bold w-6 text-center">{r.rank}</span>
+                      {[...(isSelected && aiResult ? aiResult.rankings : rankings)]
+                      .sort((a: any, b: any) => {
+                        // Primary: ascending rank; secondary (ties): descending score
+                        const rankDiff = (a.rank ?? Infinity) - (b.rank ?? Infinity);
+                        if (rankDiff !== 0) return rankDiff;
+                        return (b.score ?? 0) - (a.score ?? 0);
+                      })
+                      .map((r: any) => (
+                        <div key={`${r.rank}-${r.name}`} className="flex items-center gap-3">
+                          <span className="text-sm font-bold w-6 text-center">{r.rank ?? "—"}</span>
                           <span className="text-sm font-medium flex-1">{r.name}</span>
                           <Progress value={Math.round((r.score || 0) * 100)} className="w-24 h-2" />
                           <span className="text-xs text-muted-foreground w-8">{Math.round((r.score || 0) * 100)}%</span>

@@ -271,7 +271,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       const whoopToday = whoopRes.data ?? null;
       const lastSleep = sleepRes.data?.[0];
       const todayWater = (waterRes.data || []).reduce((s: number, e: any) => s + (e.amount_ml || 0), 0);
-      const hydrationGoal = profile?.hydration_goal_ml || 2500;
+      const hydrationGoal = (profile?.hydration_goal_ml && profile.hydration_goal_ml > 0) ? profile.hydration_goal_ml : 2500;
       let score: number;
       if (whoopToday?.recovery_score != null) {
         // Whoop is the authoritative recovery source
@@ -280,8 +280,9 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
       } else {
         let sleepComp = 50, hydComp = 50;
         if (lastSleep) {
-          const dur = Math.min(1, lastSleep.duration_hours / 8) * 0.7;
-          const qual = lastSleep.quality_score ? (lastSleep.quality_score / 10) * 0.3 : 0.15;
+          const durHours = lastSleep.duration_hours ?? 0;
+          const dur = Math.min(1, durHours / 8) * 0.7;
+          const qual = lastSleep.quality_score != null ? (lastSleep.quality_score / 10) * 0.3 : 0.15;
           sleepComp = (dur + qual) * 100;
         }
         hydComp = Math.min(100, (todayWater / hydrationGoal) * 100);
@@ -333,8 +334,9 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
         ? JSON.parse(todayPlan.workout_data)
         : todayPlan.workout_data;
       const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-      if (content?.workouts || Array.isArray(content)) {
-        const ws = content?.workouts || content;
+      const wsCandidate = content?.workouts ?? content;
+      if (Array.isArray(wsCandidate)) {
+        const ws = wsCandidate;
         const todayW = ws.find((w: any) => w.day?.toLowerCase().includes(today.toLowerCase().slice(0, 3)));
         if (todayW) todaySessionSummary = todayW.description || todayW.name || null;
       } else if (content?.erg_workout?.description) {

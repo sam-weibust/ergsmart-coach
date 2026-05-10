@@ -12,9 +12,5 @@
     "strictNullChecks": false
   },
   "include": ["src"],                   // ⭐ Ensures Vercel includes your source files
-  "exclude": ["node_modules"],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "exclude": ["node_modules"]
 }

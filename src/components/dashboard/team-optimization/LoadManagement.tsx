@@ -255,7 +255,7 @@ const LoadManagement = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                         <td key={week} className="text-center py-1.5 px-1">
                           <div
                             className={cn("rounded mx-auto w-8 h-7 flex items-center justify-center text-white font-bold text-xs", getFatigueColor(fatigue))}
-                            title={fatigue ? `Fatigue: ${fatigue}, ${(log?.total_meters / 1000).toFixed(0)}km` : "No data"}
+                            title={fatigue != null ? `Fatigue: ${fatigue}, ${((log?.total_meters ?? 0) / 1000).toFixed(0)}km` : "No data"}
                           >
                             {fatigue ?? "—"}
                           </div>

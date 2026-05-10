@@ -18,6 +18,7 @@ interface Props {
   teamMembers: any[];
   isCoach: boolean;
   profile: any;
+  safesportMode?: boolean;
 }
 
 interface Thread {
@@ -35,7 +36,7 @@ const SafeSportBadge = () => (
   </div>
 );
 
-const DirectMessages = ({ teamId, teamMembers, isCoach, profile }: Props) => {
+const DirectMessages = ({ teamId, teamMembers, isCoach, profile, safesportMode = true }: Props) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
@@ -340,10 +341,16 @@ const DirectMessages = ({ teamId, teamMembers, isCoach, profile }: Props) => {
         </div>
 
         {/* SafeSport notice for coach messages */}
-        {isCoach && isCoachThread && (
+        {isCoach && isCoachThread && safesportMode && (
           <div className="mb-3 flex items-start gap-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
             <Shield className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>This message is visible to all coaches on your team in compliance with SafeSport guidelines.</span>
+          </div>
+        )}
+        {isCoach && isCoachThread && !safesportMode && (
+          <div className="mb-3 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <Shield className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>SafeSport mode is off. This message is only visible to you and the recipient. Not recommended for programs with minor athletes.</span>
           </div>
         )}
 
@@ -541,10 +548,16 @@ const DirectMessages = ({ teamId, teamMembers, isCoach, profile }: Props) => {
         ))}
       </div>
 
-      {isCoach && (
+      {isCoach && safesportMode && (
         <p className="text-xs text-muted-foreground text-center pt-2 flex items-center justify-center gap-1">
           <Shield className="h-3 w-3 text-blue-500" />
           All coach-athlete messages are visible to every coach on this team per SafeSport guidelines.
+        </p>
+      )}
+      {isCoach && !safesportMode && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 text-center pt-2 flex items-center justify-center gap-1">
+          <Shield className="h-3 w-3" />
+          SafeSport mode is off — coach-athlete messages are not shared with other coaches.
         </p>
       )}
     </div>

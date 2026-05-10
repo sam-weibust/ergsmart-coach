@@ -158,12 +158,12 @@ const MACRO_COLORS = { protein: "#ef4444", carbs: "#f59e0b", fat: "#3b82f6" };
 function scaledNutrients(food: FoodResult, qty: number) {
   const factor = qty;
   return {
-    calories: Math.round(food.calories_per_serving * factor),
-    protein: Math.round(food.protein * factor * 10) / 10,
-    carbs: Math.round(food.carbs * factor * 10) / 10,
-    fat: Math.round(food.fat * factor * 10) / 10,
-    fiber: Math.round(food.fiber * factor * 10) / 10,
-    sugar: Math.round(food.sugar * factor * 10) / 10,
+    calories: Math.round((food.calories_per_serving ?? 0) * factor),
+    protein: Math.round((food.protein ?? 0) * factor * 10) / 10,
+    carbs: Math.round((food.carbs ?? 0) * factor * 10) / 10,
+    fat: Math.round((food.fat ?? 0) * factor * 10) / 10,
+    fiber: Math.round((food.fiber ?? 0) * factor * 10) / 10,
+    sugar: Math.round((food.sugar ?? 0) * factor * 10) / 10,
   };
 }
 
@@ -429,10 +429,10 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
   // Daily totals from food_log
   const totals = todayLog.reduce(
     (acc: any, f: any) => ({
-      calories: acc.calories + Number(f.calories),
-      protein: acc.protein + Number(f.protein),
-      carbs: acc.carbs + Number(f.carbs),
-      fat: acc.fat + Number(f.fat),
+      calories: acc.calories + (Number(f.calories) || 0),
+      protein: acc.protein + (Number(f.protein) || 0),
+      carbs: acc.carbs + (Number(f.carbs) || 0),
+      fat: acc.fat + (Number(f.fat) || 0),
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
@@ -491,12 +491,12 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
         meal_type: food.meal_type,
         food_name: food.food_name,
         brand: food.brand,
-        calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
-        fiber: food.fiber,
-        sugar: food.sugar,
+        calories: food.calories ?? 0,
+        protein: food.protein ?? 0,
+        carbs: food.carbs ?? 0,
+        fat: food.fat ?? 0,
+        fiber: food.fiber ?? 0,
+        sugar: food.sugar ?? 0,
         serving_size: food.serving_size,
         serving_unit: food.serving_unit,
         serving_quantity: food.serving_quantity,
@@ -721,8 +721,16 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
       setTimeout(() => {
         if (videoRef.current) videoRef.current.srcObject = stream;
       }, 50);
-    } catch {
-      toast({ title: "Camera unavailable", variant: "destructive" });
+    } catch (err: any) {
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        toast({
+          title: "Camera permission denied",
+          description: "Allow camera access in your browser settings, then try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Camera unavailable", description: "Could not access camera.", variant: "destructive" });
+      }
     }
   }, [scannerActive, stopWebCamera, toast]);
 
@@ -808,7 +816,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
               <div key={m.label} className="bg-muted rounded-lg p-2">
                 <div className={`font-bold ${m.color}`}>{Math.round(m.val)}g</div>
                 <div className="text-xs text-muted-foreground">{m.label} / {m.goal}g</div>
-                <Progress value={Math.min((m.val / m.goal) * 100, 100)} className="h-1 mt-1" />
+                <Progress value={m.goal > 0 ? Math.min((m.val / m.goal) * 100, 100) : 0} className="h-1 mt-1" />
               </div>
             ))}
           </div>

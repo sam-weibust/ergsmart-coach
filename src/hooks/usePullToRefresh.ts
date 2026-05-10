@@ -14,11 +14,13 @@ export function usePullToRefresh(onRefresh: () => Promise<void>) {
     const el = containerRef.current;
     if (!el) return;
     if (el.scrollTop > 0) return;
+    if (!e.touches || e.touches.length === 0) return;
     startYRef.current = e.touches[0].clientY;
   }, []);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (startYRef.current === null) return;
+    if (!e.touches || e.touches.length === 0) return;
     const el = containerRef.current;
     if (!el || el.scrollTop > 0) { startYRef.current = null; return; }
     const dy = e.touches[0].clientY - startYRef.current;

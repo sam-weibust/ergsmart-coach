@@ -449,6 +449,7 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                   teamMembers={activeTeam.team_members || []}
                   isCoach={isCoach}
                   profile={profile}
+                  safesportMode={safesportMode}
                 />
               </ErrorBoundary>
 

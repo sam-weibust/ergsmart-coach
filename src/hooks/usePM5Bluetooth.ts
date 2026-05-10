@@ -75,13 +75,15 @@ export function usePM5Bluetooth() {
 
       await startStreaming(deviceId, (update: Partial<PM5StreamData>) => {
         setPm5Data(prev => {
-          // Derive watts from split pace using Concept2 formula: 2.80 / (pace_sec/500)^3
+          // Prefer direct power reading from 0x0032 (most accurate).
+          // Fall back to Concept2 formula (2.80 / (pace_sec/500)^3) only when
+          // no direct power value is available in this update.
           let watts = prev.watts;
-          if (update.splitPace != null && update.splitPace > 0) {
+          if (update.power != null && update.power > 0) {
+            watts = update.power;
+          } else if (update.splitPace != null && update.splitPace > 0) {
             const paceSec = update.splitPace / 100;
             watts = Math.round(2.80 / Math.pow(paceSec / 500, 3));
-          } else if (update.power != null) {
-            watts = update.power;
           }
           return {
             ...prev,

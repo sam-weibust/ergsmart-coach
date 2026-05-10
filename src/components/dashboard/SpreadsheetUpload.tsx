@@ -60,8 +60,9 @@ interface StandardizedWeek {
 
 const parseWorkoutData = (rows: string[][]): StandardizedWeek[] => {
   const weeks: StandardizedWeek[] = [];
-  const headers = rows[0]?.map(h => h.toLowerCase()) || [];
-  
+  if (!rows || rows.length === 0) return weeks;
+  const headers = (rows[0] || []).map(h => (h || "").toLowerCase());
+
   // Find column indices - support the weekly grid format
   const weekIdx = headers.findIndex(h => h.includes("week"));
   const phaseIdx = headers.findIndex(h => h.includes("phase") || h.includes("difficulty"));
@@ -79,11 +80,11 @@ const parseWorkoutData = (rows: string[][]): StandardizedWeek[] => {
   
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (!row || row.length === 0 || !row.some(cell => cell.trim())) continue;
-    
-    const weekNum = parseInt(row[weekIdx]) || (currentWeek?.week || 1);
-    const phase = row[phaseIdx] || currentWeek?.phase || "Training";
-    const dayNum = parseInt(row[dayIdx]) || 1;
+    if (!row || row.length === 0 || !row.some(cell => (cell || "").trim())) continue;
+
+    const weekNum = parseInt(weekIdx >= 0 ? (row[weekIdx] || "") : "") || (currentWeek?.week || 1);
+    const phase = (phaseIdx >= 0 ? row[phaseIdx] : "") || currentWeek?.phase || "Training";
+    const dayNum = parseInt(dayIdx >= 0 ? (row[dayIdx] || "") : "") || 1;
     
     if (!currentWeek || currentWeek.week !== weekNum) {
       if (currentWeek) weeks.push(currentWeek);
@@ -94,14 +95,14 @@ const parseWorkoutData = (rows: string[][]): StandardizedWeek[] => {
       };
     }
     
-    const type = row[typeIdx]?.toUpperCase() || "";
-    const warmup = row[warmupIdx] || "";
-    const workout = row[workoutIdx] || "";
-    const rest = row[restIdx] || "";
-    const breakup = row[breakupIdx] || "";
-    const rates = row[ratesIdx] || "";
-    const cooldown = row[cooldownIdx] || "";
-    const notes = row[notesIdx] || "";
+    const type = (typeIdx >= 0 ? row[typeIdx] : "")?.toUpperCase() || "";
+    const warmup = (warmupIdx >= 0 ? row[warmupIdx] : "") || "";
+    const workout = (workoutIdx >= 0 ? row[workoutIdx] : "") || "";
+    const rest = (restIdx >= 0 ? row[restIdx] : "") || "";
+    const breakup = (breakupIdx >= 0 ? row[breakupIdx] : "") || "";
+    const rates = (ratesIdx >= 0 ? row[ratesIdx] : "") || "";
+    const cooldown = (cooldownIdx >= 0 ? row[cooldownIdx] : "") || "";
+    const notes = (notesIdx >= 0 ? row[notesIdx] : "") || "";
     
     // Build description from available fields
     const workoutParts: string[] = [];

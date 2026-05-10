@@ -53,62 +53,61 @@ function _log(tag: string, dv: DataView, parsed: object) {
   console.log(`[PM5 ${tag}] #${_dbg[tag]} raw bytes:`, bytes, '| parsed:', parsed);
 }
 
-// 0x0031 – Rowing General Status (19 bytes)
-// 0-2: elapsed time (0.01s, 24-bit LE)
-// 3-5: distance (0.1m, 24-bit LE)
-// 6:   split pace (0.5s/500m, uint8) → ×50 for centiseconds
-// 7:   split power (watts, uint8)
+// 0x0031 – Rowing General Status (19 bytes, per Concept2 PM5 BLE spec)
+// 0-2: elapsed time (0.01s, uint24 LE)
+// 3-5: distance (0.1m, uint24 LE)
+// 6-7: split/interval pace (0.5s/500m, uint16 LE) → ×50 = centiseconds
 // 8:   stroke rate (spm, uint8)
-// 9:   heart rate from HR strap (bpm, uint8)
-// 10:  cadence
-// 11:  drag factor
-// 12:  workout state
-// 13:  rowing type
+// 9:   workout state (uint8)
+// 10-11: heart rate from PM5 (uint16 LE, bpm) — only valid if 40–220
+// 12:  pace fall rate (uint8)
 export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
-  if (dv.byteLength < 13) return {};
+  if (dv.byteLength < 10) return {};
   try {
     const elapsedTime  = dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16);
     const distance     = (dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16)) / 10;
-    const splitPace    = dv.getUint8(6) * 50;    // 0.5s → centiseconds
-    const strokeRate   = dv.getUint8(8);          // spm
-    const heartRate    = dv.getUint8(9);           // bpm
-    const workoutState = dv.byteLength >= 13 ? dv.getUint8(12) : 0;
+    const rawSplit     = dv.getUint16(6, true);          // uint16 LE, 0.5s/500m units
+    const splitPace    = Math.round(rawSplit * 50);       // → centiseconds
+    const strokeRate   = dv.getUint8(8);                  // spm
+    const workoutState = dv.getUint8(9);                  // workout state
+    const rawHr        = dv.byteLength >= 12 ? dv.getUint16(10, true) : 0;
+    const heartRate    = rawHr >= 40 && rawHr <= 220 ? rawHr : 0;
     const parsed = { elapsedTime, distance, splitPace, strokeRate, heartRate, workoutState };
     _log('0031', dv, parsed);
     return parsed;
   } catch { return {}; }
 }
 
-// 0x0032 – Rowing Additional Status 1
-// 0:   stroke count (uint8)
-// 1-2: split pace (centiseconds/500m, uint16 LE)
-// 3-4: stroke power (watts, uint16 LE)
-// 5:   stroke calories/hour (uint8)
-// 6-7: split avg pace (centiseconds/500m, uint16 LE)
-// 8:   split total calories (uint8)
+// 0x0032 – Rowing Additional Status 1 (per Concept2 PM5 BLE spec)
+// 0-2: elapsed time (0.01s, uint24 LE)
+// 3-4: split/interval pace (0.5s/500m, uint16 LE) → ×50 = centiseconds
+// 5-6: stroke power (watts, uint16 LE)
+// 7:   stroke calories/hour (uint8)
+// 8-9: split average pace (0.5s/500m, uint16 LE)
 export function parseAdditionalStatus1(dv: DataView): Partial<PM5StreamData> {
-  if (dv.byteLength < 5) return {};
+  if (dv.byteLength < 7) return {};
   try {
-    const splitPace = dv.getUint16(1, true);                                   // centiseconds/500m
-    const power     = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0;         // watts
-    const parsed = { splitPace, power };
+    const rawSplit  = dv.getUint16(3, true);                                   // 0.5s/500m units
+    const splitPace = Math.round(rawSplit * 50);                               // → centiseconds
+    const power     = dv.getUint16(5, true);                                   // watts, direct read
+    const calories  = dv.byteLength >= 8 ? dv.getUint8(7) : 0;
+    const parsed = { splitPace, power, calories };
     _log('0032', dv, parsed);
     return parsed;
   } catch { return {}; }
 }
 
-// 0x0033 – Rowing Additional Status 2
-// 0-1: elapsed time (0.01s, uint16 LE)
-// 2-3: interval count (uint16 LE)
-// 4-5: drive length (0.01m = centimeters, uint16 LE)
-// 6:   drive time (0.01s = centiseconds, uint8)
+// 0x0033 – Rowing Additional Status 2 (per Concept2 PM5 BLE spec)
+// 0-2: elapsed time (0.01s, uint24 LE)
+// 3-4: drive length (0.01m = centimeters, uint16 LE)
+// 5-6: drive time (0.01s = centiseconds, uint16 LE)
 // 7-8: stroke recovery time (0.01s = centiseconds, uint16 LE)
 // 9-10: stroke count (uint16 LE)
 export function parseAdditionalStatus2(dv: DataView): Partial<PM5StreamData> {
   if (dv.byteLength < 9) return {};
   try {
-    const driveLength    = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;   // centimeters
-    const driveTime      = dv.byteLength >= 7 ? dv.getUint8(6) : 0;          // centiseconds
+    const driveLength    = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0;   // centimeters
+    const driveTime      = dv.byteLength >= 7 ? dv.getUint16(5, true) : 0;   // centiseconds (uint16, not uint8)
     const recoveryTime   = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;   // centiseconds
     const strokeDistance = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
     const parsed = { driveLength, driveTime, recoveryTime, strokeDistance };

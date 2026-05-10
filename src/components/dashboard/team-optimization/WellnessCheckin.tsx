@@ -96,13 +96,13 @@ const WellnessCheckin = ({ teamId, userId }: Props) => {
             <div className="flex items-center gap-3 text-xs">
               <span className="font-medium text-green-700 dark:text-green-400">Today's Check-in ✓</span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                <Battery className="h-3 w-3" />{(todayCheckin as any).energy}/10
+                <Battery className="h-3 w-3" />{(todayCheckin as any).energy ?? "—"}/10
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                <Activity className="h-3 w-3" />{(todayCheckin as any).soreness}/10
+                <Activity className="h-3 w-3" />{(todayCheckin as any).soreness ?? "—"}/10
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                <Moon className="h-3 w-3" />{(todayCheckin as any).sleep_hours}h
+                <Moon className="h-3 w-3" />{(todayCheckin as any).sleep_hours ?? "—"}h
               </span>
             </div>
             <button onClick={() => setOpen(true)} className="text-[10px] text-muted-foreground hover:text-primary">Edit</button>

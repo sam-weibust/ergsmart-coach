@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,17 +48,19 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
   const { data: todayLineups = [] } = useQuery({
     queryKey: ["today-lineups", teamId, todayStr],
     queryFn: async () => {
+      // Show lineups whose practice_date is today AND that have been published (not just published today)
       const { data } = await supabase
         .from("boat_lineups")
         .select("*")
         .eq("team_id", teamId)
-        .gte("published_at", todayStr + "T00:00:00")
-        .lte("published_at", todayStr + "T23:59:59");
+        .eq("practice_date", todayStr)
+        .not("published_at", "is", null);
       return data || [];
     },
   });
 
-  const lineupIds = todayLineups.map((l: any) => l.id);
+  // Memoize to prevent new array reference on every render causing infinite query refetch
+  const lineupIds = useMemo(() => todayLineups.map((l: any) => l.id), [todayLineups]);
 
   const { data: todayAttendance = [] } = useQuery({
     queryKey: ["today-attendance", teamId, todayStr],

@@ -93,7 +93,7 @@ async function analyzeIndividual(supabase: any, userId: string, apiKey: string, 
     ergByWeek[week].sessions += 1;
   }
 
-  const twokScores = ergScores.filter((s: any) => s.test_type === "2k" || s.total_meters === 2000);
+  const twokScores = ergScores.filter((s: any) => s.test_type === "2k" || (s.total_meters != null && s.total_meters >= 1950 && s.total_meters <= 2050));
   const allWatts = ergScores.filter((s: any) => s.watts).map((s: any) => ({ date: s.recorded_at, watts: Number(s.watts) }));
   const allWkg = ergScores.filter((s: any) => s.watts_per_kg).map((s: any) => ({ date: s.recorded_at, wkg: Number(s.watts_per_kg) }));
 
@@ -260,7 +260,7 @@ async function analyzeTeam(supabase: any, teamId: string, apiKey: string, corsHe
   ).join("\n");
 
   const twokTeamByWeek: Record<string, number[]> = {};
-  const twokScores = ergScores.filter((s: any) => s.test_type === "2k" || s.total_meters === 2000);
+  const twokScores = ergScores.filter((s: any) => s.test_type === "2k" || (s.total_meters != null && s.total_meters >= 1950 && s.total_meters <= 2050));
   for (const s of twokScores) {
     const week = getWeekStart(s.recorded_at);
     if (!twokTeamByWeek[week]) twokTeamByWeek[week] = [];

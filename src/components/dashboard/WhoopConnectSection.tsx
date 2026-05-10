@@ -206,6 +206,7 @@ export default function WhoopConnectSection() {
       }
       setConnected(false);
       setLastSync(null);
+      setLastAutoSync(null);
       toast({ title: "Whoop disconnected" });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });

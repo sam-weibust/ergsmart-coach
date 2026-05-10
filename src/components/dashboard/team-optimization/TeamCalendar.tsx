@@ -83,7 +83,8 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
         .gte("practice_date", rangeStart)
         .lte("practice_date", rangeEnd);
       // Coaches see all published + unpublished future lineups; athletes see only published
-      const { data } = isCoach ? await q : await q.not("published_at", "is", null);
+      const { data, error } = isCoach ? await q : await q.not("published_at", "is", null);
+      if (error) throw error;
       return data || [];
     },
   });
@@ -399,7 +400,9 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                             <p className="text-xs font-medium text-muted-foreground mb-1">500m Splits</p>
                             <div className="flex flex-wrap gap-1.5">
                               {r.splits.map((sp: any, idx: number) => {
-                                const prev = idx > 0 ? r.splits[idx - 1]?.split_seconds : null;
+                                if (sp == null || sp.split_seconds == null) return null;
+                                const prevSplit = idx > 0 ? r.splits[idx - 1] : null;
+                                const prev = prevSplit?.split_seconds ?? null;
                                 const faster = prev !== null && sp.split_seconds < prev;
                                 const slower = prev !== null && sp.split_seconds > prev;
                                 return (
