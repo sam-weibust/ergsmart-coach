@@ -37,16 +37,24 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
-        <Card className="m-4">
-          <CardContent className="py-8 text-center space-y-3">
-            <AlertTriangle className="h-8 w-8 text-destructive mx-auto" />
-            <p className="font-medium text-sm">Something went wrong</p>
-            <p className="text-xs text-muted-foreground font-mono">{this.state.error?.message}</p>
-            <Button size="sm" variant="outline" onClick={() => this.setState({ hasError: false, error: null, info: "" })}>
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
+        <div style={{
+          position: "fixed", inset: 0, background: "#0a1628",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 16, padding: 24, color: "#fff",
+        }}>
+          <AlertTriangle style={{ width: 40, height: 40, color: "#f87171" }} />
+          <p style={{ fontWeight: 600, fontSize: 16, margin: 0 }}>Something went wrong</p>
+          <p style={{ fontSize: 12, color: "#94a3b8", fontFamily: "monospace", maxWidth: 360, textAlign: "center", margin: 0 }}>
+            {this.state.error?.message}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null, info: "" }); window.location.href = "/"; }}
+            style={{ marginTop: 8, padding: "8px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", cursor: "pointer", fontSize: 14 }}
+          >
+            Reload App
+          </button>
+        </div>
       );
     }
     return this.props.children;

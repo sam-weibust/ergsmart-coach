@@ -72,6 +72,8 @@ function AppRouter() {
   const initialized = useRef(false);
   usePushNotifications();
 
+  console.log("[AppRouter] render — ready:", ready, "pathname:", window.location.pathname);
+
   // Handle deep link OAuth callbacks on iOS native (crewsync://auth/*/callback?code=...&state=...)
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -192,7 +194,9 @@ function AppRouter() {
   );
 }
 
-const App = () => (
+const App = () => {
+  console.log("[App] mounted");
+  return (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
@@ -208,6 +212,7 @@ const App = () => (
       </ThemeProvider>
     </QueryClientProvider>
   </ErrorBoundary>
-);
+  );
+};
 
 export default App;

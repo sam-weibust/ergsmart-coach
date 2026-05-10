@@ -1,26 +1,52 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import {
-  CacheFirst,
   NetworkFirst,
   StaleWhileRevalidate,
+  CacheFirst,
 } from "workbox-strategies";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
 import { ExpirationPlugin } from "workbox-expiration";
 
-const SHELL_CACHE = "crewsync-shell-v1";
-const API_CACHE = "crewsync-api-v1";
+// Bump this version any time you need to force-clear the old shell cache.
+const SHELL_CACHE = "crewsync-shell-v2";
+const API_CACHE   = "crewsync-api-v1";
+
+// Old cache names that should be deleted.
+const OBSOLETE_CACHES = ["crewsync-shell-v1"];
 
 // Injected by vite-plugin-pwa at build time
 self.__WB_MANIFEST;
 precacheAndRoute(self.__WB_MANIFEST || []);
 cleanupOutdatedCaches();
 
-// App-shell navigation fallback
+// Activate immediately and clean up stale caches.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // Delete old shell caches so stale index.html never gets served.
+      caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => OBSOLETE_CACHES.includes(k))
+            .map((k) => caches.delete(k))
+        )
+      ),
+    ])
+  );
+});
+
+// App-shell navigation fallback — NetworkFirst so a fresh index.html is
+// always fetched on reload. Falls back to cache only when offline.
+// This is the critical fix: CacheFirst here caused stale index.html to be
+// served after deploys, breaking all JS chunk references (404s → blank screen).
 registerRoute(
   new NavigationRoute(
-    new CacheFirst({
+    new NetworkFirst({
       cacheName: SHELL_CACHE,
+      networkTimeoutSeconds: 5,
       plugins: [
         new CacheableResponsePlugin({ statuses: [200] }),
       ],
@@ -28,7 +54,8 @@ registerRoute(
   )
 );
 
-// Static assets — cache first
+// Static assets (JS/CSS chunks, fonts, images) — CacheFirst is fine here
+// because Vite hashes asset filenames on every build.
 registerRoute(
   ({ request }) =>
     request.destination === "style" ||
@@ -39,15 +66,16 @@ registerRoute(
     cacheName: SHELL_CACHE,
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 30 * 24 * 60 * 60 }),
+      new ExpirationPlugin({ maxEntries: 150, maxAgeSeconds: 30 * 24 * 60 * 60 }),
     ],
   })
 );
 
 // Training plans — network first, fall back to cache
 registerRoute(
-  ({ url }) => url.pathname.includes("/functions/v1/generate-training-plan") ||
-               url.pathname.includes("/functions/v1/get-training-plan"),
+  ({ url }) =>
+    url.pathname.includes("/functions/v1/generate-training-plan") ||
+    url.pathname.includes("/functions/v1/get-training-plan"),
   new NetworkFirst({
     cacheName: API_CACHE,
     plugins: [
@@ -86,9 +114,3 @@ registerRoute(
     ],
   })
 );
-
-// Activate immediately and claim all clients
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
