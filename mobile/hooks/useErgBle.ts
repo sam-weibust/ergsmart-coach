@@ -15,57 +15,111 @@ import type { ErgMetrics } from '../types';
 
 // ─── PM5 GATT UUIDs ────────────────────────────────────────────────────────────
 
-const PM5_SERVICE       = 'ce060030-43e5-11e4-916c-0800200c9a66';
-const PM5_STATUS_CHAR   = 'ce060031-43e5-11e4-916c-0800200c9a66'; // General status
-const PM5_ADD1_CHAR     = 'ce060032-43e5-11e4-916c-0800200c9a66'; // Additional status 1
-const PM5_ADD2_CHAR     = 'ce060033-43e5-11e4-916c-0800200c9a66'; // Additional status 2
+const PM5_SERVICE     = 'ce060030-43e5-11e4-916c-0800200c9a66';
+const PM5_STATUS_CHAR = 'ce060031-43e5-11e4-916c-0800200c9a66'; // General status
+const PM5_ADD1_CHAR   = 'ce060032-43e5-11e4-916c-0800200c9a66'; // Additional status 1
+const PM5_ADD2_CHAR   = 'ce060033-43e5-11e4-916c-0800200c9a66'; // Additional status 2
+
+// ─── Debug logging (first 10 strokes only) ─────────────────────────────────────
+
+let debugStrokeCount = 0;
+
+function debugLog(charName: string, data: Uint8Array) {
+  if (debugStrokeCount >= 10) return;
+  debugStrokeCount++;
+  const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  console.log(`[PM5 BLE] ${charName} raw bytes: ${hex}`);
+}
 
 // ─── Data Parsing ──────────────────────────────────────────────────────────────
 
+/**
+ * General Status (0x0031)
+ * Byte 0-2:  elapsed time  — uint24 LE, 0.01s units
+ * Byte 3-5:  distance      — uint24 LE, 0.1m units
+ * Byte 6-7:  split pace    — uint16 LE, 0.5s/500m units
+ * Byte 8:    stroke rate   — uint8, spm
+ * Byte 9-10: heart rate    — uint16 LE, bpm (valid 40-220)
+ */
 function parseGeneralStatus(data: Uint8Array): Partial<ErgMetrics> {
-  if (data.length < 19) return {};
-  const view = new DataView(data.buffer);
+  if (data.length < 11) return {};
+  debugLog('GeneralStatus(0031)', data);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
-  // Elapsed time: bytes 0-2 (little-endian, 0.01s resolution)
-  const elapsedRaw = view.getUint8(0) | (view.getUint8(1) << 8) | (view.getUint8(2) << 16);
-  const elapsed_seconds = Math.round(elapsedRaw / 100);
+  const elapsedRaw = view.getUint8(0) + view.getUint8(1) * 256 + view.getUint8(2) * 65536;
+  const elapsed_seconds = elapsedRaw / 100;
 
-  // Distance: bytes 3-5 (0.1m resolution)
-  const distRaw = view.getUint8(3) | (view.getUint8(4) << 8) | (view.getUint8(5) << 16);
+  const distRaw = view.getUint8(3) + view.getUint8(4) * 256 + view.getUint8(5) * 65536;
   const distance_meters = Math.round(distRaw / 10);
 
-  // Pace: bytes 6-7 (0.01s/500m resolution)
-  const paceRaw = view.getUint16(6, true);
-  const split_seconds = paceRaw / 100;
+  const paceRaw = view.getUint8(6) + view.getUint8(7) * 256;
+  const split_seconds = paceRaw * 0.5; // 0.5s/500m units
 
-  // Stroke rate: byte 9
-  const stroke_rate = view.getUint8(9);
+  const stroke_rate = view.getUint8(8);
 
-  // Heart rate: byte 8
-  const heart_rate = view.getUint8(8) || null;
-
-  // Calories: bytes 10-11
-  const calories = view.getUint16(10, true);
+  const hrRaw = view.getUint8(9) + view.getUint8(10) * 256;
+  const heart_rate = hrRaw >= 40 && hrRaw <= 220 ? hrRaw : null;
 
   return {
-    elapsed_seconds,
+    elapsed_seconds: Math.round(elapsed_seconds),
     distance_meters,
     split_seconds: split_seconds > 0 && split_seconds < 600 ? split_seconds : null,
     stroke_rate: stroke_rate > 0 ? stroke_rate : null,
     heart_rate,
-    calories,
   };
 }
 
+/**
+ * Additional Status 1 (0x0032)
+ * Byte 0-2: elapsed time  — uint24 LE, 0.01s units
+ * Byte 3-4: split pace    — uint16 LE, 0.5s/500m units
+ * Byte 5-6: stroke power  — uint16 LE, watts
+ * Byte 7:   stroke calories
+ * Byte 8-9: average pace  — uint16 LE
+ */
 function parseAdditionalStatus1(data: Uint8Array): Partial<ErgMetrics> {
-  if (data.length < 11) return {};
-  const view = new DataView(data.buffer);
+  if (data.length < 7) return {};
+  debugLog('AdditionalStatus1(0032)', data);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
-  // Watts: bytes 3-4
-  const watts = view.getUint16(3, true);
+  const wattsRaw = view.getUint8(5) + view.getUint8(6) * 256;
+  if (wattsRaw > 2000) {
+    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    console.warn(`[PM5 BLE] Unexpected watts value ${wattsRaw} — raw bytes: ${hex}`);
+  }
+  const watts = wattsRaw > 0 && wattsRaw <= 2000 ? wattsRaw : null;
+
+  const calories = data.length > 7 ? view.getUint8(7) : undefined;
 
   return {
-    watts: watts > 0 ? watts : null,
+    watts,
+    ...(calories !== undefined ? { calories } : {}),
+  };
+}
+
+/**
+ * Additional Status 2 (0x0033)
+ * Byte 0-2:  elapsed time         — uint24 LE, 0.01s units
+ * Byte 3-4:  drive length         — uint16 LE, 0.01m units
+ * Byte 5-6:  drive time           — uint16 LE, 0.01s units
+ * Byte 7-8:  stroke recovery time — uint16 LE, 0.01s units
+ * Byte 9-10: stroke count         — uint16 LE
+ */
+function parseAdditionalStatus2(data: Uint8Array): Partial<ErgMetrics> {
+  if (data.length < 11) return {};
+  debugLog('AdditionalStatus2(0033)', data);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  const drive_length_m = (view.getUint8(3) + view.getUint8(4) * 256) / 100;
+  const drive_time_s = (view.getUint8(5) + view.getUint8(6) * 256) / 100;
+  const recovery_time_s = (view.getUint8(7) + view.getUint8(8) * 256) / 100;
+  const stroke_count = view.getUint8(9) + view.getUint8(10) * 256;
+
+  return {
+    drive_length_m: drive_length_m > 0 ? drive_length_m : null,
+    drive_time_s: drive_time_s > 0 ? drive_time_s : null,
+    recovery_time_s: recovery_time_s > 0 ? recovery_time_s : null,
+    stroke_count: stroke_count > 0 ? stroke_count : null,
   };
 }
 
@@ -76,6 +130,11 @@ function base64ToUint8Array(base64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function computeProjectedFinish(metrics: ErgMetrics): number | null {
+  if (!metrics.split_seconds || !metrics.stroke_count || metrics.stroke_count < 5) return null;
+  return (metrics.split_seconds / 500) * 2000;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -99,6 +158,11 @@ const DEFAULT_METRICS: ErgMetrics = {
   watts: null,
   heart_rate: null,
   pace_category: null,
+  projected_finish_seconds: null,
+  drive_length_m: null,
+  drive_time_s: null,
+  recovery_time_s: null,
+  stroke_count: null,
 };
 
 // ─── Simulation (Expo Go / web fallback) ───────────────────────────────────────
@@ -142,14 +206,17 @@ function useSimulatedErgBle(): UseErgBleReturn {
 
     let elapsed = 0;
     let distance = 0;
+    let strokes = 0;
     const splitBase = 125; // ~2:05 base
 
     const interval = setInterval(() => {
       elapsed += 1;
+      strokes += 1;
       distance += 500 / (splitBase + Math.sin(elapsed * 0.1) * 5);
       const split = splitBase + Math.sin(elapsed * 0.1) * 5;
       const rate = 22 + Math.round(Math.sin(elapsed * 0.08) * 2);
       const watts = Math.round(2.8 * Math.pow(500 / split, 3));
+      const projected = strokes >= 5 ? (split / 500) * 2000 : null;
 
       setMetrics({
         split_seconds: split,
@@ -160,6 +227,11 @@ function useSimulatedErgBle(): UseErgBleReturn {
         watts,
         heart_rate: 148 + Math.round(Math.sin(elapsed * 0.05) * 5),
         pace_category: 'moderate',
+        projected_finish_seconds: projected,
+        drive_length_m: 1.35,
+        drive_time_s: 0.58,
+        recovery_time_s: 1.12,
+        stroke_count: strokes,
       });
     }, 1000);
 
@@ -176,7 +248,6 @@ function useNativeErgBle(): UseErgBleReturn {
   const [metrics, setMetrics] = useState<ErgMetrics>(DEFAULT_METRICS);
   const [deviceName, setDeviceName] = useState<string | null>(null);
 
-  // Lazy-import so the module isn't required in Expo Go / web
   const managerRef = useRef<import('react-native-ble-plx').BleManager | null>(null);
   const deviceRef = useRef<import('react-native-ble-plx').Device | null>(null);
 
@@ -196,11 +267,12 @@ function useNativeErgBle(): UseErgBleReturn {
     setConnectionState('disconnected');
     setDeviceName(null);
     setMetrics(DEFAULT_METRICS);
+    debugStrokeCount = 0;
   }, []);
 
   const scan = useCallback(async () => {
     const manager = getManager();
-
+    debugStrokeCount = 0;
     setConnectionState('scanning');
 
     manager.startDeviceScan(
@@ -237,7 +309,11 @@ function useNativeErgBle(): UseErgBleReturn {
               (_err, char) => {
                 if (char?.value) {
                   const bytes = base64ToUint8Array(char.value);
-                  setMetrics((prev) => ({ ...prev, ...parseGeneralStatus(bytes) }));
+                  setMetrics((prev) => {
+                    const next = { ...prev, ...parseGeneralStatus(bytes) };
+                    next.projected_finish_seconds = computeProjectedFinish(next);
+                    return next;
+                  });
                 }
               },
             );
@@ -252,6 +328,21 @@ function useNativeErgBle(): UseErgBleReturn {
                 }
               },
             );
+
+            d.monitorCharacteristicForService(
+              PM5_SERVICE,
+              PM5_ADD2_CHAR,
+              (_err, char) => {
+                if (char?.value) {
+                  const bytes = base64ToUint8Array(char.value);
+                  setMetrics((prev) => {
+                    const next = { ...prev, ...parseAdditionalStatus2(bytes) };
+                    next.projected_finish_seconds = computeProjectedFinish(next);
+                    return next;
+                  });
+                }
+              },
+            );
           })
           .catch((err) => {
             setConnectionState('disconnected');
@@ -261,7 +352,6 @@ function useNativeErgBle(): UseErgBleReturn {
     );
   }, [getManager]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       deviceRef.current?.cancelConnection().catch(() => {});
@@ -278,12 +368,9 @@ function useNativeErgBle(): UseErgBleReturn {
 export function useErgBle(): UseErgBleReturn {
   const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 
-  // Hooks must be called unconditionally, so we call both and pick one.
   const simulated = useSimulatedErgBle();
   const native = useNativeErgBle();
 
-  // On native platforms, attempt real BLE; fall back to simulation if the
-  // module is missing (e.g. running in Expo Go without a dev client).
   if (isNative) {
     try {
       require('react-native-ble-plx');

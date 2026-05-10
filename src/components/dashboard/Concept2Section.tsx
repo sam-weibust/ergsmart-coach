@@ -42,16 +42,28 @@ export default function Concept2Section() {
         toast({ title: "C2 Auth Failed", description: e.data.error || "Unknown error", variant: "destructive" });
       }
     };
-    const nativeHandler = () => {
+    const nativeHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
       setIsConnectingC2(false);
       checkC2();
-      toast({ title: "Concept2 Connected!" });
+      const imported = detail?.imported ?? 0;
+      toast({
+        title: "Concept2 Connected!",
+        description: imported > 0 ? `Imported ${imported} workout${imported === 1 ? "" : "s"}.` : undefined,
+      });
+    };
+    const nativeErrorHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setIsConnectingC2(false);
+      toast({ title: "Concept2 Connection Failed", description: detail?.error || "Unknown error", variant: "destructive" });
     };
     window.addEventListener("message", msgHandler);
     window.addEventListener("c2_connected", nativeHandler);
+    window.addEventListener("c2_error", nativeErrorHandler);
     return () => {
       window.removeEventListener("message", msgHandler);
       window.removeEventListener("c2_connected", nativeHandler);
+      window.removeEventListener("c2_error", nativeErrorHandler);
     };
   }, [checkC2, toast]);
 
@@ -66,9 +78,13 @@ export default function Concept2Section() {
         ? "crewsync://auth/concept2/callback"
         : "https://crewsync.app/auth/concept2/callback";
 
+      console.log("[Concept2Section] connectC2 — redirect_uri:", redirectUri, "isNative:", isNative);
+
       const res = await c2Connect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+
+      console.log("[Concept2Section] opening OAuth URL:", data.url);
 
       if (isNative) {
         await Browser.open({ url: data.url, presentationStyle: "popover" });

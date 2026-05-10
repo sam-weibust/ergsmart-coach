@@ -185,14 +185,19 @@ export interface Message {
 // ─── Live Erg ─────────────────────────────────────────────────────────────────
 
 export interface ErgMetrics {
-  split_seconds: number | null;      // seconds per 500m
-  stroke_rate: number | null;        // strokes per minute
+  split_seconds: number | null;           // seconds per 500m
+  stroke_rate: number | null;             // strokes per minute
   distance_meters: number | null;
   calories: number | null;
   elapsed_seconds: number | null;
   watts: number | null;
   heart_rate: number | null;
   pace_category: 'rest' | 'easy' | 'moderate' | 'hard' | 'max' | null;
+  projected_finish_seconds: number | null; // projected 2000m finish in seconds
+  drive_length_m: number | null;
+  drive_time_s: number | null;
+  recovery_time_s: number | null;
+  stroke_count: number | null;
 }
 
 // ─── API Responses ────────────────────────────────────────────────────────────

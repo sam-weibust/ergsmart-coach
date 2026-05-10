@@ -28,7 +28,7 @@ serve(async (req) => {
   try {
     console.log("[c2-callback] method:", req.method, "url:", req.url);
     console.log("[c2-callback] headers:", JSON.stringify(Object.fromEntries(req.headers)));
-    const { code, user_id } = await req.json();
+    const { code, user_id, redirect_uri: clientRedirectUri } = await req.json();
 
     if (!code || !user_id) {
       return new Response(JSON.stringify({ error: "Missing code or user_id" }), {
@@ -36,6 +36,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Use the redirect_uri the client actually used — must match exactly what was
+    // sent to Concept2 during the authorization request, or the token exchange fails.
+    const redirectUri = clientRedirectUri ?? "https://crewsync.app/auth/concept2/callback";
+    console.log("[c2-callback] user_id:", user_id, "redirect_uri:", redirectUri);
 
     // Exchange authorization code for tokens
     const tokenRes = await fetch("https://log.concept2.com/oauth/access_token", {
@@ -46,9 +51,11 @@ serve(async (req) => {
         code,
         client_id: C2_CLIENT_ID,
         client_secret: C2_CLIENT_SECRET,
-        redirect_uri: "https://crewsync.app/auth/concept2/callback",
+        redirect_uri: redirectUri,
       }),
     });
+
+    console.log("[c2-callback] token exchange status:", tokenRes.status);
 
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
@@ -60,7 +67,7 @@ serve(async (req) => {
           error: "Failed to exchange authorization code",
           concept2_status: tokenRes.status,
           concept2_error: errDetail,
-          redirect_uri_sent: "https://crewsync.app/auth/concept2/callback",
+          redirect_uri_sent: redirectUri,
           client_id_present: !!C2_CLIENT_ID,
           client_secret_present: !!C2_CLIENT_SECRET,
         }),

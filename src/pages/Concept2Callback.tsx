@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { c2Callback } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
@@ -23,17 +22,18 @@ export default function Concept2Callback() {
 
     const handleCallback = async () => {
       try {
-        // Use getSession() first — it reads from localStorage and works reliably on
-        // iOS Safari after a same-tab redirect (getUser() requires a network round-trip
-        // and can fail if the tab was just restored from a redirect).
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user ?? null;
-        if (!user) {
-          navigate("/auth");
-          return;
-        }
+        // state param contains the user_id encoded by c2-connect.
+        // We use it directly — c2-callback is deployed --no-verify-jwt so no
+        // session is required here. This avoids a race where getSession() returns
+        // null on the callback page before Supabase restores the session from storage.
+        const userId = decodeURIComponent(state);
+        console.log("[Concept2Callback] code:", code.slice(0, 8) + "…", "user_id:", userId);
 
-        const res = await c2Callback({ code, user_id: decodeURIComponent(state) });
+        const res = await c2Callback({
+          code,
+          user_id: userId,
+          redirect_uri: "https://crewsync.app/auth/concept2/callback",
+        });
         const data = await res.json();
 
         if (data.error) {
@@ -56,19 +56,9 @@ export default function Concept2Callback() {
           return;
         }
 
-        // Redirect to profile with success param after 3 seconds
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", user.id)
-          .maybeSingle();
-
+        // Redirect to dashboard after 3 seconds (profile lookup requires session)
         setTimeout(() => {
-          if (profile?.username) {
-            navigate(`/athlete/${profile.username}?c2=connected&imported=${data.imported ?? 0}`);
-          } else {
-            navigate("/");
-          }
+          navigate(`/dashboard?c2=connected&imported=${data.imported ?? 0}`, { replace: true });
         }, 3000);
       } catch (e) {
         setStatus("error");

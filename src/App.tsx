@@ -76,23 +76,62 @@ function AppRouter() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = CapacitorApp.addListener("appUrlOpen", async ({ url }) => {
+      console.log("[appUrlOpen] received URL:", url);
       try {
         const parsed = new URL(url);
         const code = parsed.searchParams.get("code");
         const state = parsed.searchParams.get("state");
-        if (!code || !state) return;
+        if (!code) {
+          console.warn("[appUrlOpen] no code param in URL:", url);
+          return;
+        }
 
+        // Close the in-app browser immediately so the user returns to the app.
         await Browser.close();
 
         if (url.includes("auth/concept2/callback")) {
-          await c2Callback({ code, user_id: decodeURIComponent(state) });
-          navigate("/dashboard", { replace: true });
-          // Signal the dashboard to refresh c2 connection status
-          window.dispatchEvent(new CustomEvent("c2_connected"));
+          const redirectUri = url.startsWith("crewsync://")
+            ? "crewsync://auth/concept2/callback"
+            : "https://crewsync.app/auth/concept2/callback";
+          console.log("[appUrlOpen] c2 callback — redirect_uri:", redirectUri, "code:", code.slice(0, 8) + "…");
+
+          let imported = 0;
+          try {
+            const res = await c2Callback({
+              code,
+              user_id: state ? decodeURIComponent(state) : "",
+              redirect_uri: redirectUri,
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            imported = data.imported ?? 0;
+            navigate("/dashboard", { replace: true });
+            // Signal Concept2Section to refresh connection status
+            window.dispatchEvent(new CustomEvent("c2_connected", { detail: { imported } }));
+          } catch (cbErr: any) {
+            console.error("[appUrlOpen] c2-callback failed:", cbErr?.message);
+            navigate("/dashboard", { replace: true });
+            window.dispatchEvent(new CustomEvent("c2_error", { detail: { error: cbErr?.message } }));
+          }
         } else if (url.includes("auth/whoop/callback")) {
-          await whoopCallback({ code, user_id: decodeURIComponent(state) });
-          navigate("/dashboard", { replace: true });
-          window.dispatchEvent(new CustomEvent("whoop_connected"));
+          const redirectUri = url.startsWith("crewsync://")
+            ? "crewsync://auth/whoop/callback"
+            : "https://crewsync.app/auth/whoop/callback";
+          console.log("[appUrlOpen] whoop callback — redirect_uri:", redirectUri);
+          try {
+            const res = await whoopCallback({
+              code,
+              user_id: state ? decodeURIComponent(state) : "",
+              redirect_uri: redirectUri,
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            navigate("/dashboard", { replace: true });
+            window.dispatchEvent(new CustomEvent("whoop_connected"));
+          } catch (cbErr: any) {
+            console.error("[appUrlOpen] whoop-callback failed:", cbErr?.message);
+            navigate("/dashboard", { replace: true });
+          }
         }
       } catch (e) {
         console.error("[appUrlOpen] OAuth callback failed:", e);
