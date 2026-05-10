@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,6 +10,12 @@ import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 import { whoopConnect, whoopSync, whoopDisconnect } from "@/lib/api";
 import { getSessionUser } from "@/lib/getUser";
 
+function openCenteredPopup(url: string, name: string, w = 600, h = 700): Window | null {
+  const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+  const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+  return window.open(url, name, `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+}
+
 export default function WhoopConnectSection() {
   const { toast } = useToast();
   const [connected, setConnected] = useState(false);
@@ -17,6 +23,9 @@ export default function WhoopConnectSection() {
   const [lastAutoSync, setLastAutoSync] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const successRef = useRef(false);
 
   function formatAutoSync(ts: string): string {
     const date = new Date(ts);
@@ -42,21 +51,59 @@ export default function WhoopConnectSection() {
     } catch {}
   }, []);
 
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
   useEffect(() => {
     checkWhoop();
-    // Check for successful callback redirect
+
+    // Check for successful same-tab redirect fallback (mobile Safari)
     const params = new URLSearchParams(window.location.search);
     if (params.get("whoop") === "connected") {
       setConnected(true);
-      toast({ title: "Whoop Connected!", description: "Recovery, sleep, and strain data will sync automatically." });
+      toast({ title: "Whoop connected successfully", description: "Recovery, sleep, and strain data will sync automatically." });
       params.delete("whoop");
       const newSearch = params.toString();
       window.history.replaceState({}, "", newSearch ? `?${newSearch}` : window.location.pathname);
     }
-  }, [checkWhoop, toast]);
+
+    // Listen for messages from the OAuth popup (same origin only)
+    const msgHandler = (e: MessageEvent) => {
+      const allowedOrigins = ["https://crewsync.app", window.location.origin];
+      if (!allowedOrigins.includes(e.origin)) return;
+
+      if (e.data?.type === "whoop_connected" && e.data?.success) {
+        successRef.current = true;
+        stopPolling();
+        popupRef.current = null;
+        setIsConnecting(false);
+        checkWhoop();
+        toast({ title: "Whoop connected successfully", description: "Recovery, sleep, and strain data will sync automatically." });
+      } else if (e.data?.type === "whoop_error") {
+        successRef.current = true;
+        stopPolling();
+        popupRef.current = null;
+        setIsConnecting(false);
+        toast({ title: "Whoop connection failed", description: e.data.error || "Unknown error", variant: "destructive" });
+      }
+    };
+
+    // Native deep-link events dispatched by App.tsx
+    const nativeHandler = () => { setIsConnecting(false); checkWhoop(); };
+
+    window.addEventListener("message", msgHandler);
+    window.addEventListener("whoop_connected", nativeHandler);
+    return () => {
+      window.removeEventListener("message", msgHandler);
+      window.removeEventListener("whoop_connected", nativeHandler);
+      stopPolling();
+    };
+  }, [checkWhoop, toast, stopPolling]);
 
   const connectWhoop = async () => {
     setIsConnecting(true);
+    successRef.current = false;
     try {
       const user = await getSessionUser();
       if (!user) { setIsConnecting(false); return; }
@@ -64,14 +111,44 @@ export default function WhoopConnectSection() {
       const redirectUri = isNative
         ? "crewsync://auth/whoop/callback"
         : "https://crewsync.app/auth/whoop/callback";
+
+      console.log("[WhoopConnectSection] connectWhoop — redirect_uri:", redirectUri, "isNative:", isNative);
+
       const res = await whoopConnect({ user_id: user.id, redirect_uri: redirectUri });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+
+      console.log("[WhoopConnectSection] opening OAuth URL:", data.url);
+
       if (isNative) {
         await Browser.open({ url: data.url, presentationStyle: "popover" });
-      } else {
-        window.location.href = data.url;
+        return;
       }
+
+      const isMobileSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobileSafari) {
+        window.location.href = data.url;
+        return;
+      }
+
+      const popup = openCenteredPopup(data.url, "whoopoauth");
+      if (!popup || popup.closed) {
+        window.location.href = data.url;
+        return;
+      }
+
+      popupRef.current = popup;
+
+      pollRef.current = setInterval(() => {
+        if (popup.closed) {
+          stopPolling();
+          popupRef.current = null;
+          if (!successRef.current) {
+            setIsConnecting(false);
+            toast({ title: "Connection cancelled", description: "The Whoop window was closed.", variant: "destructive" });
+          }
+        }
+      }, 500);
     } catch (e: any) {
       setIsConnecting(false);
       toast({ title: "Failed to connect Whoop", description: e.message, variant: "destructive" });

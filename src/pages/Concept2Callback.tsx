@@ -12,7 +12,7 @@ export default function Concept2Callback() {
 
   useEffect(() => {
     const code = searchParams.get("code");
-    const state = searchParams.get("state"); // user_id
+    const state = searchParams.get("state"); // encoded user_id
 
     if (!code || !state) {
       setStatus("error");
@@ -22,10 +22,6 @@ export default function Concept2Callback() {
 
     const handleCallback = async () => {
       try {
-        // state param contains the user_id encoded by c2-connect.
-        // We use it directly — c2-callback is deployed --no-verify-jwt so no
-        // session is required here. This avoids a race where getSession() returns
-        // null on the callback page before Supabase restores the session from storage.
         const userId = decodeURIComponent(state);
         console.log("[Concept2Callback] code:", code.slice(0, 8) + "…", "user_id:", userId);
 
@@ -40,7 +36,7 @@ export default function Concept2Callback() {
           setStatus("error");
           setErrorMsg(data.error);
           if (window.opener) {
-            window.opener.postMessage({ type: "c2_auth_error", error: data.error }, "*");
+            window.opener.postMessage({ type: "concept2_error", error: data.error }, window.location.origin);
             setTimeout(() => window.close(), 2000);
           }
           return;
@@ -49,20 +45,27 @@ export default function Concept2Callback() {
         setImported(data.imported ?? 0);
         setStatus("success");
 
-        // If opened as a popup from DeviceSection, signal the opener and close
         if (window.opener) {
-          window.opener.postMessage({ type: "c2_auth_success", imported: data.imported ?? 0 }, "*");
-          setTimeout(() => window.close(), 1500);
+          // Popup flow: notify the opener and close.
+          window.opener.postMessage(
+            { type: "concept2_connected", success: true, imported: data.imported ?? 0 },
+            window.location.origin,
+          );
+          setTimeout(() => window.close(), 1200);
           return;
         }
 
-        // Redirect to dashboard after 3 seconds (profile lookup requires session)
+        // Direct-navigation fallback (mobile Safari / popup blocked).
         setTimeout(() => {
           navigate(`/dashboard?c2=connected&imported=${data.imported ?? 0}`, { replace: true });
-        }, 3000);
+        }, 2500);
       } catch (e) {
         setStatus("error");
         setErrorMsg(e instanceof Error ? e.message : "Connection failed");
+        if (window.opener) {
+          window.opener.postMessage({ type: "concept2_error", error: errorMsg }, window.location.origin);
+          setTimeout(() => window.close(), 2000);
+        }
       }
     };
 
@@ -92,7 +95,7 @@ export default function Concept2Callback() {
                 ? `Imported ${imported} workout${imported === 1 ? "" : "s"} from your Concept2 logbook.`
                 : "Your account is connected. Workouts will sync shortly."}
             </p>
-            <p className="text-xs text-muted-foreground">Redirecting to your profile…</p>
+            <p className="text-xs text-muted-foreground">Closing…</p>
           </>
         )}
         {status === "error" && (
@@ -104,11 +107,8 @@ export default function Concept2Callback() {
             </div>
             <h2 className="text-lg font-semibold">Connection Failed</h2>
             <p className="text-sm text-muted-foreground">{errorMsg || "Something went wrong."}</p>
-            <button
-              onClick={() => navigate("/")}
-              className="text-sm text-primary hover:underline"
-            >
-              Go back
+            <button onClick={() => window.opener ? window.close() : navigate("/")} className="text-sm text-primary hover:underline">
+              Close
             </button>
           </>
         )}

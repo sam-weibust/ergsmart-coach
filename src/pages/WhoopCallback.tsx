@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { whoopCallback } from "@/lib/api";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 
@@ -12,7 +11,7 @@ export default function WhoopCallback() {
 
   useEffect(() => {
     const code = searchParams.get("code");
-    const state = searchParams.get("state");
+    const state = searchParams.get("state"); // encoded user_id
 
     if (!code || !state) {
       setStatus("error");
@@ -22,34 +21,49 @@ export default function WhoopCallback() {
 
     const handle = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) { navigate("/auth"); return; }
+        const userId = decodeURIComponent(state);
+        console.log("[WhoopCallback] code:", code.slice(0, 8) + "…", "user_id:", userId);
 
-        const res = await whoopCallback({ code, user_id: decodeURIComponent(state) });
+        const res = await whoopCallback({
+          code,
+          user_id: userId,
+          redirect_uri: "https://crewsync.app/auth/whoop/callback",
+        });
         const data = await res.json();
 
         if (data.error) {
           setStatus("error");
           setErrorMsg(data.error);
+          if (window.opener) {
+            window.opener.postMessage({ type: "whoop_error", error: data.error }, window.location.origin);
+            setTimeout(() => window.close(), 2000);
+          }
           return;
         }
 
         setStatus("success");
 
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", session.user.id)
-          .maybeSingle();
+        if (window.opener) {
+          // Popup flow: notify opener and close.
+          window.opener.postMessage(
+            { type: "whoop_connected", success: true },
+            window.location.origin,
+          );
+          setTimeout(() => window.close(), 1200);
+          return;
+        }
 
+        // Direct-navigation fallback (mobile Safari / popup blocked).
         setTimeout(() => {
-          navigate(profile?.username
-            ? `/athlete/${profile.username}?whoop=connected`
-            : "/");
+          navigate("/dashboard?whoop=connected", { replace: true });
         }, 2500);
       } catch (e) {
         setStatus("error");
         setErrorMsg(e instanceof Error ? e.message : "Connection failed");
+        if (window.opener) {
+          window.opener.postMessage({ type: "whoop_error", error: errorMsg }, window.location.origin);
+          setTimeout(() => window.close(), 2000);
+        }
       }
     };
 
@@ -75,7 +89,7 @@ export default function WhoopCallback() {
             </div>
             <h2 className="text-lg font-semibold">Whoop Connected!</h2>
             <p className="text-sm text-muted-foreground">Recovery, sleep, and strain data is syncing to your profile.</p>
-            <p className="text-xs text-muted-foreground">Redirecting to your profile…</p>
+            <p className="text-xs text-muted-foreground">Closing…</p>
           </>
         )}
         {status === "error" && (
@@ -87,7 +101,9 @@ export default function WhoopCallback() {
             </div>
             <h2 className="text-lg font-semibold">Connection Failed</h2>
             <p className="text-sm text-muted-foreground">{errorMsg || "Something went wrong."}</p>
-            <button onClick={() => navigate("/")} className="text-sm text-primary hover:underline">Go back</button>
+            <button onClick={() => window.opener ? window.close() : navigate("/")} className="text-sm text-primary hover:underline">
+              Close
+            </button>
           </>
         )}
       </div>
