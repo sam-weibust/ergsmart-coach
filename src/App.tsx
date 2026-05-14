@@ -92,9 +92,7 @@ function AppRouter() {
         await Browser.close();
 
         if (url.includes("auth/concept2/callback")) {
-          const redirectUri = url.startsWith("crewsync://")
-            ? "crewsync://auth/concept2/callback"
-            : "https://crewsync.app/auth/concept2/callback";
+          const redirectUri = "https://crewsync.app/auth/concept2/callback";
           console.log("[appUrlOpen] c2 callback — redirect_uri:", redirectUri, "code:", code.slice(0, 8) + "…");
 
           let imported = 0;
@@ -116,9 +114,7 @@ function AppRouter() {
             window.dispatchEvent(new CustomEvent("c2_error", { detail: { error: cbErr?.message } }));
           }
         } else if (url.includes("auth/whoop/callback")) {
-          const redirectUri = url.startsWith("crewsync://")
-            ? "crewsync://auth/whoop/callback"
-            : "https://crewsync.app/auth/whoop/callback";
+          const redirectUri = "https://crewsync.app/auth/whoop/callback";
           console.log("[appUrlOpen] whoop callback — redirect_uri:", redirectUri);
           try {
             const res = await whoopCallback({

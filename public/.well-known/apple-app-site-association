@@ -3,22 +3,23 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["TEAMID.com.crewsync.app"],
-        "components": [
-          { "/": "/athlete/*" },
-          { "/": "/team/*" },
-          { "/": "/regatta/*" },
-          { "/": "/auth/concept2/callback*" },
-          { "/": "/auth/whoop/callback*" },
-          { "/": "/join/*" }
+        "appID": "5BJ3MBFY8U.com.crewsync.app",
+        "paths": [
+          "/auth/concept2/callback*",
+          "/auth/whoop/callback*",
+          "/athlete/*",
+          "/team/*",
+          "/regatta/*",
+          "/join/*",
+          "/*"
         ]
       }
     ]
   },
   "webcredentials": {
-    "apps": ["TEAMID.com.crewsync.app"]
+    "apps": ["5BJ3MBFY8U.com.crewsync.app"]
   },
   "activitycontinuation": {
-    "apps": ["TEAMID.com.crewsync.app"]
+    "apps": ["5BJ3MBFY8U.com.crewsync.app"]
   }
 }

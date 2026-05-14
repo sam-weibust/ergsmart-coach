@@ -108,9 +108,9 @@ export default function WhoopConnectSection() {
       const user = await getSessionUser();
       if (!user) { setIsConnecting(false); return; }
       const isNative = Capacitor.isNativePlatform();
-      const redirectUri = isNative
-        ? "crewsync://auth/whoop/callback"
-        : "https://crewsync.app/auth/whoop/callback";
+      // Always use universal link — registered in Whoop developer portal.
+      // Custom URL scheme (crewsync://) is NOT registered and will not redirect back.
+      const redirectUri = "https://crewsync.app/auth/whoop/callback";
 
       console.log("[WhoopConnectSection] connectWhoop — redirect_uri:", redirectUri, "isNative:", isNative);
 

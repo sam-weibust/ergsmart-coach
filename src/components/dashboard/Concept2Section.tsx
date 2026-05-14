@@ -126,9 +126,9 @@ export default function Concept2Section() {
       if (!user) { setIsConnectingC2(false); return; }
 
       const isNative = Capacitor.isNativePlatform();
-      const redirectUri = isNative
-        ? "crewsync://auth/concept2/callback"
-        : "https://crewsync.app/auth/concept2/callback";
+      // Always use universal link — registered in Concept2 developer portal.
+      // Custom URL scheme (crewsync://) is NOT registered and will not redirect back.
+      const redirectUri = "https://crewsync.app/auth/concept2/callback";
 
       console.log("[Concept2Section] connectC2 — redirect_uri:", redirectUri, "isNative:", isNative);
 
