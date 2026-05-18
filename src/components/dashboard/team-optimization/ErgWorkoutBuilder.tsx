@@ -22,6 +22,8 @@ interface Piece {
   distance: number | null;
   duration_seconds: number | null;
   target_split: string;
+  target_split_type: "exact" | "relative_2k";
+  target_split_offset_seconds: number | null;
   target_stroke_rate: number | null;
   rest: string;
   notes: string;
@@ -51,6 +53,8 @@ const emptyPiece = (n: number): Piece => ({
   distance: null,
   duration_seconds: null,
   target_split: "",
+  target_split_type: "exact",
+  target_split_offset_seconds: null,
   target_stroke_rate: null,
   rest: "",
   notes: "",
@@ -79,6 +83,8 @@ const ErgWorkoutBuilder = ({ teamId, teamMembers, profile, boats, onClose, editA
           ...p,
           use_distance: !!p.distance,
           target_split: secondsToTimeStr(p.target_split_seconds),
+          target_split_type: p.target_split_type ?? "exact",
+          target_split_offset_seconds: p.target_split_offset_seconds ?? null,
           rest: secondsToTimeStr(p.rest_seconds),
         }))
       : [emptyPiece(1)]
@@ -151,7 +157,9 @@ const ErgWorkoutBuilder = ({ teamId, teamMembers, profile, boats, onClose, editA
             piece_type: p.piece_type,
             distance: p.use_distance ? p.distance : null,
             duration_seconds: !p.use_distance ? timeStrToSeconds(p.duration_seconds ? secondsToTimeStr(p.duration_seconds) : "") : null,
-            target_split_seconds: splitStrToSeconds(p.target_split),
+            target_split_seconds: p.target_split_type === "exact" ? splitStrToSeconds(p.target_split) : null,
+            target_split_type: p.target_split_type,
+            target_split_offset_seconds: p.target_split_type === "relative_2k" ? (p.target_split_offset_seconds ?? null) : null,
             target_stroke_rate: p.target_stroke_rate,
             rest_seconds: timeStrToSeconds(p.rest),
             notes: p.notes,
@@ -179,7 +187,9 @@ const ErgWorkoutBuilder = ({ teamId, teamMembers, profile, boats, onClose, editA
               piece_type: p.piece_type,
               distance: p.use_distance ? p.distance : null,
               duration_seconds: !p.use_distance ? (p.duration_seconds ?? null) : null,
-              target_split_seconds: splitStrToSeconds(p.target_split),
+              target_split_seconds: p.target_split_type === "exact" ? splitStrToSeconds(p.target_split) : null,
+              target_split_type: p.target_split_type,
+              target_split_offset_seconds: p.target_split_type === "relative_2k" ? (p.target_split_offset_seconds ?? null) : null,
               target_stroke_rate: p.target_stroke_rate,
               rest_seconds: timeStrToSeconds(p.rest),
               notes: p.notes || null,
@@ -350,12 +360,77 @@ const ErgWorkoutBuilder = ({ teamId, teamMembers, profile, boats, onClose, editA
                         />
                       )}
                     </div>
-                    <div>
-                      <Label className="text-xs mb-1 block">Target Split /500m</Label>
-                      <TimeInput
-                        value={piece.target_split}
-                        onChange={v => updatePiece(idx, "target_split", v)}
-                      />
+                    <div className="col-span-2">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Label className="text-xs">Target Split /500m</Label>
+                        <div className="flex rounded overflow-hidden border border-input text-[10px] ml-auto">
+                          {(["exact", "relative_2k"] as const).map(mode => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => updatePiece(idx, "target_split_type", mode)}
+                              className={`px-2 py-1 transition-colors ${
+                                piece.target_split_type === mode
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {mode === "exact" ? "Exact Split" : "Relative to 2K"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {piece.target_split_type === "exact" ? (
+                        <TimeInput
+                          value={piece.target_split}
+                          onChange={v => updatePiece(idx, "target_split", v)}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="flex rounded overflow-hidden border border-input text-xs">
+                            {(["+", "-"] as const).map(sign => {
+                              const isNeg = (piece.target_split_offset_seconds ?? 0) < 0;
+                              const active = sign === "-" ? isNeg : !isNeg;
+                              return (
+                                <button
+                                  key={sign}
+                                  type="button"
+                                  onClick={() => {
+                                    const abs = Math.abs(piece.target_split_offset_seconds ?? 0);
+                                    updatePiece(idx, "target_split_offset_seconds", sign === "-" ? -abs : abs);
+                                  }}
+                                  className={`px-3 py-2 font-bold transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                >
+                                  {sign}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            placeholder="15"
+                            value={piece.target_split_offset_seconds !== null ? Math.abs(piece.target_split_offset_seconds) : ""}
+                            onChange={e => {
+                              const abs = e.target.value ? Number(e.target.value) : null;
+                              const isNeg = (piece.target_split_offset_seconds ?? 0) < 0;
+                              updatePiece(idx, "target_split_offset_seconds", abs !== null ? (isNeg ? -abs : abs) : null);
+                            }}
+                            className="w-20"
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">sec from 2K pace</span>
+                        </div>
+                      )}
+                      {piece.target_split_type === "relative_2k" && piece.target_split_offset_seconds !== null && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {piece.target_split_offset_seconds > 0
+                            ? `2K + ${piece.target_split_offset_seconds}s (slower than 2K pace)`
+                            : piece.target_split_offset_seconds < 0
+                            ? `2K − ${Math.abs(piece.target_split_offset_seconds)}s (faster than 2K pace)`
+                            : "2K pace"}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label className="text-xs mb-1 block">Target SR (spm)</Label>

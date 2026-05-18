@@ -112,6 +112,37 @@ export default function AthleteErgAssignment({ assignment, profile, onBack }: Pr
     },
   });
 
+  // best 2K in seconds → pace = best2k / 4
+  const { data: best2kSeconds } = useQuery({
+    queryKey: ["my-best-2k", profile.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("erg_scores" as any)
+        .select("time_seconds")
+        .eq("user_id", profile.id)
+        .eq("distance", 2000)
+        .order("time_seconds", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      return data?.time_seconds ?? null;
+    },
+  });
+
+  const my2kPaceSeconds: number | null = best2kSeconds ? best2kSeconds / 4 : null;
+
+  function resolveTarget(p: any): { seconds: number | null; label: string | null } {
+    const type = p.target_split_type ?? "exact";
+    if (type === "exact") {
+      return { seconds: p.target_split_seconds ?? null, label: null };
+    }
+    const offset: number = p.target_split_offset_seconds ?? 0;
+    if (my2kPaceSeconds === null) return { seconds: null, label: null };
+    const computed = Math.round(my2kPaceSeconds + offset);
+    const sign = offset >= 0 ? "+" : "−";
+    const label = `2K ${sign} ${Math.abs(offset)}s`;
+    return { seconds: computed, label };
+  }
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       const hasAny = pieceEntries.some(p => p.actual_split.trim() !== "");
@@ -220,7 +251,16 @@ export default function AthleteErgAssignment({ assignment, profile, onBack }: Pr
                         <span className="text-muted-foreground text-xs ml-2">
                           {target.piece_type}
                           {target.distance ? ` · ${target.distance}m` : ""}
-                          {target.target_split_seconds ? ` · target ${formatSplit(target.target_split_seconds)}/500m` : ""}
+                          {(() => {
+                            const { seconds, label } = resolveTarget(target);
+                            const type = target.target_split_type ?? "exact";
+                            if (type === "relative_2k" && my2kPaceSeconds === null) {
+                              const off = target.target_split_offset_seconds ?? 0;
+                              return ` · ${off >= 0 ? `2K + ${off}s` : `2K − ${Math.abs(off)}s`}`;
+                            }
+                            if (seconds) return ` · target ${formatSplit(seconds)}/500m${label ? ` (${label})` : ""}`;
+                            return "";
+                          })()}
                         </span>
                       )}
                     </div>
@@ -236,11 +276,16 @@ export default function AthleteErgAssignment({ assignment, profile, onBack }: Pr
                         <div>
                           <Label className="text-xs mb-1.5 block">
                             Actual Split /500m
-                            {target?.target_split_seconds && (
-                              <span className="text-blue-400 ml-1 font-normal">
-                                target: {formatSplit(target.target_split_seconds)}
-                              </span>
-                            )}
+                            {target && (() => {
+                              const { seconds, label } = resolveTarget(target);
+                              const type = target.target_split_type ?? "exact";
+                              if (type === "relative_2k" && my2kPaceSeconds === null) {
+                                const off = target.target_split_offset_seconds ?? 0;
+                                return <span className="text-yellow-400 ml-1 font-normal">{off >= 0 ? `2K + ${off}s` : `2K − ${Math.abs(off)}s`}</span>;
+                              }
+                              if (seconds) return <span className="text-blue-400 ml-1 font-normal">target: {formatSplit(seconds)}{label ? ` (${label})` : ""}</span>;
+                              return null;
+                            })()}
                           </Label>
                           <TimeInput
                             value={entry.actual_split}
@@ -389,12 +434,30 @@ export default function AthleteErgAssignment({ assignment, profile, onBack }: Pr
                 <div className="font-medium">{p.piece_type}</div>
                 {p.distance && <div className="text-muted-foreground text-xs">{p.distance}m</div>}
                 {p.duration_seconds && <div className="text-muted-foreground text-xs">{secondsToStr(p.duration_seconds)}</div>}
-                {p.target_split_seconds && (
-                  <div className="flex items-center gap-1.5 text-blue-400 text-xs font-medium">
-                    <Target className="h-3.5 w-3.5 shrink-0" />
-                    <span>Target {formatSplit(p.target_split_seconds)} /500m</span>
-                  </div>
-                )}
+                {(() => {
+                  const { seconds, label } = resolveTarget(p);
+                  const type = p.target_split_type ?? "exact";
+                  const hasNoRecord = type === "relative_2k" && my2kPaceSeconds === null;
+                  if (hasNoRecord) {
+                    return (
+                      <div className="text-xs text-yellow-400">
+                        <span className="font-medium">
+                          {(p.target_split_offset_seconds ?? 0) >= 0
+                            ? `2K + ${p.target_split_offset_seconds ?? 0}s`
+                            : `2K − ${Math.abs(p.target_split_offset_seconds ?? 0)}s`}
+                        </span>
+                        <span className="text-muted-foreground ml-1">— log a 2K test to see your personalized target</span>
+                      </div>
+                    );
+                  }
+                  if (!seconds) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 text-blue-400 text-xs font-medium">
+                      <Target className="h-3.5 w-3.5 shrink-0" />
+                      <span>Target {formatSplit(seconds)} /500m{label ? ` (${label})` : ""}</span>
+                    </div>
+                  );
+                })()}
                 {p.target_stroke_rate && (
                   <div className="text-blue-400 text-xs font-medium">SR: {p.target_stroke_rate} spm</div>
                 )}
@@ -452,9 +515,11 @@ export default function AthleteErgAssignment({ assignment, profile, onBack }: Pr
                   <span className="font-mono font-medium text-foreground">
                     {p.actual_split_seconds ? formatSplit(p.actual_split_seconds) : "--:--"}
                   </span>
-                  {target?.target_split_seconds && (
-                    <span className="text-blue-400 text-xs">target: {formatSplit(target.target_split_seconds)}</span>
-                  )}
+                  {target && (() => {
+                    const { seconds, label } = resolveTarget(target);
+                    if (!seconds) return null;
+                    return <span className="text-blue-400 text-xs">target: {formatSplit(seconds)}{label ? ` (${label})` : ""}</span>;
+                  })()}
                   {avgRow && (
                     <span className="text-muted-foreground text-xs ml-auto">avg: {formatSplit(Number(avgRow.avg_split_seconds))}</span>
                   )}

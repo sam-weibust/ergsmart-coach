@@ -194,7 +194,7 @@ const ErgAssignments = ({ teamId, teamMembers, isCoach, profile, boats, initialA
         {visibleAssignments.map((a: any) => {
           const myStatus = myResultMap[a.id];
           const piecesArr: any[] = a.pieces || [];
-          const firstTarget = piecesArr.find((p: any) => p.target_split_seconds);
+          const firstTarget = piecesArr.find((p: any) => p.target_split_seconds || p.target_split_type === "relative_2k");
           const isUpcoming = a.scheduled_date && a.scheduled_date >= today;
 
           const isForCoxswain = isCoxswain && boats.some((b: any) => {
@@ -230,7 +230,14 @@ const ErgAssignments = ({ teamId, teamMembers, isCoach, profile, boats, initialA
                         <span>{piecesArr.length} piece{piecesArr.length !== 1 ? "s" : ""}</span>
                       )}
                       {firstTarget && (
-                        <span className="text-blue-400 font-medium">{formatSplit(firstTarget.target_split_seconds)}/500m</span>
+                        <span className="text-blue-400 font-medium">
+                          {firstTarget.target_split_type === "relative_2k"
+                            ? (() => {
+                                const off = firstTarget.target_split_offset_seconds ?? 0;
+                                return off >= 0 ? `2K + ${off}s` : `2K − ${Math.abs(off)}s`;
+                              })()
+                            : `${formatSplit(firstTarget.target_split_seconds)}/500m`}
+                        </span>
                       )}
                     </div>
                     {a.deadline && (

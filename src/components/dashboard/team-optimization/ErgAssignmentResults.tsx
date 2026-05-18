@@ -313,14 +313,23 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
                         <div className="space-y-1">
                           {result.manual_pieces.map((p: any) => {
                             const targetPiece = pieces.find((tp: any) => tp.piece_number === p.piece_number);
+                            const splitType = targetPiece?.target_split_type ?? "exact";
+                            const targetSplit = splitType === "exact" ? (targetPiece?.target_split_seconds ?? null) : null;
+                            const relativeLabel = splitType === "relative_2k" && targetPiece ? (() => {
+                              const off = targetPiece.target_split_offset_seconds ?? 0;
+                              return off >= 0 ? `2K + ${off}s` : `2K − ${Math.abs(off)}s`;
+                            })() : null;
                             return (
                               <div key={p.piece_number} className="flex items-center gap-2 text-xs">
                                 <span className="w-12 text-muted-foreground shrink-0">Piece {p.piece_number}</span>
-                                <span className={`font-mono ${splitColor(p.actual_split_seconds, targetPiece?.target_split_seconds)}`}>
+                                <span className={`font-mono ${splitColor(p.actual_split_seconds, targetSplit)}`}>
                                   {p.actual_split_seconds ? formatSplit(p.actual_split_seconds) : "--:--"}
                                 </span>
-                                {targetPiece?.target_split_seconds && (
-                                  <span className="text-muted-foreground">/ {formatSplit(targetPiece.target_split_seconds)}</span>
+                                {targetSplit && (
+                                  <span className="text-muted-foreground">/ {formatSplit(targetSplit)}</span>
+                                )}
+                                {relativeLabel && (
+                                  <span className="text-blue-400">{relativeLabel}</span>
                                 )}
                                 {p.actual_stroke_rate && (
                                   <span className={`ml-2 ${targetPiece?.target_stroke_rate ? (Math.abs(p.actual_stroke_rate - targetPiece.target_stroke_rate) <= 1 ? "text-green-400" : "text-yellow-400") : ""}`}>
