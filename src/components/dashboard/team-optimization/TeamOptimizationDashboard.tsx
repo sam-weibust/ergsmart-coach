@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun,
+  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SIDEBAR_ITEMS } from "./constants";
@@ -33,11 +33,12 @@ import CoachManagement from "./CoachManagement";
 import DirectMessages from "./DirectMessages";
 import WorkoutComparison from "./WorkoutComparison";
 import TodayTab from "./TodayTab";
+import ErgAssignments from "./ErgAssignments";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
-  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun,
+  CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
 };
 
 interface Props {
@@ -102,6 +103,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
   const renderSection = () => {
     switch (activeSection) {
       case "today": return <TodayTab {...commonProps} onNavigate={(s) => setActiveSection(s)} />;
+      case "erg_assignments": return <ErgAssignments teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} boats={boats} />;
       case "overview": return <TeamOverview {...commonProps} />;
       case "calendar": return <TeamCalendar {...commonProps} />;
       case "lineups": return <BoatLineupBuilder {...commonProps} />;

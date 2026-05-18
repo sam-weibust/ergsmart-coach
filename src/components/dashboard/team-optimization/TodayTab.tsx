@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell } from "lucide-react";
+import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -157,6 +157,30 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
       queryClient.invalidateQueries({ queryKey: ["today-practice-entry", teamId, todayStr] });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const { data: myErgAssignments = [] } = useQuery({
+    queryKey: ["my-erg-assignments-today", teamId, profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const { data } = await (supabase as any)
+        .from("erg_assignments")
+        .select("*, result:erg_assignment_results(status, completed_at)")
+        .eq("team_id", teamId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (!data) return [];
+      // Filter to only those assigned to this athlete
+      return data.filter((a: any) => {
+        const assignedTo: string[] = a.assigned_to || [];
+        return (
+          assignedTo.includes("team") ||
+          assignedTo.includes(profile.id)
+        );
+      });
+    },
+    enabled: !isCoach && !!profile?.id,
   });
 
   const { data: dailyWorkout } = useQuery({
@@ -506,6 +530,57 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
         </CardContent>
       </Card>
 
+      {/* Assigned Erg Workouts (athlete view) */}
+      {!isCoach && myErgAssignments.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-foreground flex items-center gap-2">
+              <Dumbbell className="h-4 w-4 text-primary" />Assigned Erg Workouts
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {myErgAssignments.map((a: any) => {
+              const myResult = Array.isArray(a.result) ? a.result[0] : a.result;
+              const status = myResult?.status || "pending";
+              const pieces: any[] = a.pieces || [];
+              const targets = pieces.filter((p: any) => p.target_split_seconds).slice(0, 2);
+              return (
+                <button
+                  key={a.id}
+                  className="w-full flex items-center gap-3 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 border border-border text-left transition-colors"
+                  onClick={() => onNavigate("erg_assignments")}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-medium truncate">{a.title}</span>
+                      <span className={`text-[10px] px-1.5 py-0 rounded-full border ${
+                        status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                        status === "overdue" ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                        "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                      }`}>{status}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground flex gap-2">
+                      {pieces.length > 0 && <span>{pieces.length} pieces</span>}
+                      {targets.map((p: any) => (
+                        <span key={p.piece_number} className="text-blue-400">
+                          {Math.floor(p.target_split_seconds / 60)}:{String(p.target_split_seconds % 60).padStart(2, "0")}/500m
+                        </span>
+                      ))}
+                      {a.deadline && (
+                        <span className="text-yellow-400">
+                          Due {new Date(a.deadline).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick actions — coach only */}
       {isCoach && (
         <Card>
@@ -521,6 +596,9 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
             </Button>
             <Button size="sm" variant="outline" className="text-xs gap-1.5 text-foreground" onClick={() => onNavigate("board")}>
               <MessageSquare className="h-3.5 w-3.5" />Message Team
+            </Button>
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 text-foreground" onClick={() => onNavigate("erg_assignments")}>
+              <Dumbbell className="h-3.5 w-3.5" />Assign Erg Workout
             </Button>
           </CardContent>
         </Card>

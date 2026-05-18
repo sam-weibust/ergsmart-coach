@@ -62,6 +62,7 @@ export function displayName(profile: any): string {
 export const SIDEBAR_ITEMS = [
   { key: "today", label: "Today", icon: "Sun" },
   { key: "overview", label: "Overview", icon: "LayoutDashboard" },
+  { key: "erg_assignments", label: "Erg Workouts", icon: "Dumbbell" },
   { key: "calendar", label: "Calendar", icon: "CalendarDays" },
   { key: "lineups", label: "Boat Lineups", icon: "Ship" },
   { key: "lineup_history", label: "Lineup History", icon: "History" },
