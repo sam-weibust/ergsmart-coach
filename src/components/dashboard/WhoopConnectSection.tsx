@@ -90,13 +90,24 @@ export default function WhoopConnectSection() {
     };
 
     // Native deep-link events dispatched by App.tsx
-    const nativeHandler = () => { setIsConnecting(false); checkWhoop(); };
+    const nativeHandler = () => {
+      setIsConnecting(false);
+      checkWhoop();
+      toast({ title: "Whoop connected", description: "Recovery, sleep, and strain data will sync automatically." });
+    };
+    const nativeErrorHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setIsConnecting(false);
+      toast({ title: "Whoop connection failed", description: detail?.error || "Unknown error", variant: "destructive" });
+    };
 
     window.addEventListener("message", msgHandler);
     window.addEventListener("whoop_connected", nativeHandler);
+    window.addEventListener("whoop_error", nativeErrorHandler);
     return () => {
       window.removeEventListener("message", msgHandler);
       window.removeEventListener("whoop_connected", nativeHandler);
+      window.removeEventListener("whoop_error", nativeErrorHandler);
       stopPolling();
     };
   }, [checkWhoop, toast, stopPolling]);

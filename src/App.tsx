@@ -97,9 +97,11 @@ function AppRouter() {
 
           let imported = 0;
           try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const userId = state ? decodeURIComponent(state) : (session?.user?.id ?? "");
             const res = await c2Callback({
               code,
-              user_id: state ? decodeURIComponent(state) : "",
+              user_id: userId,
               redirect_uri: redirectUri,
             });
             const data = await res.json();
@@ -117,18 +119,21 @@ function AppRouter() {
           const redirectUri = "https://crewsync.app/auth/whoop/callback";
           console.log("[appUrlOpen] whoop callback — redirect_uri:", redirectUri);
           try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const userId = state ? decodeURIComponent(state) : (session?.user?.id ?? "");
             const res = await whoopCallback({
               code,
-              user_id: state ? decodeURIComponent(state) : "",
+              user_id: userId,
               redirect_uri: redirectUri,
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             navigate("/dashboard", { replace: true });
-            window.dispatchEvent(new CustomEvent("whoop_connected"));
+            window.dispatchEvent(new CustomEvent("whoop_connected", { detail: { success: true } }));
           } catch (cbErr: any) {
             console.error("[appUrlOpen] whoop-callback failed:", cbErr?.message);
             navigate("/dashboard", { replace: true });
+            window.dispatchEvent(new CustomEvent("whoop_error", { detail: { error: cbErr?.message } }));
           }
         }
       } catch (e) {
