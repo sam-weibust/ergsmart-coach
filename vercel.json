@@ -1,6 +1,14 @@
 {
+  "redirects": [
+    {
+      "source": "/.well-known/(.*)",
+      "has": [{ "type": "host", "value": "www.crewsync.app" }],
+      "destination": "https://crewsync.app/.well-known/$1",
+      "permanent": false
+    }
+  ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!\\.well-known(?:/|$)).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
