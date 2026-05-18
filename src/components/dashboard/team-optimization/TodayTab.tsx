@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import AthleteErgAssignment from "./AthleteErgAssignment";
 
 interface Props {
   teamId: string;
@@ -44,6 +45,7 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
   const [workoutText, setWorkoutText] = useState("");
   const [weather, setWeather] = useState<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [selectedErgAssignment, setSelectedErgAssignment] = useState<any>(null);
 
   const { data: todayLineups = [] } = useQuery({
     queryKey: ["today-lineups", teamId, todayStr],
@@ -163,24 +165,39 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     queryKey: ["my-erg-assignments-today", teamId, profile?.id],
     queryFn: async () => {
       if (!profile?.id) return [];
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("erg_assignments")
-        .select("*, result:erg_assignment_results(status, completed_at)")
+        .select("*")
         .eq("team_id", teamId)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(5);
-      if (!data) return [];
-      // Filter to only those assigned to this athlete
+        .neq("status", "draft")
+        .order("scheduled_date", { ascending: true })
+        .limit(10);
+      if (error || !data) return [];
+      // Filter client-side to assignments for this athlete
       return data.filter((a: any) => {
         const assignedTo: string[] = a.assigned_to || [];
         return (
           assignedTo.includes("team") ||
-          assignedTo.includes(profile.id)
+          assignedTo.includes(profile.id) ||
+          boats.some((b: any) => assignedTo.includes(b.id))
         );
       });
     },
     enabled: !isCoach && !!profile?.id,
+  });
+
+  const { data: myErgResultsMap = {} } = useQuery({
+    queryKey: ["my-erg-results-today", profile?.id, myErgAssignments.map((a: any) => a.id).join(",")],
+    queryFn: async () => {
+      if (!profile?.id || !myErgAssignments.length) return {};
+      const { data } = await (supabase as any)
+        .from("erg_assignment_results")
+        .select("assignment_id, status")
+        .eq("athlete_id", profile.id)
+        .in("assignment_id", myErgAssignments.map((a: any) => a.id));
+      return (data || []).reduce((acc: any, r: any) => { acc[r.assignment_id] = r.status; return acc; }, {});
+    },
+    enabled: !isCoach && !!profile?.id && myErgAssignments.length > 0,
   });
 
   const { data: dailyWorkout } = useQuery({
@@ -243,6 +260,17 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     Array.isArray(l?.seats) && l.seats.some((s: any) => s?.user_id === profile?.id)
   );
   const mySeat = myLineup?.seats?.find((s: any) => s?.user_id === profile?.id);
+
+  // Open a specific assignment detail directly from TodayTab
+  if (selectedErgAssignment) {
+    return (
+      <AthleteErgAssignment
+        assignment={selectedErgAssignment}
+        profile={profile}
+        onBack={() => setSelectedErgAssignment(null)}
+      />
+    );
+  }
 
   try { return (
     <div className="space-y-4">
@@ -531,52 +559,57 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
       </Card>
 
       {/* Assigned Erg Workouts (athlete view) */}
-      {!isCoach && myErgAssignments.length > 0 && (
+      {!isCoach && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-foreground flex items-center gap-2">
-              <Dumbbell className="h-4 w-4 text-primary" />Assigned Erg Workouts
+              <Dumbbell className="h-4 w-4 text-primary" />Coach Workouts
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {myErgAssignments.map((a: any) => {
-              const myResult = Array.isArray(a.result) ? a.result[0] : a.result;
-              const status = myResult?.status || "pending";
-              const pieces: any[] = a.pieces || [];
-              const targets = pieces.filter((p: any) => p.target_split_seconds).slice(0, 2);
-              return (
-                <button
-                  key={a.id}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 border border-border text-left transition-colors"
-                  onClick={() => onNavigate("erg_assignments")}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium truncate">{a.title}</span>
-                      <span className={`text-[10px] px-1.5 py-0 rounded-full border ${
-                        status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
-                        status === "overdue" ? "bg-red-500/20 text-red-400 border-red-500/30" :
-                        "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-                      }`}>{status}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex gap-2">
-                      {pieces.length > 0 && <span>{pieces.length} pieces</span>}
-                      {targets.map((p: any) => (
-                        <span key={p.piece_number} className="text-blue-400">
-                          {Math.floor(p.target_split_seconds / 60)}:{String(p.target_split_seconds % 60).padStart(2, "0")}/500m
-                        </span>
-                      ))}
-                      {a.deadline && (
-                        <span className="text-yellow-400">
-                          Due {new Date(a.deadline).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                </button>
-              );
-            })}
+          <CardContent>
+            {myErgAssignments.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2">No workouts assigned yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {myErgAssignments.map((a: any) => {
+                  const status = (myErgResultsMap as any)[a.id] || "pending";
+                  const pieces: any[] = a.pieces || [];
+                  const firstTarget = pieces.find((p: any) => p.target_split_seconds);
+                  return (
+                    <button
+                      key={a.id}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/60 active:bg-muted/80 border border-border text-left transition-colors min-h-[56px]"
+                      onClick={() => setSelectedErgAssignment(a)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <span className="text-sm font-semibold truncate">{a.title}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
+                            status === "completed" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                            status === "overdue"   ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                            status === "excused"   ? "bg-gray-500/20 text-gray-400 border-gray-500/30" :
+                            "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                          }`}>{status}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
+                          {a.scheduled_date && <span>{a.scheduled_date}</span>}
+                          {pieces.length > 0 && <span>{pieces.length} piece{pieces.length !== 1 ? "s" : ""}</span>}
+                          {firstTarget && (
+                            <span className="text-blue-400 font-medium">
+                              {Math.floor(firstTarget.target_split_seconds / 60)}:{String(firstTarget.target_split_seconds % 60).padStart(2, "0")}/500m
+                            </span>
+                          )}
+                          {a.deadline && (
+                            <span className="text-yellow-400">Due {new Date(a.deadline).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

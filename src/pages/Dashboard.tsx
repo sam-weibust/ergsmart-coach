@@ -595,6 +595,20 @@ const Dashboard = () => {
     })();
   }, [loading]);
 
+  // ── Navigate-to-live-erg event (from erg assignment "Log with PM5") ────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.assignmentId) {
+        sessionStorage.setItem("pending_erg_assignment", detail.assignmentId);
+        sessionStorage.setItem("pending_erg_pieces", JSON.stringify(detail.pieces || []));
+      }
+      navTo("live", "erg");
+    };
+    window.addEventListener("navigate_to_live_erg", handler);
+    return () => window.removeEventListener("navigate_to_live_erg", handler);
+  }, []);
+
   // ── Midnight date-change detector ─────────────────────────────────────────
   useEffect(() => {
     let lastDate = getLocalDate();
