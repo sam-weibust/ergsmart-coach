@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
   CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
+  Bot, TrendingUp, Globe, Mail, Palette,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SIDEBAR_ITEMS } from "./constants";
@@ -34,11 +35,17 @@ import DirectMessages from "./DirectMessages";
 import WorkoutComparison from "./WorkoutComparison";
 import TodayTab from "./TodayTab";
 import ErgAssignments from "./ErgAssignments";
+import CoachAIAssistant from "./CoachAIAssistant";
+import MultiSeasonAnalytics from "./MultiSeasonAnalytics";
+import TeamBrandingSection from "./TeamBrandingSection";
+import ParentEmailSection from "./ParentEmailSection";
+import RecruitingPortalSettings from "./RecruitingPortalSettings";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
   CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
+  Bot, TrendingUp, Globe, Mail, Palette,
 };
 
 interface Props {
@@ -126,6 +133,11 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
       case "coaches": return (
         <CoachManagement teamId={teamId} teamName={teamName} isCoach={isCoach} profile={profile} />
       );
+      case "coach_ai": return <CoachAIAssistant teamId={teamId} teamName={teamName} profile={profile} isCoach={isCoach} />;
+      case "season_analytics": return <MultiSeasonAnalytics teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} />;
+      case "branding": return <TeamBrandingSection teamId={teamId} isCoach={isCoach} />;
+      case "parent_emails": return <ParentEmailSection teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} />;
+      case "recruiting_portal": return <RecruitingPortalSettings teamId={teamId} teamName={teamName} teamMembers={teamMembers} isCoach={isCoach} />;
       case "settings": return (
         <div className="space-y-8">
           <SeasonManager teamId={teamId} isCoach={isCoach} />

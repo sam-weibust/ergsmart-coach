@@ -82,5 +82,11 @@ export const SIDEBAR_ITEMS = [
   { key: "messages", label: "Messages", icon: "MessageCircle" },
   { key: "board", label: "Message Board", icon: "MessageSquare" },
   { key: "coaches", label: "Coaching Staff", icon: "Users" },
+  // ── Elite Team features ───────────────────────────────────────────────────
+  { key: "coach_ai", label: "Coach AI", icon: "Bot" },
+  { key: "season_analytics", label: "Season Analytics", icon: "TrendingUp" },
+  { key: "recruiting_portal", label: "Recruiting Portal", icon: "Globe" },
+  { key: "parent_emails", label: "Parent Emails", icon: "Mail" },
+  { key: "branding", label: "Team Branding", icon: "Palette" },
   { key: "settings", label: "Team Settings", icon: "Settings" },
-] as const;
+];

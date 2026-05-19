@@ -21,6 +21,8 @@ import RegattaPage from "./pages/RegattaPage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import PricingPage from "./pages/PricingPage";
+import TeamPortalPage from "./pages/TeamPortalPage";
+import RecruitingPortalPage from "./pages/RecruitingPortalPage";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
@@ -194,6 +196,8 @@ function AppRouter() {
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/leaderboard" element={<LeaderboardPage />} />
       <Route path="/pricing" element={<PricingPage />} />
+      <Route path="/team/:slug" element={<TeamPortalPage />} />
+      <Route path="/recruit/:slug" element={<RecruitingPortalPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
