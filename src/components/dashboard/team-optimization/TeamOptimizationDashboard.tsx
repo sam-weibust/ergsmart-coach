@@ -41,6 +41,7 @@ import MultiSeasonAnalytics from "./MultiSeasonAnalytics";
 import TeamBrandingSection from "./TeamBrandingSection";
 import ParentEmailSection from "./ParentEmailSection";
 import RecruitingPortalSettings from "./RecruitingPortalSettings";
+import AthleteTeamsView from "./AthleteTeamsView";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
@@ -107,6 +108,22 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, isC
     refetchInterval: 30000,
     enabled: !!profile?.id,
   });
+
+  // Athletes and coxswains get their own dedicated view
+  if (!isCoach) {
+    return (
+      <AthleteTeamsView
+        teamId={teamId}
+        teamName={teamName}
+        teamMembers={teamMembers}
+        isCox={isCox}
+        profile={profile}
+        safesportMode={safesportMode}
+        boats={boats}
+        seasonId={effectiveSeasonId}
+      />
+    );
+  }
 
   const visibleSidebarItems = SIDEBAR_ITEMS.filter(item => isCoach || !item.coachOnly);
 
