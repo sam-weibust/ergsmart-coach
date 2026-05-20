@@ -32,6 +32,7 @@ import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import { TeamBrandingProvider } from "@/context/TeamBrandingContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { CoachComparison } from "./CoachComparison";
 
 interface TeamsSectionProps {
   profile: any;
