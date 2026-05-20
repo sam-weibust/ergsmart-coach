@@ -153,11 +153,15 @@ function AppRouter() {
     // Callback pages must complete their own logic — never redirect away from them.
     const isCallbackPath = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
 
+    // Public routes that should never auto-redirect to dashboard, even when logged in.
+    const PUBLIC_PREFIXES = ["/team/", "/recruit/", "/athlete/", "/leaderboard", "/pricing", "/privacy", "/directory"];
+    const isPublicPath = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
+
     // Fast session check — reads from localStorage, resolves in <50ms typically.
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session && !isCallbackPath) {
+      if (data.session && !isCallbackPath && !isPublicPath) {
         navigate("/dashboard", { replace: true });
-      } else if (isNative && !isCallbackPath) {
+      } else if (isNative && !isCallbackPath && !isPublicPath) {
         // Never show landing page on native — go straight to login.
         navigate("/auth", { replace: true });
       }
@@ -167,7 +171,8 @@ function AppRouter() {
     // React to future auth state changes for the lifetime of the app.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const onCallback = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
-      if (event === "SIGNED_IN" && session && !onCallback) {
+      const onPublic = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
+      if (event === "SIGNED_IN" && session && !onCallback && !onPublic) {
         navigate("/dashboard", { replace: true });
       } else if (event === "SIGNED_OUT") {
         queryClient.clear();

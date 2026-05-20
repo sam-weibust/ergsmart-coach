@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
+import { TeamBrandingProvider } from "@/context/TeamBrandingContext";
 import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
 import AttendancePrompt from "./team-optimization/AttendancePrompt";
 import WellnessCheckin from "./team-optimization/WellnessCheckin";
@@ -545,14 +546,16 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
               {/* Team Optimization Dashboard */}
               <ErrorBoundary>
-                <TeamOptimizationDashboard
-                  teamId={activeTeam.id}
-                  teamName={activeTeam.name}
-                  teamMembers={activeTeam.team_members || []}
-                  isCoach={isCoach}
-                  profile={profile}
-                  safesportMode={safesportMode}
-                />
+                <TeamBrandingProvider teamId={activeTeam.id}>
+                  <TeamOptimizationDashboard
+                    teamId={activeTeam.id}
+                    teamName={activeTeam.name}
+                    teamMembers={activeTeam.team_members || []}
+                    isCoach={isCoach}
+                    profile={profile}
+                    safesportMode={safesportMode}
+                  />
+                </TeamBrandingProvider>
               </ErrorBoundary>
 
               <AlertDialog>

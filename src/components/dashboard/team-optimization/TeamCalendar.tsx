@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, Wind, Waves, Users, LayoutGrid, List, Save, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wind, Waves, Users, LayoutGrid, List, Save, AlertCircle, Plus, X } from "lucide-react";
 import { formatSplit } from "./constants";
 import { useToast } from "@/hooks/use-toast";
+import TeamEventModal, { getEventColor, EVENT_TYPES } from "./TeamEventModal";
+import { useTeamBranding } from "@/context/TeamBrandingContext";
 
 interface Props {
   teamId: string;
@@ -46,12 +48,15 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
   const today = new Date();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { logoUrl, primaryColor, fallbackLogo } = useTeamBranding();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [activeBoatFilter, setActiveBoatFilter] = useState<string[]>([]);
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [addEventDay, setAddEventDay] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<any>(null);
 
   const startOfMonth = new Date(year, month, 1);
   const endOfMonth = new Date(year, month + 1, 0);
@@ -116,6 +121,20 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
     },
   });
 
+  const { data: teamEvents = [] } = useQuery({
+    queryKey: ["team-events", teamId, year, month],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("team_events")
+        .select("*")
+        .eq("team_id", teamId)
+        .gte("date", rangeStart)
+        .lte("date", rangeEnd)
+        .order("date", { ascending: true });
+      return data || [];
+    },
+  });
+
   const saveCoachNotes = useMutation({
     mutationFn: async ({ entryId, notes }: { entryId: string; notes: string }) => {
       const { error } = await supabase
@@ -160,6 +179,17 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
     }
     return map;
   }, [visibleResults]);
+
+  // Group events by date (filter coaches_only if athlete)
+  const eventsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const e of teamEvents) {
+      if (!isCoach && e.visible_to?.type === "coaches_only") continue;
+      if (!map[e.date]) map[e.date] = [];
+      map[e.date].push(e);
+    }
+    return map;
+  }, [teamEvents, isCoach]);
 
   // Group lineups by date
   const lineupsByDate = useMemo(() => {
@@ -209,11 +239,19 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
   const selectedEntries = selectedDay ? (entriesByDate[selectedDay] || []) : [];
   const todayStr = today.toISOString().split("T")[0];
 
+  const selectedEvents = selectedDay ? (eventsByDate[selectedDay] || []) : [];
+
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Header with branding */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
+          <img
+            src={logoUrl || fallbackLogo}
+            alt=""
+            className="h-7 w-7 rounded-lg object-cover shrink-0"
+            style={{ boxShadow: `0 0 0 1.5px ${primaryColor}44` }}
+          />
           <Button variant="ghost" size="sm" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
           <h2 className="text-lg font-semibold w-44 text-center">{MONTHS[month]} {year}</h2>
           <Button variant="ghost" size="sm" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
@@ -270,6 +308,7 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
               const hasPublishedLineup = dayLineups.some((l: any) => l.published_at);
               const hasScheduledLineup = dayLineups.some((l: any) => !l.published_at && dateStr > todayStr);
               const hasPendingEntry = (entriesByDate[dateStr] || []).some((e: any) => e.status === "pending");
+              const dayEvents = eventsByDate[dateStr] || [];
               const isFuture = dateStr > todayStr;
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDay;
@@ -277,17 +316,40 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                 <button
                   key={i}
                   onClick={() => setSelectedDay(isSelected ? null : dateStr)}
-                  className={`relative rounded-lg p-1 min-h-[48px] sm:min-h-[60px] flex flex-col items-start transition-colors text-left
+                  className={`group relative rounded-lg p-1 min-h-[48px] sm:min-h-[60px] flex flex-col items-start transition-colors text-left
                     ${isSelected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 hover:bg-primary/20" : isFuture && (hasPublishedLineup || hasScheduledLineup) ? "bg-blue-50/30 dark:bg-blue-950/20 hover:bg-blue-50/50 dark:hover:bg-blue-950/30" : "hover:bg-muted"}
                   `}
                 >
-                  <span className={`text-xs font-medium mb-1 ${isToday && !isSelected ? "text-primary" : ""}`}>{day}</span>
-                  <div className="flex flex-wrap gap-0.5">
+                  <span className={`text-xs font-medium mb-0.5 ${isToday && !isSelected ? "text-primary" : ""}`}>{day}</span>
+                  <div className="flex flex-wrap gap-0.5 mb-0.5">
                     {hasResults && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
                     {hasPublishedLineup && !isFuture && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
                     {(hasPublishedLineup || hasScheduledLineup) && isFuture && <span className="h-1.5 w-1.5 rounded-full bg-blue-400 ring-1 ring-blue-400/50" />}
                     {hasPendingEntry && !hasResults && !isFuture && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
                   </div>
+                  {/* Event chips */}
+                  {dayEvents.slice(0, 2).map((ev: any) => (
+                    <span
+                      key={ev.id}
+                      className="block w-full text-[9px] leading-tight px-1 py-0.5 rounded text-white truncate mb-0.5"
+                      style={{ background: getEventColor(ev.event_type) }}
+                    >
+                      {ev.title}
+                    </span>
+                  ))}
+                  {dayEvents.length > 2 && (
+                    <span className="text-[9px] text-muted-foreground">+{dayEvents.length - 2} more</span>
+                  )}
+                  {/* Add event button (coaches only) */}
+                  {isCoach && (
+                    <button
+                      className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity h-4 w-4 rounded bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground"
+                      onClick={e => { e.stopPropagation(); setAddEventDay(dateStr); }}
+                      title="Add event"
+                    >
+                      <Plus className="h-2.5 w-2.5" />
+                    </button>
+                  )}
                 </button>
               );
             })}
@@ -304,11 +366,57 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
       {/* Day detail */}
       {selectedDay && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-base">
-            {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-base">
+              {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </h3>
+            {isCoach && (
+              <Button size="sm" variant="outline" className="h-7 gap-1 text-xs shrink-0" onClick={() => setAddEventDay(selectedDay)}>
+                <Plus className="h-3 w-3" />Add Event
+              </Button>
+            )}
+          </div>
 
-          {selectedResults.length === 0 && selectedLineups.length === 0 && (
+          {/* Events for this day */}
+          {selectedEvents.length > 0 && (
+            <div className="space-y-2">
+              {selectedEvents.map((ev: any) => (
+                <div
+                  key={ev.id}
+                  className="flex items-start gap-3 p-3 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity"
+                  style={{ borderLeftColor: getEventColor(ev.event_type), borderLeftWidth: 4 }}
+                  onClick={() => isCoach && setEditingEvent(ev)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{ev.title}</span>
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full text-white font-medium"
+                        style={{ background: getEventColor(ev.event_type) }}
+                      >
+                        {EVENT_TYPES.find(t => t.value === ev.event_type)?.label ?? ev.event_type}
+                      </span>
+                      {ev.visible_to?.type === "coaches_only" && (
+                        <span className="text-[10px] text-muted-foreground border border-border rounded-full px-1.5 py-0.5">Coaches Only</span>
+                      )}
+                    </div>
+                    {(ev.start_time || ev.location) && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {ev.start_time && <span>{ev.start_time.slice(0,5)}{ev.end_time ? `–${ev.end_time.slice(0,5)}` : ""} </span>}
+                        {ev.location && <span>· {ev.location}</span>}
+                      </p>
+                    )}
+                    {ev.description && <p className="text-xs text-muted-foreground mt-1">{ev.description}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedResults.length === 0 && selectedLineups.length === 0 && selectedEvents.length === 0 && (
+            <p className="text-sm text-muted-foreground">No events or practice data for this day.</p>
+          )}
+          {selectedResults.length === 0 && selectedLineups.length === 0 && selectedEvents.length > 0 && (
             <p className="text-sm text-muted-foreground">No practice data for this day.</p>
           )}
           {selectedDay && selectedDay > todayStr && selectedLineups.length > 0 && (
@@ -467,6 +575,30 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
             });
           })()}
         </div>
+      )}
+
+      {/* Add event modal */}
+      {addEventDay && (
+        <TeamEventModal
+          teamId={teamId}
+          coachId={profile?.id}
+          initialDate={addEventDay}
+          isCoach={isCoach}
+          boats={boats}
+          onClose={() => setAddEventDay(null)}
+        />
+      )}
+
+      {/* Edit event modal */}
+      {editingEvent && (
+        <TeamEventModal
+          teamId={teamId}
+          coachId={profile?.id}
+          event={editingEvent}
+          isCoach={isCoach}
+          boats={boats}
+          onClose={() => setEditingEvent(null)}
+        />
       )}
     </div>
   );

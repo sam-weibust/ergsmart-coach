@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SIDEBAR_ITEMS } from "./constants";
+import { useTeamBranding } from "@/context/TeamBrandingContext";
 import TeamOverview from "./TeamOverview";
 import BoatLineupBuilder from "./BoatLineupBuilder";
 import ErgScoreManager from "./ErgScoreManager";
@@ -60,6 +61,7 @@ interface Props {
 
 const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection, safesportMode = true }: Props) => {
   const [activeSection, setActiveSection] = useState(initialSection ?? "overview");
+  const { logoUrl, primaryColor, fallbackLogo } = useTeamBranding();
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("all");
 
   const { data: seasons = [] } = useQuery({
@@ -211,8 +213,19 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
           </div>
         )}
 
+        {/* Team branding header */}
+        <div className="flex items-center gap-3 px-1 pb-3 mb-1 border-b border-border">
+          <img
+            src={logoUrl || fallbackLogo}
+            alt={teamName}
+            className="h-9 w-9 rounded-xl object-cover shrink-0"
+            style={{ boxShadow: `0 0 0 2px ${primaryColor}22` }}
+          />
+          <h2 className="text-base font-bold text-foreground truncate" style={{ color: primaryColor }}>{teamName}</h2>
+        </div>
+
         {/* Sticky horizontal tab bar — mobile only */}
-        <div className="md:hidden sticky top-0 z-20 bg-[#0a1628] border-b border-white/10 -mx-4 px-0 mb-4">
+        <div className="md:hidden sticky top-0 z-20 border-b border-white/10 -mx-4 px-0 mb-4" style={{ background: primaryColor }}>
           <div className="flex overflow-x-auto scrollbar-none">
             {SIDEBAR_ITEMS.map((item) => {
               const Icon = ICON_MAP[item.icon];

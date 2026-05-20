@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell, ChevronRight } from "lucide-react";
+import { Sun, Cloud, CloudRain, CloudSnow, Wind, MapPin, Users, Ship, Calendar, MessageSquare, Save, Edit2, Loader2, CheckCircle2, Dumbbell, ChevronRight, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AthleteErgAssignment from "./AthleteErgAssignment";
+import { getEventColor, EVENT_TYPES } from "./TeamEventModal";
+import { useTeamBranding } from "@/context/TeamBrandingContext";
 
 interface Props {
   teamId: string;
@@ -40,6 +42,7 @@ function AttendanceDot({ status }: { status?: string }) {
 const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats = [], onNavigate }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { logoUrl, primaryColor, fallbackLogo } = useTeamBranding();
   const todayStr = new Date().toISOString().split("T")[0];
   const [editingWorkout, setEditingWorkout] = useState(false);
   const [workoutText, setWorkoutText] = useState("");
@@ -103,6 +106,19 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
         .lte("date", thirtyDays.toISOString().split("T")[0])
         .order("date", { ascending: true });
       return data || [];
+    },
+  });
+
+  const { data: todayEvents = [] } = useQuery({
+    queryKey: ["team-events-today", teamId, todayStr],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("team_events")
+        .select("*")
+        .eq("team_id", teamId)
+        .eq("date", todayStr)
+        .order("start_time", { ascending: true });
+      return (data || []).filter((e: any) => isCoach || e.visible_to?.type !== "coaches_only");
     },
   });
 
@@ -200,6 +216,42 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
     enabled: !isCoach && !!profile?.id && myErgAssignments.length > 0,
   });
 
+  const sevenDaysLater = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    return d.toISOString().split("T")[0];
+  }, [todayStr]);
+
+  const { data: weekEvents = [] } = useQuery({
+    queryKey: ["team-events-week", teamId, todayStr],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("team_events")
+        .select("*")
+        .eq("team_id", teamId)
+        .gte("date", todayStr)
+        .lte("date", sevenDaysLater)
+        .order("date", { ascending: true });
+      return (data || []).filter((e: any) => isCoach || e.visible_to?.type !== "coaches_only");
+    },
+    enabled: !isCoach,
+  });
+
+  const { data: weekLineups = [] } = useQuery({
+    queryKey: ["week-lineups", teamId, todayStr],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("boat_lineups")
+        .select("*")
+        .eq("team_id", teamId)
+        .gte("practice_date", todayStr)
+        .lte("practice_date", sevenDaysLater)
+        .not("published_at", "is", null)
+        .order("practice_date", { ascending: true });
+      return data || [];
+    },
+    enabled: !isCoach,
+  });
+
   const { data: dailyWorkout } = useQuery({
     queryKey: ["team-daily-workout", teamId, todayStr],
     queryFn: async () => {
@@ -275,9 +327,42 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
   try { return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
+        <img src={logoUrl || fallbackLogo} alt="" className="h-7 w-7 rounded-lg object-cover shrink-0" />
         <Sun className="h-5 w-5 text-yellow-400" />
-        <h2 className="text-lg font-bold text-foreground">Today — {new Date(todayStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</h2>
+        <h2 className="text-lg font-bold text-foreground" style={{ color: primaryColor }}>Today — {new Date(todayStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</h2>
       </div>
+
+      {/* Today's custom events — shown above lineup */}
+      {todayEvents.length > 0 && (
+        <div className="space-y-2">
+          {todayEvents.map((ev: any) => {
+            const evColor = getEventColor(ev.event_type);
+            const evLabel = EVENT_TYPES.find(t => t.value === ev.event_type)?.label ?? ev.event_type;
+            return (
+              <div
+                key={ev.id}
+                className="flex items-start gap-3 rounded-xl px-4 py-3 text-white"
+                style={{ background: evColor }}
+              >
+                <CalendarDays className="h-4 w-4 mt-0.5 shrink-0 opacity-90" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm">{ev.title}</span>
+                    <span className="text-[10px] bg-white/20 rounded-full px-1.5 py-0.5 font-medium">{evLabel}</span>
+                  </div>
+                  {(ev.start_time || ev.location) && (
+                    <p className="text-xs text-white/80 mt-0.5">
+                      {ev.start_time && <span>{ev.start_time.slice(0,5)}{ev.end_time ? `–${ev.end_time.slice(0,5)}` : ""}</span>}
+                      {ev.location && <span> · {ev.location}</span>}
+                    </p>
+                  )}
+                  {ev.description && <p className="text-xs text-white/70 mt-0.5">{ev.description}</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Weather */}
       {weather && (
@@ -338,6 +423,78 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
                 {checkIn.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check In"}
               </Button>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* This Week — athlete only */}
+      {!isCoach && (weekEvents.length > 0 || weekLineups.length > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-foreground flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-primary" />This Week
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              // Merge events and lineups into a sorted timeline
+              const items: any[] = [
+                ...weekEvents.map((e: any) => ({ ...e, _type: "event", _sortDate: e.date })),
+                ...weekLineups.map((l: any) => ({ ...l, _type: "lineup", _sortDate: l.practice_date })),
+              ].sort((a, b) => a._sortDate.localeCompare(b._sortDate));
+
+              if (items.length === 0) return <p className="text-xs text-muted-foreground">Nothing scheduled this week.</p>;
+
+              return (
+                <div className="space-y-2">
+                  {items.map((item: any) => {
+                    if (item._type === "event") {
+                      const evColor = getEventColor(item.event_type);
+                      const evLabel = EVENT_TYPES.find(t => t.value === item.event_type)?.label ?? item.event_type;
+                      return (
+                        <div key={`ev-${item.id}`} className="flex items-start gap-3">
+                          <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: evColor + "22" }}>
+                            <CalendarDays className="h-3.5 w-3.5" style={{ color: evColor }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-medium">{item.title}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full text-white font-medium" style={{ background: evColor }}>{evLabel}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(item.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                              {item.start_time && ` · ${item.start_time.slice(0,5)}`}
+                              {item.location && ` · ${item.location}`}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // Lineup
+                      const mySeat = Array.isArray(item.seats) && item.seats.find((s: any) => s.user_id === profile?.id);
+                      return (
+                        <div key={`lu-${item.id}`} className="flex items-start gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                            <Ship className="h-3.5 w-3.5 text-blue-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-medium">{item.name || "Practice"}</span>
+                              {mySeat && (
+                                <Badge variant="outline" className="text-[10px]">{mySeat.seat_number === 0 ? "Cox" : `Seat ${mySeat.seat_number}`}</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(item.practice_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
