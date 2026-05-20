@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, BarChart3, Copy, Check, ChevronDown, GraduationCap, Mail, X } from "lucide-react";
+import { Users, UserPlus, Trash2, Copy, Check, ChevronDown, GraduationCap, Mail, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,24 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Leaderboard } from "./Leaderboard";
-import { TeamGoals } from "./TeamGoals";
-import { MessageBoard } from "./MessageBoard";
-import { TeamWorkoutPlanSection } from "./TeamWorkoutPlanSection";
-import { CoachComparison } from "./CoachComparison";
-import { TeamAnalytics } from "./TeamAnalytics";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import { TeamBrandingProvider } from "@/context/TeamBrandingContext";
-import TeamMessageBoard from "./team-optimization/TeamMessageBoard";
-import AttendancePrompt from "./team-optimization/AttendancePrompt";
-import WellnessCheckin from "./team-optimization/WellnessCheckin";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import TodayTab from "./team-optimization/TodayTab";
 
 interface TeamsSectionProps {
   profile: any;
@@ -586,48 +575,24 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           </Card>
         )}
 
-        {activeTeam && activeTeam._role === "member" && (
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              {activeTeam.description && (
-                <p className="text-sm text-muted-foreground">{activeTeam.description}</p>
-              )}
-              {activeTeam.coach && (
-                <p className="text-xs text-muted-foreground">
-                  Coach: {activeTeam.coach.full_name || activeTeam.coach.username || activeTeam.coach.email}
-                </p>
-              )}
-
-              {/* Today tab — read-only view for athletes */}
-              <ErrorBoundary>
-                <TodayTab
+        {activeTeam && activeTeam._role === "member" && (() => {
+          const isCox = profile?.user_type === "coxswain" || profile?.is_coxswain === true;
+          return (
+            <ErrorBoundary>
+              <TeamBrandingProvider teamId={activeTeam.id}>
+                <TeamOptimizationDashboard
                   teamId={activeTeam.id}
                   teamName={activeTeam.name}
                   teamMembers={activeTeam.team_members || []}
                   isCoach={false}
+                  isCox={isCox}
                   profile={profile}
-                  onNavigate={() => {}}
+                  safesportMode={true}
                 />
-              </ErrorBoundary>
-
-              {profile?.id && <WellnessCheckin teamId={activeTeam.id} userId={profile.id} />}
-              {profile?.id && <AttendancePrompt teamId={activeTeam.id} userId={profile.id} />}
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Leaderboard teamId={activeTeam.id} teamName={activeTeam.name} />
-                <TeamGoals teamId={activeTeam.id} isCoach={false} currentUserId={profile.id} />
-              </div>
-
-              <TeamMessageBoard
-                teamId={activeTeam.id}
-                teamName={activeTeam.name}
-                teamMembers={activeTeam.team_members || []}
-                isCoach={false}
-                profile={profile}
-              />
-            </CardContent>
-          </Card>
-        )}
+              </TeamBrandingProvider>
+            </ErrorBoundary>
+          );
+        })()}
 
         {allTeams.length === 0 && (
           <Card>

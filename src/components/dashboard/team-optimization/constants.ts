@@ -59,34 +59,42 @@ export function displayName(profile: any): string {
   return profile.full_name || profile.username || profile.email || "Unknown";
 }
 
-export const SIDEBAR_ITEMS = [
+export interface SidebarItem {
+  key: string;
+  label: string;
+  icon: string;
+  coachOnly?: boolean;
+  coxVisible?: boolean; // visible to coxswains but not other athletes
+}
+
+export const SIDEBAR_ITEMS: SidebarItem[] = [
   { key: "today", label: "Today", icon: "Sun" },
   { key: "overview", label: "Overview", icon: "LayoutDashboard" },
   { key: "erg_assignments", label: "Erg Workouts", icon: "Dumbbell" },
   { key: "calendar", label: "Calendar", icon: "CalendarDays" },
-  { key: "lineups", label: "Boat Lineups", icon: "Ship" },
-  { key: "lineup_history", label: "Lineup History", icon: "History" },
-  { key: "practice_detail", label: "Practice Detail", icon: "Waves" },
-  { key: "boat_perf", label: "Boat Performance", icon: "TrendingDown" },
   { key: "history", label: "Workout History", icon: "Waves" },
-  { key: "erg_scores", label: "Erg Scores", icon: "BarChart3" },
-  { key: "workout_comparison", label: "Workout Compare", icon: "GitCompare" },
   { key: "onwater", label: "On-Water Results", icon: "Activity" },
-  { key: "seat_racing", label: "Seat Racing", icon: "ArrowLeftRight" },
-  { key: "load", label: "Load Management", icon: "Activity" },
-  { key: "race_optimizer", label: "Race Optimizer", icon: "Trophy" },
-  { key: "recruiting", label: "Recruiting Gaps", icon: "GraduationCap" },
-  { key: "depth", label: "Program Depth", icon: "Users" },
-  { key: "training_plan", label: "Training Plan", icon: "Calendar" },
   { key: "leaderboard", label: "Leaderboard", icon: "Medal" },
-  { key: "messages", label: "Messages", icon: "MessageCircle" },
   { key: "board", label: "Message Board", icon: "MessageSquare" },
-  { key: "coaches", label: "Coaching Staff", icon: "Users" },
+  { key: "messages", label: "Messages", icon: "MessageCircle" },
+  { key: "lineups", label: "Boat Lineups", icon: "Ship", coachOnly: true },
+  { key: "lineup_history", label: "Lineup History", icon: "History", coachOnly: true },
+  { key: "practice_detail", label: "Practice Detail", icon: "Waves", coachOnly: true },
+  { key: "boat_perf", label: "Boat Performance", icon: "TrendingDown", coachOnly: true },
+  { key: "erg_scores", label: "Erg Scores", icon: "BarChart3", coachOnly: true },
+  { key: "workout_comparison", label: "Workout Compare", icon: "GitCompare", coachOnly: true },
+  { key: "seat_racing", label: "Seat Racing", icon: "ArrowLeftRight", coachOnly: true },
+  { key: "load", label: "Load Management", icon: "Activity", coachOnly: true },
+  { key: "race_optimizer", label: "Race Optimizer", icon: "Trophy", coachOnly: true },
+  { key: "recruiting", label: "Recruiting Gaps", icon: "GraduationCap", coachOnly: true },
+  { key: "depth", label: "Program Depth", icon: "Users", coachOnly: true },
+  { key: "training_plan", label: "Training Plan", icon: "Calendar", coachOnly: true },
+  { key: "coaches", label: "Coaching Staff", icon: "Users", coachOnly: true },
   // ── Elite Team features ───────────────────────────────────────────────────
-  { key: "coach_ai", label: "Coach AI", icon: "Bot" },
-  { key: "season_analytics", label: "Season Analytics", icon: "TrendingUp" },
-  { key: "recruiting_portal", label: "Recruiting Portal", icon: "Globe" },
-  { key: "parent_emails", label: "Parent Emails", icon: "Mail" },
-  { key: "branding", label: "Team Branding", icon: "Palette" },
-  { key: "settings", label: "Team Settings", icon: "Settings" },
+  { key: "coach_ai", label: "Coach AI", icon: "Bot", coachOnly: true },
+  { key: "season_analytics", label: "Season Analytics", icon: "TrendingUp", coachOnly: true },
+  { key: "recruiting_portal", label: "Recruiting Portal", icon: "Globe", coachOnly: true },
+  { key: "parent_emails", label: "Parent Emails", icon: "Mail", coachOnly: true },
+  { key: "branding", label: "Team Branding", icon: "Palette", coachOnly: true },
+  { key: "settings", label: "Team Settings", icon: "Settings", coachOnly: true },
 ];

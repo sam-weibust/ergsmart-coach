@@ -54,13 +54,14 @@ interface Props {
   teamName: string;
   teamMembers: any[];
   isCoach: boolean;
+  isCox?: boolean;
   profile: any;
   initialSection?: string;
   safesportMode?: boolean;
 }
 
-const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, profile, initialSection, safesportMode = true }: Props) => {
-  const [activeSection, setActiveSection] = useState(initialSection ?? "overview");
+const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, isCox = false, profile, initialSection, safesportMode = true }: Props) => {
+  const [activeSection, setActiveSection] = useState(initialSection ?? (isCoach ? "overview" : "today"));
   const { logoUrl, primaryColor, fallbackLogo } = useTeamBranding();
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("all");
 
@@ -106,6 +107,8 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
     refetchInterval: 30000,
     enabled: !!profile?.id,
   });
+
+  const visibleSidebarItems = SIDEBAR_ITEMS.filter(item => isCoach || !item.coachOnly);
 
   const commonProps = { teamId, teamName, teamMembers, isCoach, profile, seasonId: effectiveSeasonId, boats };
 
@@ -169,7 +172,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
           </Select>
         )}
         <nav className="space-y-0.5">
-          {SIDEBAR_ITEMS.map((item) => {
+          {visibleSidebarItems.map((item) => {
             const Icon = ICON_MAP[item.icon];
             const showBadge = item.key === "messages" && unreadMessageCount > 0;
             return (
@@ -227,7 +230,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, pro
         {/* Sticky horizontal tab bar — mobile only */}
         <div className="md:hidden sticky top-0 z-20 border-b border-white/10 -mx-4 px-0 mb-4" style={{ background: primaryColor }}>
           <div className="flex overflow-x-auto scrollbar-none">
-            {SIDEBAR_ITEMS.map((item) => {
+            {visibleSidebarItems.map((item) => {
               const Icon = ICON_MAP[item.icon];
               const isActive = activeSection === item.key;
               const showBadge = item.key === "messages" && unreadMessageCount > 0;

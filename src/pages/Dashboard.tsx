@@ -101,7 +101,6 @@ import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfi
 import { CollegeTargetsSection } from "@/components/dashboard/CollegeTargetsSection";
 import CombineSection from "@/components/dashboard/CombineSection";
 import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
-import AthleteComparisonSection from "@/components/dashboard/AthleteComparisonSection";
 import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
 import { ReferralSection } from "@/components/dashboard/ReferralSection";
 import DirectorySection from "@/components/dashboard/DirectorySection";
@@ -833,6 +832,11 @@ const Dashboard = () => {
       return <RegattasSection profile={profile} isCoach={isCoach} initialTab={activeSub ?? undefined} />;
     }
 
+    // Teams — always render TeamsSection; it manages its own internal navigation
+    if (activeSection === "teams") {
+      return <TeamsSection profile={profile} isCoach={isCoach} />;
+    }
+
     // Section with no sub selected → landing grid
     if (!activeSub && section && section.subs.length > 0) {
       return <SectionLanding section={section} navTo={navTo} isCoach={isCoach} userRole={userRole} />;
@@ -899,34 +903,6 @@ const Dashboard = () => {
           return <CritiqueSection />;
         case "ask":
           return <AskSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Teams ─────────────────────────────────────────────────────────────────
-    if (activeSection === "teams") {
-      switch (activeSub) {
-        case "roster":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "lineups":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "seat-racing":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "race-optimizer":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "messages":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "leaderboard":
-          return <TeamsSection profile={profile} isCoach={isCoach} />;
-        case "comparison":
-          return <AthleteComparisonSection />;
-        case "plan-gen":
-          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
-        case "load-mgmt":
-          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
-        case "recruiting-gaps":
-          return isCoach ? <TeamsSection profile={profile} isCoach={isCoach} /> : null;
         default:
           return null;
       }
