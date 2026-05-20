@@ -118,6 +118,7 @@ import { getLocalDate } from "@/lib/dateUtils";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
 import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
 import OrganizationSection from "@/components/dashboard/OrganizationSection";
+import AthleticDirectorDashboard from "@/components/dashboard/AthleticDirectorDashboard";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
 import {
   Dialog,
@@ -454,7 +455,7 @@ const hiddenForRole = (sectionId: string, subId: string | null, role: string | n
   if (!role || role === "rower") return false;
 
   if (role === "organizer") {
-    if (!["dashboard", "teams", "competition", "performance", "settings"].includes(sectionId)) return true;
+    if (!["dashboard", "organization", "teams", "competition", "performance", "settings"].includes(sectionId)) return true;
     if (sectionId === "performance" && subId && subId !== "ask") return true;
     if (sectionId === "competition" && subId && subId !== "leaderboard") return true;
     return false;
@@ -734,6 +735,45 @@ const Dashboard = () => {
     })();
   }, [profile]);
 
+  // Accept AD invite from URL token
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const adToken = params.get("accept_ad_invite");
+    if (!adToken || !profile) return;
+
+    (async () => {
+      const user = await getSessionUser();
+      if (!user) return;
+
+      const { data: invite } = await supabase
+        .from("team_athletic_directors" as any)
+        .select("*")
+        .eq("token", adToken)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (!invite) return;
+
+      // Update invite record to accepted
+      const { error } = await supabase
+        .from("team_athletic_directors" as any)
+        .update({ user_id: user.id, status: "accepted", joined_at: new Date().toISOString() })
+        .eq("id", (invite as any).id);
+
+      if (!error) {
+        // Ensure user has organizer role
+        await supabase.from("profiles").update({ user_type: "organizer" }).eq("id", user.id);
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete("accept_ad_invite");
+        window.history.replaceState({}, "", url.toString());
+
+        queryClient.invalidateQueries({ queryKey: ["profile"] });
+        toast({ title: "Athletic Director access granted!", description: "You now have oversight access to this team." });
+      }
+    })();
+  }, [profile]);
+
   const { data: userTeams } = useQuery({
     queryKey: ["user-team-memberships"],
     queryFn: async () => {
@@ -784,6 +824,7 @@ const Dashboard = () => {
     // Organization dashboard
     if (activeSection === "organization") {
       if (!isCoach && !isOrganizer) return null;
+      if (isOrganizer) return <AthleticDirectorDashboard profile={profile} />;
       return <OrganizationSection profile={profile} />;
     }
 

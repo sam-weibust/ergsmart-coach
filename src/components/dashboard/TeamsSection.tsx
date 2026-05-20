@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UserPlus, Trash2, BarChart3, Copy, Check, ChevronDown } from "lucide-react";
+import { Users, UserPlus, Trash2, BarChart3, Copy, Check, ChevronDown, GraduationCap, Mail, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +60,8 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
   });
   const [membersOpen, setMembersOpen] = useState(false);
   const [safesportMode, setSafesportMode] = useState(true);
+  const [adEmail, setAdEmail] = useState("");
+  const [adSending, setAdSending] = useState(false);
 
   const { data: teams } = useQuery({
     queryKey: ["teams", profile?.id],
@@ -203,6 +205,32 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
       toast({ title: "Team deleted" });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
     },
+  });
+
+  const { data: teamADs = [] } = useQuery({
+    queryKey: ["team-athletic-directors", activeTeamId],
+    queryFn: async () => {
+      if (!activeTeamId) return [];
+      const { data } = await supabase
+        .from("team_athletic_directors" as any)
+        .select("id, invited_email, status, joined_at, user_id")
+        .eq("team_id", activeTeamId)
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!activeTeamId && isCoach,
+  });
+
+  const removeAD = useMutation({
+    mutationFn: async (adId: string) => {
+      const { error } = await supabase.from("team_athletic_directors" as any).delete().eq("id", adId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Athletic Director removed" });
+      queryClient.invalidateQueries({ queryKey: ["team-athletic-directors"] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const allTeams = [
@@ -438,6 +466,80 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
                     checked={safesportMode}
                     onCheckedChange={setSafesportMode}
                   />
+                </div>
+              )}
+
+              {/* Athletic Director section */}
+              {isCoach && (
+                <div className="border rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">Athletic Directors</span>
+                    <Badge variant="outline" className="text-[10px]">Read-only oversight</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Invite an Athletic Director to have read-only program oversight — they can view roster, performance, attendance, and alerts, but not coaching decisions or private messages.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Email address"
+                      type="email"
+                      value={adEmail}
+                      onChange={(e) => setAdEmail(e.target.value)}
+                      className="flex-1 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={adSending || !adEmail.trim()}
+                      onClick={async () => {
+                        if (!adEmail.trim() || !activeTeam) return;
+                        setAdSending(true);
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          const res = await supabase.functions.invoke("invite-ad", {
+                            body: { team_id: activeTeam.id, email: adEmail.trim() },
+                          });
+                          if (res.error) throw new Error(res.error.message);
+                          toast({ title: "Invitation sent!", description: `Invite sent to ${adEmail.trim()}` });
+                          setAdEmail("");
+                          queryClient.invalidateQueries({ queryKey: ["team-athletic-directors"] });
+                        } catch (e: any) {
+                          toast({ title: "Error", description: e.message, variant: "destructive" });
+                        } finally {
+                          setAdSending(false);
+                        }
+                      }}
+                    >
+                      <Mail className="h-3.5 w-3.5 mr-1" />
+                      Invite
+                    </Button>
+                  </div>
+                  {(teamADs as any[]).length > 0 && (
+                    <div className="space-y-1.5">
+                      {(teamADs as any[]).map((ad: any) => (
+                        <div key={ad.id} className="flex items-center justify-between text-xs bg-muted/40 rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <GraduationCap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{ad.invited_email}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              variant={ad.status === "accepted" ? "default" : "secondary"}
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              {ad.status}
+                            </Badge>
+                            <button
+                              onClick={() => removeAD.mutate(ad.id)}
+                              className="text-destructive hover:text-destructive/80 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
