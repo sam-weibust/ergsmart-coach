@@ -116,6 +116,7 @@ import { toast } from "sonner";
 import { getLocalDate } from "@/lib/dateUtils";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
 import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
+import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
 import OrganizationSection from "@/components/dashboard/OrganizationSection";
 import AthleticDirectorDashboard from "@/components/dashboard/AthleticDirectorDashboard";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
@@ -162,6 +163,7 @@ const NAV_CONFIG: NavSection[] = [
       { id: "history", label: "History", description: "Review your past workouts", icon: History },
       { id: "erg", label: "Erg Workout", description: "Log an erg session", icon: Activity },
       { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
+      { id: "strength-program", label: "Strength Program", description: "View and follow the rowing strength program", icon: Dumbbell },
       { id: "cross-training", label: "Cross Training", description: "Log runs, rides, and swims", icon: Activity },
       { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
       { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
@@ -863,6 +865,8 @@ const Dashboard = () => {
           );
         case "strength":
           return <MultiSetStrengthForm profile={profile} />;
+        case "strength-program":
+          return <StrengthProgramSection profile={profile} />;
         case "cross-training":
           return <CrossTrainingSection profile={profile} />;
         case "nutrition":

@@ -51,7 +51,7 @@ serve(async (req) => {
     // ---------------------------
     // FETCH USER CONTEXT
     // ---------------------------
-    const [profileRes, goalsRes, ergRes, strengthRes] = await Promise.all([
+    const [profileRes, goalsRes, ergRes, strengthRes, teamMemberRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
       supabase
@@ -66,12 +66,41 @@ serve(async (req) => {
         .eq("user_id", user_id)
         .order("workout_date", { ascending: false })
         .limit(5),
+      supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const profile = profileRes.data;
     const goals = goalsRes.data;
     const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
+
+    // ---------------------------
+    // FETCH TRAINING PHILOSOPHY
+    // ---------------------------
+    let philosophyPrompt = "";
+    const teamId = teamMemberRes.data?.team_id;
+    if (teamId) {
+      const { data: customPhil } = await supabase
+        .from("team_training_philosophy")
+        .select("philosophy")
+        .eq("team_id", teamId)
+        .maybeSingle();
+      const sp = (customPhil?.philosophy as { system_prompt?: string } | null)?.system_prompt;
+      if (sp) philosophyPrompt = sp;
+    }
+    if (!philosophyPrompt) {
+      const { data: defaultPhil } = await supabase
+        .from("default_training_philosophy")
+        .select("system_prompt")
+        .eq("is_default", true)
+        .maybeSingle();
+      if (defaultPhil?.system_prompt) philosophyPrompt = defaultPhil.system_prompt;
+    }
 
     // ---------------------------
     // BUILD USER CONTEXT
@@ -122,10 +151,12 @@ ${
     // ---------------------------
     // SYSTEM PROMPT
     // ---------------------------
-    const systemPrompt = `You are CrewSync AI, an expert rowing and strength training coach.
+    const systemPrompt = `${philosophyPrompt ? philosophyPrompt + "\n\n" : ""}You are CrewSync AI, an expert rowing and strength training coach.
 
 USER CONTEXT:
 ${userContext}
+
+STRENGTH PROGRAM INTEGRATION — during erg season, lift days are: Monday (Day A — Lower Power), Tuesday (Day B — Upper Pull), Thursday (Day C — Lower Endurance), Saturday (Day D — Upper Endurance). Set day 1 (Monday) type to "LIFT" with workout "Day A — Lower Power: Back Squat 5x3, Romanian Deadlift 4x5, Power Clean 4x3, Box Jump 4x5, Glute Ham Raise 3x8, Plank 3x60s". Day 2 (Tuesday): "Day B — Upper Pull: Deadlift 5x3, Weighted Pull-ups 4x5, Barbell Row 4x6, Single Arm DB Row 3x8, Face Pulls 3x15, Hanging Leg Raise 3x12". Day 4 (Thursday): "Day C — Lower Endurance: Front Squat 4x6, Bulgarian Split Squat 3x8, Trap Bar Deadlift 4x8, Step-ups 3x10, Nordic Hamstring Curl 3x6, Pallof Press 3x12". Day 6 (Saturday) in 4-day version: "Day D — Upper Endurance: Hex Bar Deadlift 4x8, DB Romanian Deadlift 3x12, Lat Pulldown 4x10, Cable Row 4x12, DB Curl to Press 3x10, Copenhagen Plank 3x30s, Reverse Hyper 3x15". Scale intensity with erg loading week: easy erg week 75-80%, medium 80-85%, hard 85-90%, recovery week 60-65% cut volume half. The full weekly plan shows BOTH erg and lift sessions together each day.
 
 You are generating a complete multi-week training plan.
 You MUST output the FULL plan, not a sample.

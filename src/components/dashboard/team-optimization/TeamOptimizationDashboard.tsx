@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
   CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
-  Bot, TrendingUp, Globe, Mail, Palette,
+  Bot, TrendingUp, Globe, Mail, Palette, Brain,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SIDEBAR_ITEMS } from "./constants";
@@ -42,12 +42,13 @@ import TeamBrandingSection from "./TeamBrandingSection";
 import ParentEmailSection from "./ParentEmailSection";
 import RecruitingPortalSettings from "./RecruitingPortalSettings";
 import AthleteTeamsView from "./AthleteTeamsView";
+import TrainingPhilosophySection from "./TrainingPhilosophySection";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Ship, BarChart3, Waves, ArrowLeftRight,
   Activity, Trophy, GraduationCap, Users, Calendar, Medal, MessageSquare,
   CalendarDays, History, Settings, TrendingDown, MessageCircle, GitCompare, Sun, Dumbbell,
-  Bot, TrendingUp, Globe, Mail, Palette,
+  Bot, TrendingUp, Globe, Mail, Palette, Brain,
 };
 
 interface Props {
@@ -158,6 +159,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, isC
       case "coach_ai": return <CoachAIAssistant teamId={teamId} teamName={teamName} profile={profile} isCoach={isCoach} />;
       case "season_analytics": return <MultiSeasonAnalytics teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} />;
       case "branding": return <TeamBrandingSection teamId={teamId} isCoach={isCoach} />;
+      case "training_philosophy": return <TrainingPhilosophySection teamId={teamId} isCoach={isCoach} />;
       case "parent_emails": return <ParentEmailSection teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} />;
       case "recruiting_portal": return <RecruitingPortalSettings teamId={teamId} teamName={teamName} teamMembers={teamMembers} isCoach={isCoach} />;
       case "settings": return (

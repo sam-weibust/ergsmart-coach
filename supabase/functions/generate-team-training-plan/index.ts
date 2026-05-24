@@ -20,24 +20,51 @@ serve(async (req) => {
 
     const { team_id, weeks, season_phase, practice_days_per_week, injured_athletes = [] } = await req.json();
 
-    const { data: loadData } = await supabase
-      .from("weekly_load_logs")
-      .select("user_id, fatigue_score, total_meters")
-      .eq("team_id", team_id)
-      .order("week_start", { ascending: false })
-      .limit(30);
+    const [loadRes, ergRes, customPhilRes, defaultPhilRes] = await Promise.all([
+      supabase
+        .from("weekly_load_logs")
+        .select("user_id, fatigue_score, total_meters")
+        .eq("team_id", team_id)
+        .order("week_start", { ascending: false })
+        .limit(30),
+      supabase
+        .from("erg_scores")
+        .select("user_id, watts, test_type")
+        .eq("team_id", team_id)
+        .order("recorded_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("team_training_philosophy")
+        .select("philosophy")
+        .eq("team_id", team_id)
+        .maybeSingle(),
+      supabase
+        .from("default_training_philosophy")
+        .select("system_prompt")
+        .eq("is_default", true)
+        .maybeSingle(),
+    ]);
 
-    const { data: ergScores } = await supabase
-      .from("erg_scores")
-      .select("user_id, watts, test_type")
-      .eq("team_id", team_id)
-      .order("recorded_at", { ascending: false })
-      .limit(50);
+    const loadData = loadRes.data;
+    const ergScores = ergRes.data;
+
+    // Fetch training philosophy: team custom first, then CrewSync default
+    let philosophyPrompt = "";
+    const customPhil = customPhilRes.data?.philosophy as { system_prompt?: string } | null;
+    if (customPhil?.system_prompt) {
+      philosophyPrompt = customPhil.system_prompt;
+    } else if (defaultPhilRes.data?.system_prompt) {
+      philosophyPrompt = defaultPhilRes.data.system_prompt;
+    }
 
     const twokScores = ergScores?.filter(e => e.test_type === "2k") || [];
     const avgWatts2k = twokScores.length
       ? twokScores.reduce((acc, e) => acc + (e.watts || 0), 0) / twokScores.length
       : 0;
+
+    const systemPrompt = philosophyPrompt
+      ? `${philosophyPrompt}\n\nYou are generating a team training plan. Apply the methodology above to all sessions.`
+      : "You are CrewSync AI, an expert rowing coach generating a team training plan.";
 
     const prompt = `Generate a ${weeks}-week team rowing training plan.
 
@@ -51,7 +78,7 @@ Generate a complete multi-week plan. Each session must have:
 - Warmup (specific, 10-15 min)
 - Main set (segments with distance/rate/zone/rest)
 - Cooldown (5-10 min)
-- Zones: UT2 (easy), UT1 (moderate), TR (threshold), AT (anaerobic threshold)
+- Zones: UT2 (easy), UT1 (moderate), TR1/TR2 (threshold/race prep), AT (anaerobic threshold)
 
 Varsity gets higher volume (~20%) than novice.
 Fatigue athletes get reduced load this week.
@@ -89,6 +116,7 @@ Respond with ONLY valid JSON:
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 8192,
+        system: systemPrompt,
         messages: [{ role: "user", content: prompt }],
       }),
     });

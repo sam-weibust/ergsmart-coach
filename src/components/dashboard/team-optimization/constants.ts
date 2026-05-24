@@ -96,5 +96,6 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { key: "recruiting_portal", label: "Recruiting Portal", icon: "Globe", coachOnly: true },
   { key: "parent_emails", label: "Parent Emails", icon: "Mail", coachOnly: true },
   { key: "branding", label: "Team Branding", icon: "Palette", coachOnly: true },
+  { key: "training_philosophy", label: "Training Philosophy", icon: "Brain", coachOnly: true },
   { key: "settings", label: "Team Settings", icon: "Settings", coachOnly: true },
 ];
