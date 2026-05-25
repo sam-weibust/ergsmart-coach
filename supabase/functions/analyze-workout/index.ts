@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,18 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing workout data" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Cache per workout — once generated, never regenerate
+    // Use workout.id if available, otherwise hash the workout content
+    const workoutId = workout.id || workout.workout_id || hashKey({ workout, workoutType });
+    const cacheKey = `workout_feedback:${workoutId}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify(cached), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
 
@@ -129,9 +142,11 @@ ${userContext}
       };
     }
 
+    await setCached(supabase, cacheKey, { feedback }, TTL.PERMANENT);
+
     return new Response(JSON.stringify({ feedback }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("analyze-workout error:", e);

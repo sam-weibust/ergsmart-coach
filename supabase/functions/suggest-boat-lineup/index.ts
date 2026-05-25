@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,8 +24,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch erg scores for athletes
+    // Cache per sorted athlete pool + boat class + locked seats — 1h TTL
     const athleteIds = athlete_pool.map((a: any) => a.id);
+    const cacheKey = `suggest_lineup:${team_id}:${boat_class}:${hashKey({ athleteIds, locked_seats })}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    // Fetch erg scores for athletes
     const { data: ergScores } = await supabase
       .from("erg_scores")
       .select("*")
@@ -98,7 +108,8 @@ Respond with ONLY valid JSON, no extra text:
     const end = text.lastIndexOf("}");
     const suggestion = JSON.parse(text.slice(start, end + 1));
 
-    return new Response(JSON.stringify(suggestion), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    await setCached(supabase, cacheKey, suggestion, TTL.HOUR);
+    return new Response(JSON.stringify(suggestion), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

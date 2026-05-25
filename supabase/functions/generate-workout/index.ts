@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,13 +8,32 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const FALLBACK_PHILOSOPHY = `You are generating training plans following a competitive high school rowing program methodology.
+
+ZONE SYSTEM (paces relative to athlete 2k time per 500m):
+UT2: 2k+20-25s, rate 16-20. Pure aerobic base.
+UT1: 2k+15-20s, rate 18-24. Moderate aerobic, rate ladders.
+AT: 2k+4-9s, rate 26-28. Anaerobic threshold.
+TR1: 2k+0-4s, rate 26-32. Threshold, hard pieces.
+TR2: below 2k pace, rate 32+. Race specific, peak phase only within 6 weeks of race.
+
+WEEKLY STRUCTURE (erg season Jan-Mar): Mon UT1+lift, Tue lift only, Wed UT2/UT1 high volume, Thu lift only, Fri AT/TR1 quality, Sat lift/rest, Sun off.
+WEEKLY STRUCTURE (summer Jun-Aug): Mon lift, Tue TR1 required, Wed lift, Thu lift/UT1, Fri TR1/TR2, Sat lift, Sun off.
+
+3-WEEK LOADING CYCLE: Week 1 easy, Week 2 medium, Week 3 hard, Week 4 recovery (50% volume).
+
+Always specify piece duration/distance, rest interval, stroke rate, warmup, cooldown. Express paces as 2k +/- seconds, never absolute splits.`;
+
 serve(async (req) => {
+  console.log("generate-workout: function started");
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    console.log("generate-workout: ANTHROPIC_API_KEY present:", !!ANTHROPIC_API_KEY);
     if (!ANTHROPIC_API_KEY) {
       throw new Error("Missing ANTHROPIC_API_KEY");
     }
@@ -49,6 +69,23 @@ serve(async (req) => {
     }
 
     // ---------------------------
+    // CACHE CHECK — per athlete per month-count per calendar day
+    // ---------------------------
+    const today = new Date().toISOString().slice(0, 10);
+    const cacheKey = `training_plan:${user_id}:${preferences.months ?? 3}:${today}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      console.log("generate-workout: cache hit for", cacheKey);
+      return new Response(JSON.stringify(cached), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+    console.log("generate-workout: cache miss for", cacheKey);
+
+    console.log("generate-workout: fetching user context for", user_id);
+
+    // ---------------------------
     // FETCH USER CONTEXT
     // ---------------------------
     const [profileRes, goalsRes, ergRes, strengthRes, teamMemberRes] = await Promise.all([
@@ -79,28 +116,50 @@ serve(async (req) => {
     const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
+    console.log("generate-workout: user context fetched. profile:", !!profile, "goals:", !!goals);
+
     // ---------------------------
-    // FETCH TRAINING PHILOSOPHY
+    // FETCH TRAINING PHILOSOPHY (with fallback)
     // ---------------------------
     let philosophyPrompt = "";
-    const teamId = teamMemberRes.data?.team_id;
-    if (teamId) {
-      const { data: customPhil } = await supabase
-        .from("team_training_philosophy")
-        .select("philosophy")
-        .eq("team_id", teamId)
-        .maybeSingle();
-      const sp = (customPhil?.philosophy as { system_prompt?: string } | null)?.system_prompt;
-      if (sp) philosophyPrompt = sp;
+    try {
+      const teamId = teamMemberRes.data?.team_id;
+      if (teamId) {
+        const { data: customPhil } = await supabase
+          .from("team_training_philosophy")
+          .select("philosophy")
+          .eq("team_id", teamId)
+          .maybeSingle();
+        const sp = (customPhil?.philosophy as { system_prompt?: string } | null)?.system_prompt;
+        if (sp) philosophyPrompt = sp;
+      }
+      if (!philosophyPrompt) {
+        const { data: defaultPhil, error: philError } = await supabase
+          .from("default_training_philosophy")
+          .select("system_prompt")
+          .eq("is_default", true)
+          .maybeSingle();
+        if (philError) {
+          console.error("generate-workout: philosophy fetch error:", philError.message);
+        } else if (defaultPhil?.system_prompt) {
+          philosophyPrompt = defaultPhil.system_prompt;
+        }
+      }
+    } catch (philErr) {
+      console.error("generate-workout: philosophy fetch threw:", philErr);
     }
+
+    // Cap philosophy to 3500 chars to prevent token overflow
+    if (philosophyPrompt.length > 3500) {
+      philosophyPrompt = philosophyPrompt.slice(0, 3500) + "\n[methodology continues — follow all rules above]";
+    }
+
     if (!philosophyPrompt) {
-      const { data: defaultPhil } = await supabase
-        .from("default_training_philosophy")
-        .select("system_prompt")
-        .eq("is_default", true)
-        .maybeSingle();
-      if (defaultPhil?.system_prompt) philosophyPrompt = defaultPhil.system_prompt;
+      console.warn("generate-workout: using fallback philosophy");
+      philosophyPrompt = FALLBACK_PHILOSOPHY;
     }
+
+    console.log("generate-workout: philosophy prompt length:", philosophyPrompt.length, "chars");
 
     // ---------------------------
     // BUILD USER CONTEXT
@@ -151,7 +210,9 @@ ${
     // ---------------------------
     // SYSTEM PROMPT
     // ---------------------------
-    const systemPrompt = `${philosophyPrompt ? philosophyPrompt + "\n\n" : ""}You are CrewSync AI, an expert rowing and strength training coach.
+    const systemPrompt = `${philosophyPrompt}
+
+You are CrewSync AI, an expert rowing and strength training coach.
 
 USER CONTEXT:
 ${userContext}
@@ -191,7 +252,7 @@ Your ONLY output should be a single valid JSON object with this exact structure:
             "description": "60 min steady state at UT2 intensity",
             "distance": "14000",
             "duration": "60 min",
-            "targetSplit": "2:05/500m",
+            "targetSplit": "2k+22s/500m",
             "rate": "r18-20",
             "warmup": "10 min easy rowing",
             "cooldown": "10 min easy",
@@ -220,15 +281,19 @@ Rules you MUST follow:
   - "breakup": piece structure (e.g. "4x2000m" or "3x20 min") or "" for continuous/rest
   - "rates": stroke rate or lift tempo (e.g. "r20-22" or "controlled") or ""
   - "cooldown": short string (e.g. "10 min easy") or "" for rest days
-  - "ergWorkout": object with { zone, description, distance (meters as string), duration (e.g. "60 min"), targetSplit (e.g. "2:05/500m"), rate, warmup, cooldown, restPeriods } — use null for non-erg days
+  - "ergWorkout": object with { zone, description, distance (meters as string), duration (e.g. "60 min"), targetSplit (e.g. "2k+22s/500m"), rate, warmup, cooldown, restPeriods } — use null for non-erg days
 - The workouts MUST be specific, actionable, and unique for each day.
 - For strength/lift days set "type" to "LIFT" and set "ergWorkout" to null.
 - For rest/off days set "type" to "REST", set "workout" to "Rest", and set "ergWorkout" to null.
+- targetSplit MUST always be expressed as 2k+Xs/500m or 2k-Xs/500m — never absolute splits.
 
 Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
 
+    console.log("generate-workout: system prompt built, total chars:", systemPrompt.length);
+    console.log("generate-workout: calling Anthropic API, model: claude-sonnet-4-6, max_tokens: 16000");
+
     // ---------------------------
-    // CALL CLAUDE 3 HAIKU (guaranteed available)
+    // CALL ANTHROPIC
     // ---------------------------
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -243,9 +308,7 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
           model: "claude-sonnet-4-6",
           max_tokens: 16000,
           stream: false,
-
           system: systemPrompt,
-
           messages: [
             {
               role: "user",
@@ -256,17 +319,21 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
       }
     );
 
+    console.log("generate-workout: Anthropic response status:", anthropicResponse.status);
+
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
-      console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
+      console.error("generate-workout: Anthropic error body:", t);
+      return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
+        status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const result = await anthropicResponse.json();
     const text = result?.content?.[0]?.text;
+
+    console.log("generate-workout: Anthropic response received, text length:", text?.length ?? 0);
 
     if (!text) {
       return new Response(JSON.stringify({ error: "Invalid AI response" }), {
@@ -292,24 +359,20 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
     let parsed = tryParseJson(text);
 
     if (!parsed) {
-      // First parse failed — send through strict JSON repair pass
-      console.warn("First parse failed, attempting repair pass");
+      console.warn("generate-workout: first parse failed, attempting repair pass");
 
-      const repairSystemPrompt = `You are a strict JSON‑only generator for RowSync's training‑plan API.
-Your ONLY job is to take a natural‑language training plan and output a fully valid JSON object that can be parsed by Supabase Edge Functions without errors.
+      const repairSystemPrompt = `You are a strict JSON-only generator for RowSync's training-plan API.
+Your ONLY job is to take a natural-language training plan and output a fully valid JSON object that can be parsed by Supabase Edge Functions without errors.
 
 RULES:
 - Output MUST be valid JSON.
 - NO comments, no trailing commas, no explanations, no markdown.
 - Never wrap JSON in code fences.
 - Never include text before or after the JSON.
-- All strings must be double‑quoted.
+- All strings must be double-quoted.
 - All null values must be literal null.
 - All numbers must be numbers, not strings.
 - If the input contains invalid JSON fragments, rewrite them into valid JSON.
-- If the input contains extra text, ignore it and produce clean JSON only.
-- If the input contains durations like "45 min", convert them to strings.
-- If the input contains distances like "10500", convert them to strings unless explicitly numeric.
 - Ensure arrays and objects are properly closed.
 - Ensure every week, day, and ergWorkout object is valid.
 
@@ -348,10 +411,7 @@ EXPECTED OUTPUT SHAPE:
   ]
 }
 
-When given ANY training plan text — even if messy, partial, or malformed —
-you MUST return a fully valid JSON object matching the schema above.
-If something is missing, fill it with an empty string or null.
-Your output must ALWAYS be valid JSON.`;
+When given ANY training plan text, return fully valid JSON matching the schema above. Fill missing fields with empty string or null.`;
 
       const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -374,12 +434,12 @@ Your output must ALWAYS be valid JSON.`;
         const repairText = repairResult?.content?.[0]?.text ?? "";
         parsed = tryParseJson(repairText);
         if (parsed) {
-          console.log("Repair pass succeeded");
+          console.log("generate-workout: repair pass succeeded");
         } else {
-          console.error("Repair pass also failed:", repairText);
+          console.error("generate-workout: repair pass also failed");
         }
       } else {
-        console.error("Repair pass HTTP error:", repairResponse.status);
+        console.error("generate-workout: repair pass HTTP error:", repairResponse.status);
       }
     }
 
@@ -390,12 +450,15 @@ Your output must ALWAYS be valid JSON.`;
       });
     }
 
+    console.log("generate-workout: success, storing in cache and returning plan");
+    await setCached(supabase, cacheKey, parsed, TTL.DAY);
+
     return new Response(JSON.stringify(parsed), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
-    console.error("generate-workout error:", e);
+    console.error("generate-workout: unhandled error:", e);
     return new Response(
       JSON.stringify({
         error: e instanceof Error ? e.message : "Unknown error",

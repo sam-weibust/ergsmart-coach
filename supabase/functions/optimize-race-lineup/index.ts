@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,15 @@ serve(async (req) => {
     );
 
     const { team_id, boat_class, athlete_ids, locked_seats = [], race_name, race_date, factor_weights } = await req.json();
+
+    // Cache per sorted athlete set + boat class + locked seats — 1h TTL
+    const cacheKey = `lineup:${team_id}:${boat_class}:${hashKey({ athlete_ids, locked_seats, factor_weights })}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
 
     // Fetch all relevant data
     const [ergRes, seatRaceRes, loadRes] = await Promise.all([
@@ -70,7 +80,8 @@ Respond with ONLY valid JSON:
     const end = text.lastIndexOf("}");
     const lineup = JSON.parse(text.slice(start, end + 1));
 
-    return new Response(JSON.stringify(lineup), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    await setCached(supabase, cacheKey, lineup, TTL.HOUR);
+    return new Response(JSON.stringify(lineup), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

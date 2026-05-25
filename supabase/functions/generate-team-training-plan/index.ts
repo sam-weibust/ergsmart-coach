@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,10 +8,30 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const FALLBACK_PHILOSOPHY = `You are generating training plans following a competitive high school rowing program methodology.
+
+ZONE SYSTEM (paces relative to athlete 2k time per 500m):
+UT2: 2k+20-25s, rate 16-20. Pure aerobic base.
+UT1: 2k+15-20s, rate 18-24. Moderate aerobic, rate ladders.
+AT: 2k+4-9s, rate 26-28. Anaerobic threshold.
+TR1: 2k+0-4s, rate 26-32. Threshold, hard pieces.
+TR2: below 2k pace, rate 32+. Race specific, peak phase only within 6 weeks of race.
+
+WEEKLY STRUCTURE (erg season Jan-Mar): Mon UT1+lift, Tue lift only, Wed UT2/UT1 high volume, Thu lift only, Fri AT/TR1 quality, Sat lift/rest, Sun off.
+WEEKLY STRUCTURE (summer Jun-Aug): Mon lift, Tue TR1 required, Wed lift, Thu lift/UT1, Fri TR1/TR2, Sat lift, Sun off.
+
+3-WEEK LOADING CYCLE: Week 1 easy, Week 2 medium, Week 3 hard, Week 4 recovery (50% volume).
+
+Always specify piece duration/distance, rest interval, stroke rate, warmup, cooldown. Express paces as 2k +/- seconds, never absolute splits.`;
+
 serve(async (req) => {
+  console.log("generate-team-training-plan: function started");
+
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    console.log("generate-team-training-plan: ANTHROPIC_API_KEY present:", !!ANTHROPIC_API_KEY);
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const supabase = createClient(
@@ -20,7 +41,20 @@ serve(async (req) => {
 
     const { team_id, weeks, season_phase, practice_days_per_week, injured_athletes = [] } = await req.json();
 
-    const [loadRes, ergRes, customPhilRes, defaultPhilRes] = await Promise.all([
+    console.log("generate-team-training-plan: team_id:", team_id, "weeks:", weeks);
+
+    // Cache per team + weeks + phase per calendar day
+    const today = new Date().toISOString().slice(0, 10);
+    const cacheKey = `team_plan:${team_id}:${weeks}:${season_phase || "general"}:${today}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      console.log("generate-team-training-plan: cache hit");
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    const [loadRes, ergRes] = await Promise.all([
       supabase
         .from("weekly_load_logs")
         .select("user_id, fatigue_score, total_meters")
@@ -33,28 +67,50 @@ serve(async (req) => {
         .eq("team_id", team_id)
         .order("recorded_at", { ascending: false })
         .limit(50),
-      supabase
-        .from("team_training_philosophy")
-        .select("philosophy")
-        .eq("team_id", team_id)
-        .maybeSingle(),
-      supabase
-        .from("default_training_philosophy")
-        .select("system_prompt")
-        .eq("is_default", true)
-        .maybeSingle(),
     ]);
 
     const loadData = loadRes.data;
     const ergScores = ergRes.data;
 
-    // Fetch training philosophy: team custom first, then CrewSync default
+    console.log("generate-team-training-plan: fetching training philosophy");
+
+    // Fetch training philosophy with fallback
     let philosophyPrompt = "";
-    const customPhil = customPhilRes.data?.philosophy as { system_prompt?: string } | null;
-    if (customPhil?.system_prompt) {
-      philosophyPrompt = customPhil.system_prompt;
-    } else if (defaultPhilRes.data?.system_prompt) {
-      philosophyPrompt = defaultPhilRes.data.system_prompt;
+    try {
+      const [customPhilRes, defaultPhilRes] = await Promise.all([
+        supabase
+          .from("team_training_philosophy")
+          .select("philosophy")
+          .eq("team_id", team_id)
+          .maybeSingle(),
+        supabase
+          .from("default_training_philosophy")
+          .select("system_prompt")
+          .eq("is_default", true)
+          .maybeSingle(),
+      ]);
+
+      const customPhil = customPhilRes.data?.philosophy as { system_prompt?: string } | null;
+      if (customPhil?.system_prompt) {
+        philosophyPrompt = customPhil.system_prompt;
+        console.log("generate-team-training-plan: using team custom philosophy, length:", philosophyPrompt.length);
+      } else if (defaultPhilRes.data?.system_prompt) {
+        philosophyPrompt = defaultPhilRes.data.system_prompt;
+        console.log("generate-team-training-plan: using default philosophy, length:", philosophyPrompt.length);
+      } else {
+        console.warn("generate-team-training-plan: no philosophy found in DB, using fallback");
+      }
+    } catch (philErr) {
+      console.error("generate-team-training-plan: philosophy fetch threw:", philErr);
+    }
+
+    // Cap philosophy to 3500 chars to prevent token overflow
+    if (philosophyPrompt.length > 3500) {
+      philosophyPrompt = philosophyPrompt.slice(0, 3500) + "\n[methodology continues — follow all rules above]";
+    }
+
+    if (!philosophyPrompt) {
+      philosophyPrompt = FALLBACK_PHILOSOPHY;
     }
 
     const twokScores = ergScores?.filter(e => e.test_type === "2k") || [];
@@ -62,9 +118,9 @@ serve(async (req) => {
       ? twokScores.reduce((acc, e) => acc + (e.watts || 0), 0) / twokScores.length
       : 0;
 
-    const systemPrompt = philosophyPrompt
-      ? `${philosophyPrompt}\n\nYou are generating a team training plan. Apply the methodology above to all sessions.`
-      : "You are CrewSync AI, an expert rowing coach generating a team training plan.";
+    const systemPrompt = `${philosophyPrompt}\n\nYou are generating a team training plan. Apply the methodology above to all sessions.`;
+
+    console.log("generate-team-training-plan: system prompt built, total chars:", systemPrompt.length);
 
     const prompt = `Generate a ${weeks}-week team rowing training plan.
 
@@ -79,6 +135,7 @@ Generate a complete multi-week plan. Each session must have:
 - Main set (segments with distance/rate/zone/rest)
 - Cooldown (5-10 min)
 - Zones: UT2 (easy), UT1 (moderate), TR1/TR2 (threshold/race prep), AT (anaerobic threshold)
+- Express all target paces as 2k+Xs/500m or 2k-Xs/500m — never absolute splits
 
 Varsity gets higher volume (~20%) than novice.
 Fatigue athletes get reduced load this week.
@@ -110,6 +167,8 @@ Respond with ONLY valid JSON:
   ]
 }`;
 
+    console.log("generate-team-training-plan: calling Anthropic API, model: claude-sonnet-4-6");
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
@@ -121,16 +180,44 @@ Respond with ONLY valid JSON:
       }),
     });
 
-    if (!resp.ok) throw new Error(`Anthropic error: ${await resp.text()}`);
+    console.log("generate-team-training-plan: Anthropic response status:", resp.status);
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("generate-team-training-plan: Anthropic error body:", errText);
+      throw new Error(`Anthropic error ${resp.status}: ${errText}`);
+    }
+
     const result = await resp.json();
-    const text = result?.content?.[0]?.text ?? "{}";
+    const text = result?.content?.[0]?.text ?? "";
+
+    console.log("generate-team-training-plan: response received, text length:", text.length);
+
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    const plan = JSON.parse(text.slice(start, end + 1));
 
-    return new Response(JSON.stringify(plan), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (start === -1 || end === -1 || end <= start) {
+      console.error("generate-team-training-plan: no valid JSON object found in response:", text.slice(0, 200));
+      throw new Error("AI response did not contain valid JSON");
+    }
+
+    let plan;
+    try {
+      plan = JSON.parse(text.slice(start, end + 1));
+    } catch (parseErr) {
+      console.error("generate-team-training-plan: JSON.parse failed:", parseErr);
+      throw new Error("AI returned malformed JSON");
+    }
+
+    console.log("generate-team-training-plan: success, caching and returning plan");
+    await setCached(supabase, cacheKey, plan, TTL.DAY);
+
+    return new Response(JSON.stringify(plan), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
-    console.error(e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    console.error("generate-team-training-plan: unhandled error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
