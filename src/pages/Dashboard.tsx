@@ -120,6 +120,10 @@ import StrengthProgramSection from "@/components/dashboard/StrengthProgramSectio
 import OrganizationSection from "@/components/dashboard/OrganizationSection";
 import AthleticDirectorDashboard from "@/components/dashboard/AthleticDirectorDashboard";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
+import { ApiCostDashboard } from "@/components/dashboard/ApiCostDashboard";
+import { TourProvider } from "@/components/tour/TourContext";
+import { TourOverlay } from "@/components/tour/TourOverlay";
+import { WelcomeModal } from "@/components/tour/WelcomeModal";
 import { useTeamBranding } from "@/context/TeamBrandingContext";
 import {
   Dialog,
@@ -304,6 +308,13 @@ const NAV_CONFIG: NavSection[] = [
       { id: "connected-apps", label: "Connected Apps", description: "Concept2, Garmin, and integrations", icon: Link2 },
       { id: "billing", label: "Billing", description: "Plan and usage", icon: Star },
     ],
+  },
+  {
+    id: "admin-costs",
+    label: "API Costs",
+    icon: BarChart3,
+    coachOnly: false,
+    subs: [],
   },
 ];
 
@@ -837,6 +848,12 @@ const Dashboard = () => {
       return <OrganizationSection profile={profile} />;
     }
 
+    // Admin cost dashboard
+    if (activeSection === "admin-costs") {
+      if (!(profile as any)?.is_admin) return null;
+      return <ApiCostDashboard />;
+    }
+
     // Regattas — manages its own internal tabs
     if (activeSection === "regattas") {
       return <RegattasSection profile={profile} isCoach={isCoach} initialTab={activeSub ?? undefined} />;
@@ -1027,15 +1044,21 @@ const Dashboard = () => {
     { id: "performance", label: "Performance", icon: BarChart3 },
   ].filter((item) => !hiddenForRole(item.id, null, userRole));
 
+  const isAdmin = !!(profile as any)?.is_admin;
   const navVisible = (s: NavSection) =>
-    (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(s.id, null, userRole);
+    (!s.coachOnly || isCoach || isOrganizer) &&
+    !hiddenForRole(s.id, null, userRole) &&
+    (s.id !== "admin-costs" || isAdmin);
 
   const moreNavSections = NAV_CONFIG.filter(
     (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && navVisible(s)
   );
 
   return (
+    <TourProvider profile={profile} onNavTo={navTo}>
     <div className="h-screen bg-background flex flex-col overflow-hidden">
+      <WelcomeModal />
+      <TourOverlay />
       <AppStoreBanner />
 
       {/* ── First-time onboarding dialog ─────────────────────────────────── */}
@@ -1172,6 +1195,7 @@ const Dashboard = () => {
               <div key={section.id}>
                 <button
                   onClick={() => navTo(section.id)}
+                  data-tour-id={`tour-nav-${section.id}`}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
                     ${activeSection === section.id
                       ? "text-white"
@@ -1194,6 +1218,7 @@ const Dashboard = () => {
                       <button
                         key={sub.id}
                         onClick={() => navTo(section.id, sub.id)}
+                        data-tour-id={`tour-nav-${section.id}-${sub.id}`}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors
                           ${activeSub === sub.id
                             ? "bg-white/15 text-white font-semibold"
@@ -1276,6 +1301,7 @@ const Dashboard = () => {
               <button
                 key={item.id}
                 onClick={() => navTo(item.id)}
+                data-tour-id={`tour-nav-${item.id}`}
                 className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
                 style={{ color: isActive ? teamColor : undefined }}
               >
@@ -1321,6 +1347,7 @@ const Dashboard = () => {
                   <div key={section.id}>
                     <button
                       onClick={() => navTo(section.id)}
+                      data-tour-id={`tour-nav-${section.id}`}
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors font-semibold text-sm min-h-[44px] hover:bg-muted"
                       style={sectionActive ? { background: `rgba(var(--team-color-rgb, 10,22,40),0.1)`, color: teamColor } : undefined}
                     >
@@ -1357,6 +1384,7 @@ const Dashboard = () => {
         </div>
       </div>
     </div>
+    </TourProvider>
   );
 };
 

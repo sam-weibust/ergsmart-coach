@@ -1,11 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MODEL = "claude-haiku-4-5-20251001";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -22,14 +25,20 @@ serve(async (req) => {
     const { coach_id, athlete_ids } = await req.json();
     if (!coach_id) return new Response(JSON.stringify({ error: "Missing coach_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Fetch coach program profile
+    // Cache by coach + sorted athlete_ids (48h TTL)
+    const cacheKey = `recruit_score_${coach_id}_${hashKey(athlete_ids || [])}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id: coach_id, function_name: "score-recruits", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" } });
+    }
+
     const { data: coachProfile } = await supabase
       .from("coach_profiles")
       .select("*")
       .eq("coach_id", coach_id)
       .maybeSingle();
 
-    // Fetch athletes to score
     let athleteQuery = supabase
       .from("athlete_profiles")
       .select("*, profiles!inner(full_name, height, weight, experience_level)")
@@ -41,7 +50,6 @@ serve(async (req) => {
     const { data: athletes } = await athleteQuery;
     if (!athletes?.length) return new Response(JSON.stringify({ scores: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Fetch best 2k scores for each athlete
     const athleteUserIds = athletes.map((a: any) => a.user_id);
     const { data: ergScores } = await supabase
       .from("erg_scores")
@@ -50,7 +58,6 @@ serve(async (req) => {
       .eq("test_type", "2k")
       .order("recorded_at", { ascending: false });
 
-    // Get best score per athlete
     const bestScores: Record<string, any> = {};
     for (const score of ergScores ?? []) {
       if (!bestScores[score.user_id] || score.time_seconds < bestScores[score.user_id].time_seconds) {
@@ -58,7 +65,6 @@ serve(async (req) => {
       }
     }
 
-    // Fetch combine scores
     const { data: combineEntries } = await supabase
       .from("combine_entries")
       .select("user_id, two_k_seconds, virtual_combine_score")
@@ -70,7 +76,6 @@ serve(async (req) => {
       if (!combineByUser[ce.user_id]) combineByUser[ce.user_id] = ce;
     }
 
-    // Build athlete summaries for AI
     const athleteSummaries = athletes.map((a: any) => {
       const erg = bestScores[a.user_id];
       const combine = combineByUser[a.user_id];
@@ -80,72 +85,48 @@ serve(async (req) => {
         user_id: a.user_id,
         name: profile?.full_name ?? "Unknown",
         grad_year: a.grad_year,
-        location: a.location,
-        school: a.school,
-        division_interest: a.division_interest,
-        height_cm: profile?.height,
-        weight_kg: profile?.weight,
         best_2k: ergTime,
-        watts_per_kg: erg?.watts_per_kg,
+        watts_per_kg: erg?.watts_per_kg ? Math.round(erg.watts_per_kg * 10) / 10 : null,
         combine_score: combine?.virtual_combine_score,
+        height_cm: profile?.height,
       };
     });
 
     const programContext = coachProfile
-      ? `Coach's program: ${coachProfile.school_name || "Unknown"}, ${coachProfile.division || "unknown division"}, ${coachProfile.team_type || "unknown type"}.
-Target 2k range: ${coachProfile.target_2k_min_seconds ? `${Math.floor(coachProfile.target_2k_min_seconds/60)}:${String(coachProfile.target_2k_min_seconds%60).padStart(2,"0")}` : "not set"} - ${coachProfile.target_2k_max_seconds ? `${Math.floor(coachProfile.target_2k_max_seconds/60)}:${String(coachProfile.target_2k_max_seconds%60).padStart(2,"0")}` : "not set"}.
-Target height: ${coachProfile.target_height_min_cm ?? "?"}cm - ${coachProfile.target_height_max_cm ?? "?"}cm.
-Target weight: ${coachProfile.target_weight_min_kg ?? "?"}kg - ${coachProfile.target_weight_max_kg ?? "?"}kg.
-Description: ${coachProfile.program_description ?? "Not provided"}.`
-      : "Coach has not filled out their program profile yet. Score based on general recruiting standards.";
+      ? `Program: ${coachProfile.school_name || "?"}, ${coachProfile.division || "?"}, ${coachProfile.team_type || "?"}. Target 2k: ${coachProfile.target_2k_min_seconds ? `${Math.floor(coachProfile.target_2k_min_seconds/60)}:${String(coachProfile.target_2k_min_seconds%60).padStart(2,"0")}` : "?"}-${coachProfile.target_2k_max_seconds ? `${Math.floor(coachProfile.target_2k_max_seconds/60)}:${String(coachProfile.target_2k_max_seconds%60).padStart(2,"0")}` : "?"}. Height: ${coachProfile.target_height_min_cm ?? "?"}cm-${coachProfile.target_height_max_cm ?? "?"}cm.`
+      : "No program profile. Score on general standards.";
 
-    const prompt = `You are a rowing recruiting analyst. Score each recruit 1-100 for fit with this program.
-
-${programContext}
-
-Athletes to score:
-${JSON.stringify(athleteSummaries, null, 2)}
-
-Return ONLY valid JSON array with this exact format (no markdown, no explanation):
-[{"user_id":"...","score":85,"reasoning":"Brief 1-sentence reason"}]`;
+    const prompt = `Rowing recruiting analyst. Score each recruit 1-100 for fit with this program.\n\n${programContext}\n\nAthletes:\n${JSON.stringify(athleteSummaries)}\n\nReturn ONLY valid JSON array (no markdown):\n[{"user_id":"...","score":85,"reasoning":"1-sentence reason"}]`;
 
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
+      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: MODEL, max_tokens: 150, messages: [{ role: "user", content: prompt }] }),
     });
 
     const aiData = await aiRes.json();
+    const usage = aiData?.usage ?? {};
     const rawText = aiData.content?.[0]?.text ?? "[]";
     const scores = JSON.parse(rawText);
 
-    // Upsert scores into database
     for (const s of scores) {
       await supabase.from("recruit_scores").upsert({
-        coach_id,
-        athlete_user_id: s.user_id,
-        score: s.score,
-        reasoning: s.reasoning,
+        coach_id, athlete_user_id: s.user_id, score: s.score, reasoning: s.reasoning,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       }, { onConflict: "coach_id,athlete_user_id" });
     }
 
-    return new Response(JSON.stringify({ scores }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const responseBody = { scores };
+    await setCached(supabase, cacheKey, responseBody, TTL.TWO_DAYS, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: coach_id, function_name: "score-recruits", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+
+    return new Response(JSON.stringify(responseBody), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

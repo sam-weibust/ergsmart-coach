@@ -8,9 +8,7 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const cronSecret = req.headers.get("x-cron-secret");
   const expectedSecret = Deno.env.get("CRON_SECRET");
@@ -22,12 +20,16 @@ serve(async (req) => {
   const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+  // Only sync users active within the last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
   const { data: connections } = await supabase
     .from("whoop_connections")
-    .select("user_id");
+    .select("user_id, profiles!inner(last_active_at)")
+    .gte("profiles.last_active_at", thirtyDaysAgo);
 
   if (!connections || connections.length === 0) {
-    return new Response(JSON.stringify({ synced: 0 }), {
+    return new Response(JSON.stringify({ synced: 0, skipped: 0 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -44,10 +46,7 @@ serve(async (req) => {
       });
       if (res.ok) {
         synced++;
-        await supabase
-          .from("whoop_connections")
-          .update({ last_auto_sync_at: now })
-          .eq("user_id", user_id);
+        await supabase.from("whoop_connections").update({ last_auto_sync_at: now }).eq("user_id", user_id);
       } else {
         errors++;
       }

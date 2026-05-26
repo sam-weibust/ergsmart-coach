@@ -1,11 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MODEL = "claude-haiku-4-5-20251001";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -25,8 +28,18 @@ serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
-    // Use client-supplied local date to avoid UTC day-boundary issues
     const today = local_date || new Date().toISOString().split("T")[0];
+
+    // Cache check
+    const cacheKey = `insights_${user_id}_${today}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id, function_name: "generate-insights", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" }
+      });
+    }
+
     const todayMs = new Date(today + "T00:00:00Z").getTime();
     const thirtyDaysAgo = new Date(todayMs - 30 * 86400000).toISOString().split("T")[0];
     const sevenDaysAgo = new Date(todayMs - 7 * 86400000).toISOString().split("T")[0];
@@ -47,80 +60,47 @@ serve(async (req) => {
     const meals = mealsRes.data || [];
     const workouts = workoutsRes.data || [];
 
-    // Aggregate meals by date
     const mealsByDate: Record<string, number> = {};
-    for (const m of meals) {
-      mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
-    }
+    for (const m of meals) mealsByDate[m.meal_date] = (mealsByDate[m.meal_date] || 0) + (m.calories || 0);
 
-    // Aggregate water by date
     const waterByDate: Record<string, number> = {};
-    for (const w of waterEntries) {
-      waterByDate[w.date] = (waterByDate[w.date] || 0) + (w.amount_ml || 0);
-    }
+    for (const w of waterEntries) waterByDate[w.date] = (waterByDate[w.date] || 0) + (w.amount_ml || 0);
 
-    // Weight trend
     const weightTrend = weightEntries.slice(0, 14).map(e => `${e.date}: ${e.weight}${e.unit}`).join(", ");
     const weightChange = weightEntries.length >= 2
       ? (weightEntries[0].weight - weightEntries[weightEntries.length - 1].weight).toFixed(1)
       : null;
 
-    // Sleep stats
     const avgSleep = sleepEntries.length > 0
       ? (sleepEntries.reduce((s, e) => s + e.duration_hours, 0) / sleepEntries.length).toFixed(1)
       : null;
-    const avgSleepQuality = sleepEntries.filter(e => e.quality_score).length > 0
-      ? (sleepEntries.filter(e => e.quality_score).reduce((s, e) => s + (e.quality_score || 0), 0) / sleepEntries.filter(e => e.quality_score).length).toFixed(1)
-      : null;
 
-    // Hydration stats
     const hydrationGoal = profile?.hydration_goal_ml || 2500;
     const waterValues = Object.values(waterByDate);
     const avgWater = waterValues.length > 0 ? Math.round(waterValues.reduce((a, b) => a + b, 0) / waterValues.length) : null;
-    const hydrationGoalDays = waterValues.filter(v => v >= hydrationGoal).length;
-
-    // Calorie stats
     const calorieValues = Object.values(mealsByDate);
     const avgCalories = calorieValues.length > 0 ? Math.round(calorieValues.reduce((a, b) => a + b, 0) / calorieValues.length) : null;
 
-    const context = `
-ATHLETE: ${profile?.full_name || "Athlete"}
-DIET GOAL: ${profile?.diet_goal || "maintain"}
-HYDRATION GOAL: ${hydrationGoal}ml/day
+    const context = [
+      `Athlete: ${profile?.full_name || "Athlete"} | Goal: ${profile?.diet_goal || "maintain"} | Hydration goal: ${hydrationGoal}ml`,
+      weightTrend ? `Weight (14d): ${weightTrend}` : null,
+      weightChange != null ? `Change: ${Number(weightChange) > 0 ? "+" : ""}${weightChange}${weightEntries[0]?.unit || "lbs"}` : null,
+      avgSleep ? `Avg sleep 7d: ${avgSleep}hrs` : null,
+      avgWater ? `Avg hydration: ${avgWater}ml` : null,
+      avgCalories ? `Avg calories: ${avgCalories}kcal` : null,
+      workouts.length ? `Workouts 7d: ${workouts.map(w => `${w.workout_date} ${w.distance}m ${w.avg_split || ""}`).join("; ")}` : null,
+    ].filter(Boolean).join("\n");
 
-LAST 14 DAYS WEIGHT: ${weightTrend || "No data"}
-WEIGHT CHANGE (${weightEntries.length} entries): ${weightChange != null ? `${Number(weightChange) > 0 ? "+" : ""}${weightChange} ${weightEntries[0]?.unit || "lbs"}` : "Insufficient data"}
-
-LAST 7 DAYS SLEEP:
-${sleepEntries.map(s => `  ${s.date}: ${s.duration_hours}hrs${s.quality_score ? `, quality ${s.quality_score}/10` : ""}`).join("\n") || "  No data"}
-Average: ${avgSleep ? `${avgSleep} hrs` : "N/A"}, Average quality: ${avgSleepQuality ? `${avgSleepQuality}/10` : "N/A"}
-
-LAST 7 DAYS HYDRATION:
-${Object.entries(waterByDate).map(([d, ml]) => `  ${d}: ${ml}ml (goal: ${hydrationGoal}ml)`).join("\n") || "  No data"}
-Average: ${avgWater ? `${avgWater}ml` : "N/A"}, Goal met: ${hydrationGoalDays}/${waterValues.length} days
-
-LAST 7 DAYS CALORIES:
-${Object.entries(mealsByDate).map(([d, cal]) => `  ${d}: ${cal} kcal`).join("\n") || "  No data"}
-Average: ${avgCalories ? `${avgCalories} kcal` : "N/A"}
-
-LAST 7 DAYS WORKOUTS:
-${workouts.map(w => `  ${w.workout_date}: ${w.distance}m, avg split ${w.avg_split || "N/A"}${w.avg_watts ? `, ${w.avg_watts}W` : ""}`).join("\n") || "  No data"}
-`.trim();
-
-    const systemPrompt = `You are a high-performance rowing coach and sports scientist. Generate a concise, data-driven, actionable insight summary. Be direct and specific — like a coach, not a chatbot. Use exact numbers from the data. Identify real patterns (sleep/performance correlation, hydration/output, calories/weight trend). Flag sleep debt, hydration gaps, and calorie misalignment relative to the athlete's goal. Keep it to 4-6 sentences max. No fluff, no generic advice. Output plain text only, no markdown.`;
+    const systemPrompt = `Expert rowing coach. Generate a 4-6 sentence data-driven insight summary. Direct and specific, like a coach. Reference exact numbers. Flag sleep debt, hydration gaps, calorie misalignment. Plain text only, no markdown.`;
 
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
+      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 512,
+        model: MODEL,
+        max_tokens: 300,
         system: systemPrompt,
-        messages: [{ role: "user", content: `Here is the athlete's data:\n\n${context}\n\nGenerate the insight summary.` }],
+        messages: [{ role: "user", content: `Athlete data:\n${context}\n\nGenerate insight summary.` }],
       }),
     });
 
@@ -134,25 +114,25 @@ ${workouts.map(w => `  ${w.workout_date}: ${w.distance}m, avg split ${w.avg_spli
 
     const aiResult = await anthropicResponse.json();
     const insight = aiResult?.content?.[0]?.text ?? "";
+    const usage = aiResult?.usage ?? {};
 
-    // Cache in database — one row per user per insight_type per date
+    const result = { insight, last_updated: new Date().toISOString() };
+    await setCached(supabase, cacheKey, result, TTL.HALF_DAY, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id, function_name: "generate-insights", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+
+    // Also store in ai_insights table
     await supabase.from("ai_insights").upsert({
-      user_id,
-      insight_type,
-      date: today,
-      content: insight,
-      last_updated: new Date().toISOString(),
+      user_id, insight_type, date: today, content: insight, last_updated: new Date().toISOString(),
     }, { onConflict: "user_id,insight_type,date" });
 
-    return new Response(JSON.stringify({ insight, last_updated: new Date().toISOString() }), {
+    return new Response(JSON.stringify(result), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("generate-insights error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

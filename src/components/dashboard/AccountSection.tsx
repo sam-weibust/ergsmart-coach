@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Lock, AlertTriangle, Download, Shield, CheckCircle2, XCircle, Monitor } from "lucide-react";
+import { Loader2, Mail, Lock, AlertTriangle, Download, Shield, CheckCircle2, XCircle, Monitor, Map } from "lucide-react";
+import { useTour } from "@/components/tour/TourContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,8 @@ export function AccountSection() {
   const [exportLoading, setExportLoading] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [signOutAllLoading, setSignOutAllLoading] = useState(false);
+
+  const { startTour } = useTour();
 
   const { data: profile } = useQuery({
     queryKey: ["account-profile"],
@@ -330,6 +333,30 @@ export function AccountSection() {
           <p className="text-xs text-muted-foreground mt-2">
             Includes profile, all erg workouts and scores, recovery logs, wellness check-ins, and workout plans.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Restart Tour */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Map className="h-4 w-4" />
+            App Tour
+          </CardTitle>
+          <CardDescription className="text-xs">Relaunch the interactive tour to revisit all features from the beginning.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            className="min-h-[44px]"
+            onClick={() => {
+              const role: string | null = (profile as any)?.user_type ?? (profile as any)?.role ?? null;
+              const userId = (profile as any)?.id;
+              if (userId) startTour(role, userId);
+            }}
+          >
+            Restart Tour
+          </Button>
         </CardContent>
       </Card>
 

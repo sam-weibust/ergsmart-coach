@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +25,7 @@ serve(async (req) => {
     const cacheKey = `lineup:${team_id}:${boat_class}:${hashKey({ athlete_ids, locked_seats, factor_weights })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
+      await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -67,8 +68,8 @@ Respond with ONLY valid JSON:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 800,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -80,7 +81,9 @@ Respond with ONLY valid JSON:
     const end = text.lastIndexOf("}");
     const lineup = JSON.parse(text.slice(start, end + 1));
 
-    await setCached(supabase, cacheKey, lineup, TTL.HOUR);
+    const usage = result?.usage ?? {};
+    await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     return new Response(JSON.stringify(lineup), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);

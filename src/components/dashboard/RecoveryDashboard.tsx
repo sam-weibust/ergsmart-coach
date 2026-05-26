@@ -681,6 +681,7 @@ function InsightsTab({ profile }: { profile: any }) {
         .maybeSingle();
       return data;
     },
+    staleTime: 12 * 60 * 60 * 1000, // 12 hours
   });
 
   const { data: weeklyInsight } = useQuery({
@@ -696,6 +697,7 @@ function InsightsTab({ profile }: { profile: any }) {
         .maybeSingle();
       return data;
     },
+    staleTime: 12 * 60 * 60 * 1000, // 12 hours
   });
 
   const refreshInsight = async (type: "daily" | "weekly" = "daily") => {

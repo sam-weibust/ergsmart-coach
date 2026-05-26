@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,6 +76,7 @@ serve(async (req) => {
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       console.log("generate-workout: cache hit for", cacheKey);
+      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
@@ -290,10 +291,10 @@ Rules you MUST follow:
 Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
 
     console.log("generate-workout: system prompt built, total chars:", systemPrompt.length);
-    console.log("generate-workout: calling Anthropic API, model: claude-sonnet-4-6, max_tokens: 16000");
+    console.log("generate-workout: calling Anthropic API, model: claude-sonnet-4-20250514");
 
     // ---------------------------
-    // CALL ANTHROPIC
+    // CALL ANTHROPIC (with prompt caching on system prompt)
     // ---------------------------
     const anthropicResponse = await fetch(
       "https://api.anthropic.com/v1/messages",
@@ -302,13 +303,14 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
         headers: {
           "x-api-key": ANTHROPIC_API_KEY,
           "anthropic-version": "2023-06-01",
+          "anthropic-beta": "prompt-caching-2024-07-31",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-20250514",
           max_tokens: 8000,
           stream: false,
-          system: systemPrompt,
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages: [
             {
               role: "user",
@@ -450,8 +452,10 @@ When given ANY training plan text, return fully valid JSON matching the schema a
       });
     }
 
+    const usage = result?.usage ?? {};
     console.log("generate-workout: success, storing in cache and returning plan");
-    await setCached(supabase, cacheKey, parsed, TTL.DAY);
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
     return new Response(JSON.stringify(parsed), {
       status: 200,

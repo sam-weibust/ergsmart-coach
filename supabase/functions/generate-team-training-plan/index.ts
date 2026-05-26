@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,6 +49,7 @@ serve(async (req) => {
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       console.log("generate-team-training-plan: cache hit");
+      await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -167,15 +168,15 @@ Respond with ONLY valid JSON:
   ]
 }`;
 
-    console.log("generate-team-training-plan: calling Anthropic API, model: claude-sonnet-4-6");
+    console.log("generate-team-training-plan: calling Anthropic API, model: claude-sonnet-4-20250514");
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "anthropic-beta": "prompt-caching-2024-07-31", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 8192,
-        system: systemPrompt,
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -209,8 +210,10 @@ Respond with ONLY valid JSON:
       throw new Error("AI returned malformed JSON");
     }
 
+    const usage = result?.usage ?? {};
     console.log("generate-team-training-plan: success, caching and returning plan");
-    await setCached(supabase, cacheKey, plan, TTL.DAY);
+    await setCached(supabase, cacheKey, plan, TTL.DAY, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
     return new Response(JSON.stringify(plan), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {

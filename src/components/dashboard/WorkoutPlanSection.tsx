@@ -1140,6 +1140,7 @@ export const WorkoutPlanSection = () => {
       if (error) throw error;
       return (data || []) as WorkoutPlan[];
     },
+    staleTime: 24 * 60 * 60 * 1000, // 24 hours
   });
 
   const { data: friends } = useQuery<Friend[]>({

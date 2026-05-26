@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,10 +8,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const MODEL = "claude-haiku-4-5-20251001";
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -30,165 +33,95 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Cause 1 — API key check
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    console.log("[analyze-workouts] ANTHROPIC_API_KEY present:", !!ANTHROPIC_API_KEY);
-    if (!ANTHROPIC_API_KEY) {
-      return jsonResponse({ error: "ANTHROPIC_API_KEY not configured in Supabase secrets" }, 500);
-    }
+    if (!ANTHROPIC_API_KEY) return jsonResponse({ error: "ANTHROPIC_API_KEY not configured" }, 500);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
     let body: any;
-    try {
-      body = await req.json();
-    } catch (e) {
-      return jsonResponse({ error: "Invalid JSON body" }, 400);
-    }
+    try { body = await req.json(); } catch { return jsonResponse({ error: "Invalid JSON body" }, 400); }
 
-    console.log("[analyze-workouts] body keys:", Object.keys(body));
-
-    const { sessions, assignmentTitle, pieces, completedCount, totalCount } = body;
+    const { sessions, assignmentTitle, pieces, completedCount, totalCount, assignment_id } = body;
 
     if (!sessions || !Array.isArray(sessions) || sessions.length === 0) {
       return jsonResponse({ error: "sessions array is required and must not be empty" }, 400);
     }
 
-    // Cause 3 — Truncate large payloads (max 20 sessions)
-    const truncatedSessions = sessions.slice(0, 20);
-    console.log(`[analyze-workouts] sessions: ${sessions.length} (sending ${truncatedSessions.length})`);
-
-    // Build a prompt that handles both on-water sessions and erg assignment results
     const isErgAssignment = !!assignmentTitle;
+
+    // Cache for erg assignments by assignment_id + completed count
+    let cacheKey: string | null = null;
+    if (isErgAssignment && assignment_id) {
+      cacheKey = `workout_analysis_${assignment_id}_${completedCount ?? sessions.length}`;
+      const cached = await getCached(supabase, cacheKey);
+      if (cached) {
+        await logUsage(supabase, { function_name: "analyze-workouts", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+        return jsonResponse(cached);
+      }
+    }
+
+    const truncatedSessions = sessions.slice(0, 20);
 
     let prompt: string;
 
     if (isErgAssignment) {
-      // Erg assignment analysis mode
       const pieceTargets = (pieces || []).map((p: any) =>
-        `  Piece ${p.piece_number} (${p.piece_type}): target ${p.distance ? p.distance + "m" : "--"}, split ${formatSplit(p.target_split_seconds)}, SR ${p.target_stroke_rate || "--"} spm`
+        `  Piece ${p.piece_number} (${p.piece_type}): ${p.distance ? p.distance + "m" : "--"}, split ${formatSplit(p.target_split_seconds)}, SR ${p.target_stroke_rate || "--"}`
       ).join("\n");
 
       const athleteDescriptions = truncatedSessions.map((s: any, i: number) => {
         const name = s.athlete || s.boatName || `Athlete ${i + 1}`;
         const athletePieces = (s.pieces || []).map((p: any) =>
-          `  - Piece ${p.piece_number}: split ${formatSplit(p.actual_split_seconds)}, SR ${p.actual_stroke_rate || "--"} spm${p.notes ? ", notes: " + p.notes : ""}`
+          `  - P${p.piece_number}: ${formatSplit(p.actual_split_seconds)}, SR ${p.actual_stroke_rate || "--"}`
         ).join("\n");
-        return `${name}:\n${athletePieces || "  No pieces logged"}${s.notes ? "\n  Notes: " + s.notes : ""}`;
+        return `${name}:\n${athletePieces || "  No pieces"}${s.notes ? " Notes: " + s.notes : ""}`;
       }).join("\n\n");
 
-      prompt = `You are an expert rowing coach analyzing erg workout results.
+      prompt = `Rowing coach analyzing erg results. Workout: ${assignmentTitle}. Completion: ${completedCount ?? truncatedSessions.length}/${totalCount ?? truncatedSessions.length}
 
-Workout: ${assignmentTitle}
-Completion: ${completedCount ?? truncatedSessions.length}/${totalCount ?? truncatedSessions.length} athletes
+TARGETS:\n${pieceTargets || "None"}\n\nRESULTS:\n${athleteDescriptions}
 
-TARGET PIECES:
-${pieceTargets || "No targets defined"}
-
-ATHLETE RESULTS:
-${athleteDescriptions}
-
-Provide a structured coaching analysis:
-
-**TEAM SUMMARY**
-Overall performance vs targets. Who hit pace, who struggled.
-
-**STANDOUT PERFORMANCES**
-Best performances and why they stand out.
-
-**AREAS OF CONCERN**
-Athletes or pieces where splits were significantly off target.
-
-**PACING PATTERNS**
-Did athletes go out hard and fade, stay consistent, or build through the pieces?
-
-**RECOMMENDATIONS**
-3 specific, actionable coaching recommendations based on this data.
-
-Be direct and data-driven. Reference specific split times. Keep each section to 2-3 sentences.`;
+Provide:\n**TEAM SUMMARY**\n**STANDOUT PERFORMANCES**\n**AREAS OF CONCERN**\n**PACING PATTERNS**\n**RECOMMENDATIONS**\nBe direct, reference split times, 2-3 sentences each section.`;
     } else {
-      // On-water session analysis mode
       const sessionDescriptions = truncatedSessions.map((s: any, i: number) => {
         const piecesArr = s.pieces || [];
         const avgSplit = s.avgSplit ? formatSplit(s.avgSplit) : "N/A";
         const pieceDetails = piecesArr.map((p: any) =>
-          `  - Piece ${p.piece_number} (${p.piece_type || ""}): ${p.distance || "--"}m, split ${formatSplit(p.average_split_seconds)}, rate ${p.stroke_rate || "N/A"} spm`
+          `  ${p.distance || "--"}m, split ${formatSplit(p.average_split_seconds)}, rate ${p.stroke_rate || "N/A"}`
         ).join("\n");
-
-        return `Session ${i + 1}: ${s.date || "unknown date"} — ${s.boatName || "unknown"} (${s.boatClass || ""})
-  Planned workout: ${s.coachNotes || "N/A"}
-  Avg split: ${avgSplit}
-  Distance: ${s.totalDistance || 0}m
-  Total time: ${s.totalTime ? formatTime(s.totalTime) : "N/A"}
-  Stroke rate: ${s.avgStrokeRate || "N/A"} spm
-  Attendance: ${s.attendance}/${s.totalRoster} athletes
-  Weather: ${s.conditions || "N/A"}
-  Wind: ${s.windConditions || "N/A"}, Water: ${s.waterConditions || "N/A"}
-  Lineup: ${s.lineup || "N/A"}
-  Pieces logged:
-${pieceDetails || "  No pieces logged"}`;
+        return `Session ${i + 1}: ${s.date || "?"} ${s.boatName || ""} | Split: ${avgSplit} | ${s.totalDistance || 0}m | Attendance: ${s.attendance}/${s.totalRoster}\n${pieceDetails}`;
       }).join("\n\n");
 
-      prompt = `You are an expert rowing coach analyzing training session data for a competitive rowing program. Analyze these ${truncatedSessions.length} practice session${truncatedSessions.length !== 1 ? "s" : ""} and provide a structured coaching report.
-
-SESSION DATA:
-${sessionDescriptions}
-
-Provide a structured analysis with these exact section headers:
-**STRONGEST SESSION**
-Which session performed best and why, citing specific split data.
-
-**PACING PATTERNS**
-How pacing strategy differed across sessions — did they go out hard and fade, stay consistent, or build?
-
-**PERFORMANCE TREND**
-Is the lineup improving, declining, or plateauing over time? What does the trajectory suggest?
-
-**CONDITIONS CORRELATION**
-What weather/water conditions correlated with better splits? Any notable patterns?
-
-**NEXT PRACTICE FOCUS**
-3 specific, actionable recommendations for the next practice based on this data.
-
-**ANOMALIES**
-Any unusual data points, concerning patterns, or things that don't fit the trend and warrant investigation.
-
-Be direct, specific, and coaching-focused. Use split times and data to back every claim. Keep each section to 2-4 sentences.`;
+      prompt = `Rowing coach analyzing ${truncatedSessions.length} session(s).\n\n${sessionDescriptions}\n\nProvide:\n**STRONGEST SESSION**\n**PACING PATTERNS**\n**PERFORMANCE TREND**\n**CONDITIONS CORRELATION**\n**NEXT PRACTICE FOCUS**\n**ANOMALIES**\n2-4 sentences each.`;
     }
 
-    console.log("[analyze-workouts] prompt length:", prompt.length, "chars");
-
-    // Cause 2 — Correct model string
     const anthropicPayload = {
-      model: "claude-sonnet-4-5",
-      max_tokens: 1200,
+      model: MODEL,
+      max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     };
 
-    console.log("[analyze-workouts] calling Anthropic API, model:", anthropicPayload.model);
-
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify(anthropicPayload),
     });
 
-    console.log("[analyze-workouts] Anthropic response status:", response.status);
-
     if (!response.ok) {
       const errText = await response.text();
-      console.error("[analyze-workouts] Anthropic error body:", errText);
       return jsonResponse({ error: `Anthropic API error ${response.status}: ${errText}` }, 502);
     }
 
     const data = await response.json();
+    const usage = data?.usage ?? {};
     const text = data.content?.[0]?.text ?? "";
-    console.log("[analyze-workouts] response text length:", text.length);
+
+    await logUsage(supabase, { function_name: "analyze-workouts", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
     if (isErgAssignment) {
-      // Parse erg-specific sections
       const sectionKeys = ["TEAM SUMMARY", "STANDOUT PERFORMANCES", "AREAS OF CONCERN", "PACING PATTERNS", "RECOMMENDATIONS"];
       const sections: Record<string, string> = {};
       for (let i = 0; i < sectionKeys.length; i++) {
@@ -200,14 +133,12 @@ Be direct, specific, and coaching-focused. Use split times and data to back ever
         const end = nextKey ? text.indexOf(`**${nextKey}**`) : text.length;
         sections[key] = text.slice(contentStart, end === -1 ? text.length : end).trim();
       }
-      return jsonResponse({ analysis: text, sections, raw: text });
+      const result = { analysis: text, sections, raw: text };
+      if (cacheKey) await setCached(supabase, cacheKey, result, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
+      return jsonResponse(result);
     }
 
-    // Parse on-water sections
-    const sectionKeys = [
-      "STRONGEST SESSION", "PACING PATTERNS", "PERFORMANCE TREND",
-      "CONDITIONS CORRELATION", "NEXT PRACTICE FOCUS", "ANOMALIES",
-    ];
+    const sectionKeys = ["STRONGEST SESSION", "PACING PATTERNS", "PERFORMANCE TREND", "CONDITIONS CORRELATION", "NEXT PRACTICE FOCUS", "ANOMALIES"];
     const sections: Record<string, string> = {};
     for (let i = 0; i < sectionKeys.length; i++) {
       const key = sectionKeys[i];
@@ -222,8 +153,7 @@ Be direct, specific, and coaching-focused. Use split times and data to back ever
     return jsonResponse({ sections, raw: text });
 
   } catch (err: any) {
-    // Cause 5 — Never crash without returning a response
-    console.error("[analyze-workouts] unhandled error:", err?.message, err?.stack);
+    console.error("[analyze-workouts] unhandled error:", err?.message);
     return jsonResponse({ error: err?.message ?? "Internal server error" }, 500);
   }
 });
