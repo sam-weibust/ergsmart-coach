@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BleProvider } from "./context/BleContext";
+import { TeamBrandingProvider } from "./context/TeamBrandingContext";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
@@ -216,11 +217,13 @@ const App = () => {
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <BleProvider>
           <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppRouter />
-            </BrowserRouter>
+            <TeamBrandingProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AppRouter />
+              </BrowserRouter>
+            </TeamBrandingProvider>
           </TooltipProvider>
         </BleProvider>
       </ThemeProvider>

@@ -120,6 +120,7 @@ import StrengthProgramSection from "@/components/dashboard/StrengthProgramSectio
 import OrganizationSection from "@/components/dashboard/OrganizationSection";
 import AthleticDirectorDashboard from "@/components/dashboard/AthleticDirectorDashboard";
 import { ProfileSection } from "@/components/dashboard/ProfileSection";
+import { useTeamBranding } from "@/context/TeamBrandingContext";
 import {
   Dialog,
   DialogContent,
@@ -522,6 +523,7 @@ function SectionLanding({
 const Dashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { logoUrl: teamLogo, primaryColor: teamColor, teamName } = useTeamBranding();
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSub, setActiveSub] = useState<string | null>(null);
@@ -794,8 +796,14 @@ const Dashboard = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
-            <div className="w-16 h-16 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
-            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-primary animate-pulse-soft" />
+            <div
+              className="w-16 h-16 rounded-full border-4 animate-spin"
+              style={{ borderColor: `${teamColor}30`, borderTopColor: teamColor }}
+            />
+            <Sparkles
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 animate-pulse-soft"
+              style={{ color: teamColor }}
+            />
           </div>
           <p className="text-muted-foreground font-medium">Loading your training...</p>
         </div>
@@ -1120,16 +1128,21 @@ const Dashboard = () => {
       </Dialog>
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/10 bg-[#0a1628] z-20 shadow-sm shrink-0">
+      <header
+        className="border-b border-white/10 z-20 shadow-sm shrink-0"
+        style={{ background: teamColor }}
+      >
         <div className="px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img
-              src={crewsyncLogo}
-              alt="CrewSync"
-              className="h-10 w-10 rounded-xl shadow-sm border border-white/20 hover:scale-105 transition-transform cursor-pointer"
+              src={teamLogo || crewsyncLogo}
+              alt={teamName || "CrewSync"}
+              className="h-10 w-10 rounded-xl shadow-sm border border-white/20 hover:scale-105 transition-transform cursor-pointer object-cover bg-white/10"
               onClick={() => navTo("dashboard")}
             />
-            <span className="font-bold text-lg hidden sm:inline text-white">CrewSync</span>
+            <span className="font-bold text-lg hidden sm:inline text-white">
+              {teamName || "CrewSync"}
+            </span>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
@@ -1150,7 +1163,10 @@ const Dashboard = () => {
       {/* ── Below Header: Sidebar + Content ────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
-        <aside className="hidden md:flex flex-col w-60 shrink-0 bg-[#0a1628] border-r border-white/10 overflow-y-auto">
+        <aside
+          className="hidden md:flex flex-col w-60 shrink-0 border-r border-white/10 overflow-y-auto"
+          style={{ background: teamColor }}
+        >
           <nav className="flex-1 px-3 py-4 space-y-0.5">
             {NAV_CONFIG.filter(navVisible).map((section) => (
               <div key={section.id}>
@@ -1158,8 +1174,9 @@ const Dashboard = () => {
                   onClick={() => navTo(section.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
                     ${activeSection === section.id
-                      ? "bg-[#2d6be4] text-white"
+                      ? "text-white"
                       : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                  style={activeSection === section.id ? { background: "rgba(255,255,255,0.2)" } : undefined}
                 >
                   <section.icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 text-left">{section.label}</span>
@@ -1183,9 +1200,8 @@ const Dashboard = () => {
                             : "text-white/55 hover:bg-white/10 hover:text-white/90"}`}
                       >
                         <div
-                          className={`w-1 h-1 rounded-full ${
-                            activeSub === sub.id ? "bg-[#2d6be4]" : "bg-white/30"
-                          }`}
+                          className="w-1 h-1 rounded-full"
+                          style={{ background: activeSub === sub.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)" }}
                         />
                         {sub.label}
                       </button>
@@ -1200,7 +1216,7 @@ const Dashboard = () => {
           <div className="px-3 py-4 border-t border-white/10 space-y-2">
             {profile && (
               <div className="flex items-center gap-2 px-3 py-2">
-                <div className="w-7 h-7 rounded-full bg-[#2d6be4] flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                   <User className="h-3.5 w-3.5 text-white" />
                 </div>
                 <div className="min-w-0">
@@ -1229,6 +1245,8 @@ const Dashboard = () => {
           className="flex-1 overflow-y-auto relative"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
+          {/* Team color accent bar */}
+          <div className="h-[3px] w-full shrink-0" style={{ background: teamColor }} />
           <PullToRefreshIndicator progress={progress} refreshing={refreshing} threshold={threshold} />
           <main
             className="container mx-auto px-4 py-6 md:pb-8 animate-fade-in"
@@ -1252,31 +1270,44 @@ const Dashboard = () => {
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex justify-around items-center h-16 px-1">
-          {mobileBottomNav.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => navTo(item.id)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors ${
-                activeSection === item.id ? "text-primary" : "text-muted-foreground"
-              }`}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="text-[11px] font-medium">{item.label}</span>
-            </button>
-          ))}
+          {mobileBottomNav.map((item) => {
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => navTo(item.id)}
+                className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
+                style={{ color: isActive ? teamColor : undefined }}
+              >
+                {!isActive && <item.icon className="h-5 w-5 text-muted-foreground" />}
+                {isActive && <item.icon className="h-5 w-5" style={{ color: teamColor }} />}
+                <span
+                  className={`text-[11px] font-medium ${isActive ? "font-semibold" : "text-muted-foreground"}`}
+                  style={isActive ? { color: teamColor } : undefined}
+                >
+                  {item.label}
+                </span>
+                {isActive && (
+                  <div className="absolute bottom-0 w-8 h-[2px] rounded-t-full" style={{ background: teamColor }} />
+                )}
+              </button>
+            );
+          })}
 
           {/* More sheet */}
           <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
             <SheetTrigger asChild>
               <button
-                className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors ${
-                  moreNavSections.some((s) => s.id === activeSection)
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                }`}
+                className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
+                style={{
+                  color: moreNavSections.some((s) => s.id === activeSection) ? teamColor : undefined,
+                }}
               >
-                <MoreHorizontal className="h-5 w-5" />
-                <span className="text-[11px] font-medium">More</span>
+                <MoreHorizontal
+                  className="h-5 w-5"
+                  style={{ color: moreNavSections.some((s) => s.id === activeSection) ? teamColor : undefined }}
+                />
+                <span className="text-[11px] font-medium text-muted-foreground">More</span>
               </button>
             </SheetTrigger>
             <SheetContent side="bottom" className="max-h-[85vh] flex flex-col">
@@ -1284,42 +1315,42 @@ const Dashboard = () => {
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
               <div className="overflow-y-auto flex-1 pb-4 space-y-4">
-                {moreNavSections.map((section) => (
+                {moreNavSections.map((section) => {
+                  const sectionActive = activeSection === section.id;
+                  return (
                   <div key={section.id}>
                     <button
                       onClick={() => navTo(section.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors font-semibold text-sm min-h-[44px] ${
-                        activeSection === section.id
-                          ? "bg-primary/10 text-primary"
-                          : "text-foreground hover:bg-muted"
-                      }`}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors font-semibold text-sm min-h-[44px] hover:bg-muted"
+                      style={sectionActive ? { background: `rgba(var(--team-color-rgb, 10,22,40),0.1)`, color: teamColor } : undefined}
                     >
-                      <section.icon className="h-4 w-4 shrink-0" />
+                      <section.icon className="h-4 w-4 shrink-0" style={sectionActive ? { color: teamColor } : undefined} />
                       <span className="flex-1">{section.label}</span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </button>
-                    {activeSection === section.id && section.subs.length > 0 && (
+                    {sectionActive && section.subs.length > 0 && (
                       <div className="ml-4 mt-1 space-y-0.5">
                         {section.subs
                           .filter((s) => (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(section.id, s.id, userRole))
-                          .map((sub) => (
+                          .map((sub) => {
+                          const subActive = activeSub === sub.id;
+                          return (
                           <button
                             key={sub.id}
                             onClick={() => navTo(section.id, sub.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm transition-colors min-h-[44px] ${
-                              activeSub === sub.id
-                                ? "bg-primary/10 text-primary font-semibold"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            }`}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm transition-colors min-h-[44px] hover:bg-muted hover:text-foreground"
+                            style={subActive ? { color: teamColor, fontWeight: 600 } : { color: "var(--muted-foreground)" }}
                           >
-                            <sub.icon className="h-4 w-4 shrink-0" />
+                            <sub.icon className="h-4 w-4 shrink-0" style={subActive ? { color: teamColor } : undefined} />
                             {sub.label}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </SheetContent>
           </Sheet>

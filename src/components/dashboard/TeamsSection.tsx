@@ -30,7 +30,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
-import { TeamBrandingProvider } from "@/context/TeamBrandingContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CoachComparison } from "./CoachComparison";
 
@@ -536,16 +535,14 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
               {/* Team Optimization Dashboard */}
               <ErrorBoundary>
-                <TeamBrandingProvider teamId={activeTeam.id}>
-                  <TeamOptimizationDashboard
-                    teamId={activeTeam.id}
-                    teamName={activeTeam.name}
-                    teamMembers={activeTeam.team_members || []}
-                    isCoach={isCoach}
-                    profile={profile}
-                    safesportMode={safesportMode}
-                  />
-                </TeamBrandingProvider>
+                <TeamOptimizationDashboard
+                  teamId={activeTeam.id}
+                  teamName={activeTeam.name}
+                  teamMembers={activeTeam.team_members || []}
+                  isCoach={isCoach}
+                  profile={profile}
+                  safesportMode={safesportMode}
+                />
               </ErrorBoundary>
 
               <AlertDialog>
@@ -580,17 +577,15 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
           const isCox = profile?.user_type === "coxswain" || profile?.is_coxswain === true;
           return (
             <ErrorBoundary>
-              <TeamBrandingProvider teamId={activeTeam.id}>
-                <TeamOptimizationDashboard
-                  teamId={activeTeam.id}
-                  teamName={activeTeam.name}
-                  teamMembers={activeTeam.team_members || []}
-                  isCoach={false}
-                  isCox={isCox}
-                  profile={profile}
-                  safesportMode={true}
-                />
-              </TeamBrandingProvider>
+              <TeamOptimizationDashboard
+                teamId={activeTeam.id}
+                teamName={activeTeam.name}
+                teamMembers={activeTeam.team_members || []}
+                isCoach={false}
+                isCox={isCox}
+                profile={profile}
+                safesportMode={true}
+              />
             </ErrorBoundary>
           );
         })()}

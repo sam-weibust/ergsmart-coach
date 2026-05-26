@@ -50,6 +50,7 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
 
   const saveMutation = useMutation({
     mutationFn: async (updates: Record<string, any>) => {
+      console.log("[TeamBranding] saving to teams table:", updates);
       const { error } = await supabase.from("teams").update(updates).eq("id", teamId);
       if (error) throw error;
     },
@@ -57,6 +58,7 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
       toast({ title: "Saved" });
       qc.invalidateQueries({ queryKey: ["team-branding", teamId] });
       qc.invalidateQueries({ queryKey: ["teams"] });
+      qc.invalidateQueries({ queryKey: ["global-team-branding"] });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -64,12 +66,34 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
   async function uploadLogo(file: File) {
     setUploading(true);
     try {
-      const path = `${teamId}/logo.${file.name.split(".").pop()}`;
-      const { error: upErr } = await supabase.storage.from("team-logos").upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
+      if (file.size > 2 * 1024 * 1024) throw new Error("File too large — max 2MB");
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!["png", "jpg", "jpeg", "webp"].includes(ext || "")) {
+        throw new Error("Only PNG, JPG, or WebP files are accepted");
+      }
+
+      const path = `${teamId}/logo.${ext}`;
+      console.log("[TeamBranding] uploading logo:", file.name, "size:", file.size, "to path:", path);
+
+      const { error: upErr, data: upData } = await supabase.storage
+        .from("team-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      console.log("[TeamBranding] storage upload result:", { upData, upErr });
+      if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
       const { data: { publicUrl } } = supabase.storage.from("team-logos").getPublicUrl(path);
-      await saveMutation.mutateAsync({ logo_url: publicUrl });
+      console.log("[TeamBranding] public URL:", publicUrl);
+
+      if (!publicUrl) throw new Error("Could not get public URL for uploaded logo");
+
+      // Append cache-buster so the browser loads the new logo immediately
+      const urlWithBust = `${publicUrl}?v=${Date.now()}`;
+      await saveMutation.mutateAsync({ logo_url: urlWithBust });
+      console.log("[TeamBranding] logo_url saved:", urlWithBust);
+      toast({ title: "Logo uploaded", description: "Team logo updated successfully." });
     } catch (e: any) {
+      console.error("[TeamBranding] upload error:", e);
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
     } finally {
       setUploading(false);

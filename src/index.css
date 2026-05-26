@@ -6,6 +6,10 @@
 
 @layer base {
   :root {
+    /* Team branding — overridden dynamically by TeamBrandingProvider */
+    --team-color: #0a1628;
+    --team-color-rgb: 10, 22, 40;
+
     /* Page and surface backgrounds */
     --background: 220 20% 98%;       /* #f8f9fb light gray page bg */
     --foreground: 216 60% 10%;       /* #0a1628 navy */
