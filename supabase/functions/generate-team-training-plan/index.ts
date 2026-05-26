@@ -104,9 +104,9 @@ serve(async (req) => {
       console.error("generate-team-training-plan: philosophy fetch threw:", philErr);
     }
 
-    // Cap philosophy to 3500 chars to prevent token overflow
-    if (philosophyPrompt.length > 3500) {
-      philosophyPrompt = philosophyPrompt.slice(0, 3500) + "\n[methodology continues — follow all rules above]";
+    // Cap philosophy to 1500 chars to prevent system prompt token overflow/timeouts
+    if (philosophyPrompt.length > 1500) {
+      philosophyPrompt = philosophyPrompt.slice(0, 1500) + "\n[see full methodology — follow all rules]";
     }
 
     if (!philosophyPrompt) {

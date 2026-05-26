@@ -21,18 +21,20 @@ export default function TrainingPhilosophySection({ teamId, isCoach }: Props) {
   const { data: philosophy, isLoading } = useQuery({
     queryKey: ["team-training-philosophy", teamId],
     queryFn: async () => {
-      const { data } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
         .from("team_training_philosophy")
         .select("*")
         .eq("team_id", teamId)
         .maybeSingle();
-      return data;
+      return data as { summary: string; philosophy: any; updated_at: string } | null;
     },
   });
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("team_training_philosophy")
         .delete()
         .eq("team_id", teamId);
@@ -62,17 +64,25 @@ export default function TrainingPhilosophySection({ teamId, isCoach }: Props) {
 
       // Upload file to Supabase storage
       const filePath = `${teamId}/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+      console.log("[TrainingPhilosophy] uploading to storage:", filePath);
       const { error: upErr } = await supabase.storage
         .from("training-files")
         .upload(filePath, file, { upsert: false });
-      if (upErr) throw upErr;
+      if (upErr) {
+        console.error("[TrainingPhilosophy] storage upload error:", upErr);
+        throw new Error(`Storage upload failed: ${upErr.message}`);
+      }
+
+      console.log("[TrainingPhilosophy] file uploaded, calling edge function");
 
       // Call analyze-training-philosophy edge function
       const { data: fnData, error: fnErr } = await supabase.functions.invoke("analyze-training-philosophy", {
         body: { team_id: teamId, coach_id: user.id, file_path: filePath, file_name: file.name },
       });
 
-      if (fnErr) throw new Error(fnErr.message);
+      console.log("[TrainingPhilosophy] edge function result:", { fnData, fnErr });
+
+      if (fnErr) throw new Error(`Analysis failed: ${fnErr.message}`);
       if (fnData?.error) throw new Error(fnData.error);
 
       setExtractedResult(fnData);

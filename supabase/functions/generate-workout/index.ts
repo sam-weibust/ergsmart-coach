@@ -149,9 +149,9 @@ serve(async (req) => {
       console.error("generate-workout: philosophy fetch threw:", philErr);
     }
 
-    // Cap philosophy to 3500 chars to prevent token overflow
-    if (philosophyPrompt.length > 3500) {
-      philosophyPrompt = philosophyPrompt.slice(0, 3500) + "\n[methodology continues — follow all rules above]";
+    // Cap philosophy to 1500 chars to prevent system prompt token overflow/timeouts
+    if (philosophyPrompt.length > 1500) {
+      philosophyPrompt = philosophyPrompt.slice(0, 1500) + "\n[see full methodology above — follow all rules]";
     }
 
     if (!philosophyPrompt) {
@@ -306,7 +306,7 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 16000,
+          max_tokens: 8000,
           stream: false,
           system: systemPrompt,
           messages: [
