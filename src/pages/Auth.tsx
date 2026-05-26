@@ -8,6 +8,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Mail, Lock, User, Sparkles, Heart } from "lucide-react";
+
+function pwScore(p: string) {
+  let s = 0;
+  if (p.length >= 12) s++;
+  if (/[A-Z]/.test(p)) s++;
+  if (/[a-z]/.test(p)) s++;
+  if (/[0-9]/.test(p)) s++;
+  if (/[^A-Za-z0-9]/.test(p)) s++;
+  return s;
+}
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 
 const SIGNUP_ROLES = [
@@ -29,6 +39,10 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (pwScore(password) < 5) {
+      toast.error("Password must be 12+ characters with uppercase, lowercase, number, and special character.");
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -342,11 +356,27 @@ const Auth = () => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            minLength={6}
+                            minLength={12}
                             className="pl-10"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+                        {password.length > 0 && (() => {
+                          const score = pwScore(password);
+                          const colors = ["bg-red-500", "bg-red-500", "bg-yellow-500", "bg-yellow-500", "bg-blue-500", "bg-green-500"];
+                          const labels = ["Weak", "Weak", "Fair", "Fair", "Good", "Strong"];
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${colors[score]}`} style={{ width: `${(score / 5) * 100}%` }} />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{labels[score]}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">12+ chars, uppercase, lowercase, number, special character</p>
+                            </div>
+                          );
+                        })()}
+                        {password.length === 0 && <p className="text-xs text-muted-foreground">Minimum 12 characters</p>}
                       </div>
 
                       <Button type="submit" className="w-full" size="lg" disabled={isLoading}>

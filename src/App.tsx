@@ -147,6 +147,25 @@ function AppRouter() {
     return () => { listener.then(h => h.remove()); };
   }, [navigate]);
 
+  // Update last_active_at on the profile to track inactivity.
+  const touchLastActive = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    let lastTouch = 0;
+    touchLastActive.current = async () => {
+      const now = Date.now();
+      if (now - lastTouch < 5 * 60 * 1000) return; // debounce 5 min
+      lastTouch = now;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await supabase.from("profiles").update({ last_active_at: new Date().toISOString() }).eq("id", session.user.id);
+    };
+    // Touch on meaningful user interactions.
+    const events = ["click", "keydown", "touchstart"];
+    const handler = () => touchLastActive.current?.();
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+    return () => events.forEach(e => window.removeEventListener(e, handler));
+  }, []);
+
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -158,10 +177,30 @@ function AppRouter() {
     const PUBLIC_PREFIXES = ["/team/", "/recruit/", "/athlete/", "/leaderboard", "/pricing", "/privacy", "/directory"];
     const isPublicPath = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
 
+    // Check 30-day inactivity — force re-auth if last_active_at is stale.
+    const checkInactivityTimeout = async (userId: string) => {
+      const { data } = await supabase.from("profiles").select("last_active_at").eq("id", userId).maybeSingle();
+      if (!data?.last_active_at) return; // no record yet — not expired
+      const daysSinceActive = (Date.now() - new Date(data.last_active_at).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceActive > 30) {
+        console.log("[AppRouter] session expired due to 30-day inactivity — signing out");
+        await supabase.auth.signOut();
+      }
+    };
+
     // Fast session check — reads from localStorage, resolves in <50ms typically.
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (data.session && !isCallbackPath && !isPublicPath) {
-        navigate("/dashboard", { replace: true });
+        await checkInactivityTimeout(data.session.user.id);
+        // Re-check session after potential sign-out.
+        const { data: recheckData } = await supabase.auth.getSession();
+        if (recheckData.session) {
+          // Touch last_active_at on login.
+          await supabase.from("profiles").update({ last_active_at: new Date().toISOString() }).eq("id", data.session.user.id);
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate(isNative ? "/auth" : "/", { replace: true });
+        }
       } else if (isNative && !isCallbackPath && !isPublicPath) {
         // Never show landing page on native — go straight to login.
         navigate("/auth", { replace: true });
@@ -174,6 +213,8 @@ function AppRouter() {
       const onCallback = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
       const onPublic = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
       if (event === "SIGNED_IN" && session && !onCallback && !onPublic) {
+        // Touch last_active_at on every sign-in.
+        supabase.from("profiles").update({ last_active_at: new Date().toISOString() }).eq("id", session.user.id);
         navigate("/dashboard", { replace: true });
       } else if (event === "SIGNED_OUT") {
         queryClient.clear();
