@@ -42,28 +42,14 @@ export default defineConfig(() => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          "react-vendor": ["react", "react-dom"],
-          "recharts": ["recharts"],
-          "supabase": ["@supabase/supabase-js"],
-          "ui": [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-select",
-            "@radix-ui/react-tabs",
-            "@radix-ui/react-toast",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-accordion",
-            "@radix-ui/react-avatar",
-            "@radix-ui/react-checkbox",
-            "@radix-ui/react-label",
-            "@radix-ui/react-progress",
-            "@radix-ui/react-slider",
-            "@radix-ui/react-switch",
-          ],
-          "query": ["@tanstack/react-query"],
-          "date": ["date-fns"],
-          "router": ["react-router-dom"],
+        manualChunks(id) {
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) return "react-vendor";
+          if (id.includes("node_modules/recharts/")) return "recharts";
+          if (id.includes("node_modules/@supabase/")) return "supabase";
+          if (id.includes("node_modules/@tanstack/")) return "query";
+          if (id.includes("node_modules/date-fns/")) return "date";
+          if (id.includes("node_modules/react-router")) return "router";
+          if (id.includes("node_modules/@radix-ui/")) return "ui";
         },
       },
     },

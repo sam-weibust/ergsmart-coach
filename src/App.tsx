@@ -20,6 +20,7 @@ import PersonalRecordsPage from "./pages/PersonalRecordsPage";
 import NotFound from "./pages/NotFound";
 import RegattaPage from "./pages/RegattaPage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import PricingPage from "./pages/PricingPage";
 import TeamPortalPage from "./pages/TeamPortalPage";
@@ -174,7 +175,7 @@ function AppRouter() {
     const isCallbackPath = window.location.pathname.startsWith("/auth/") && window.location.pathname.endsWith("/callback");
 
     // Public routes that should never auto-redirect to dashboard, even when logged in.
-    const PUBLIC_PREFIXES = ["/team/", "/recruit/", "/athlete/", "/leaderboard", "/pricing", "/privacy", "/directory"];
+    const PUBLIC_PREFIXES = ["/team/", "/recruit/", "/athlete/", "/leaderboard", "/pricing", "/privacy", "/terms", "/directory"];
     const isPublicPath = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
 
     // Check 30-day inactivity — force re-auth if last_active_at is stale.
@@ -241,6 +242,7 @@ function AppRouter() {
       <Route path="/auth/whoop/callback" element={<WhoopCallback />} />
       <Route path="/regatta/:id" element={<RegattaPage />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
       <Route path="/leaderboard" element={<LeaderboardPage />} />
       <Route path="/pricing" element={<PricingPage />} />
       <Route path="/team/:slug" element={<TeamPortalPage />} />

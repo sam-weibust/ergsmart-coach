@@ -102,6 +102,9 @@ const RecoverySection = ({ profile }: RecoverySectionProps) => {
 
   return (
     <div className="space-y-6">
+      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-800 dark:text-amber-400">
+        <strong>Health Disclaimer:</strong> CrewSync recovery scores are for informational purposes only and are not medical advice. Injury logs are not medical records. Consult a healthcare professional for any health concerns.
+      </div>
       {/* Log Form */}
       <Card>
         <CardHeader>

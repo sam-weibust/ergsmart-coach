@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [signupRole, setSignupRole] = useState("athlete");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const referralCode = searchParams.get("ref");
@@ -41,6 +43,10 @@ const Auth = () => {
     e.preventDefault();
     if (pwScore(password) < 5) {
       toast.error("Password must be 12+ characters with uppercase, lowercase, number, and special character.");
+      return;
+    }
+    if (!termsAccepted) {
+      toast.error("You must accept the Terms of Service and Privacy Policy to create an account.");
       return;
     }
     setIsLoading(true);
@@ -53,6 +59,8 @@ const Auth = () => {
           data: {
             full_name: fullName,
             role: signupRole,
+            accepted_terms_at: new Date().toISOString(),
+            terms_version: "1.0",
           },
         },
       });
@@ -379,7 +387,22 @@ const Auth = () => {
                         {password.length === 0 && <p className="text-xs text-muted-foreground">Minimum 12 characters</p>}
                       </div>
 
-                      <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id="terms"
+                          checked={termsAccepted}
+                          onCheckedChange={(v) => setTermsAccepted(v === true)}
+                          className="mt-0.5"
+                        />
+                        <label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                          I am at least 13 years old and agree to the{" "}
+                          <Link to="/terms" className="underline hover:text-foreground" target="_blank">Terms of Service</Link>
+                          {" "}and{" "}
+                          <Link to="/privacy" className="underline hover:text-foreground" target="_blank">Privacy Policy</Link>.
+                        </label>
+                      </div>
+
+                      <Button type="submit" className="w-full" size="lg" disabled={isLoading || !termsAccepted}>
                         {isLoading ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -395,9 +418,10 @@ const Auth = () => {
               </CardContent>
             </Card>
           
-            {/* Footer text */}
-            <p className="text-center text-sm text-muted-foreground mt-6">
-              By continuing, you agree to our terms of service.
+            <p className="text-center text-xs text-muted-foreground mt-6">
+              <Link to="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+              {" · "}
+              <Link to="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
             </p>
           </div>
         </div>

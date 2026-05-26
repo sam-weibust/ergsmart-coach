@@ -153,6 +153,10 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
 
   return (
     <div className="flex flex-col h-full bg-card border border-border rounded-xl overflow-hidden" style={{ touchAction: "manipulation" }}>
+      {/* AI Disclaimer */}
+      <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800 text-[10px] text-blue-700 dark:text-blue-400 text-center">
+        AI-generated advice only. Consult a qualified coach. Not responsible for injuries.
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#0a1628] shrink-0">
         <div className="flex items-center gap-2">

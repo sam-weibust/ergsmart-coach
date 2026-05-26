@@ -15,9 +15,7 @@ const API_CACHE   = "crewsync-api-v1";
 // Old cache names that should be deleted.
 const OBSOLETE_CACHES = ["crewsync-shell-v1"];
 
-// Injected by vite-plugin-pwa at build time
-self.__WB_MANIFEST;
-precacheAndRoute(self.__WB_MANIFEST || []);
+precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 // Activate immediately and clean up stale caches.
