@@ -539,7 +539,7 @@ export default function PricingPage() {
           <div className="flex justify-center">
             <span className="inline-flex items-center gap-1.5 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full border border-green-200 dark:border-green-800">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-              Nonprofits always free
+              Nonprofits — contact us for free access
             </span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-black text-foreground">Simple, transparent pricing</h1>
@@ -714,18 +714,23 @@ export default function PricingPage() {
           <div className="flex-1 space-y-3">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-white/70 shrink-0" />
-              <h2 className="text-xl font-bold text-white">Nonprofit and Community Rowing Programs</h2>
+              <h2 className="text-xl font-bold text-white">Nonprofits</h2>
             </div>
             <p className="text-white/75 text-sm leading-relaxed max-w-2xl">
-              CrewSync is completely free for nonprofit rowing clubs and community programs — forever. We believe every program deserves access to professional coaching tools regardless of budget.
+              Verified 501(c)(3) nonprofit rowing organizations get full Elite Team access at no cost. Contact us to apply.
             </p>
           </div>
-          <a
-            href="mailto:sam.weibust@gmail.com"
-            className="shrink-0 inline-block bg-white text-[#0a1628] font-bold px-6 py-3 rounded-xl text-sm hover:bg-white/90 transition-colors whitespace-nowrap"
-          >
-            Contact Us for Free Access
-          </a>
+          <div className="shrink-0 flex flex-col items-start md:items-end gap-2">
+            <a
+              href="mailto:sam.weibust@gmail.com?subject=CrewSync%20Nonprofit%20Application&body=Organization%20name%3A%20%0AEIN%3A%20%0ABrief%20description%20of%20your%20program%3A%20"
+              className="inline-block bg-white text-[#0a1628] font-bold px-6 py-3 rounded-xl text-sm hover:bg-white/90 transition-colors whitespace-nowrap"
+            >
+              Contact Us
+            </a>
+            <p className="text-white/50 text-xs max-w-xs text-left md:text-right leading-relaxed">
+              Schools and school athletic programs are not eligible. Community rowing clubs, adaptive rowing programs, and registered nonprofit organizations qualify.
+            </p>
+          </div>
         </div>
 
         {/* FAQ */}
