@@ -97,6 +97,92 @@ function buildPreferencePrompt(prefs: Record<string, unknown>): string {
   return lines.join("\n");
 }
 
+function buildPersonalizationPrompt(
+  profile: any,
+  goals: any,
+  recentErg: any[],
+  preferences: Record<string, unknown>
+): string {
+  const lines: string[] = [];
+  const athleteName = profile?.full_name || "this athlete";
+
+  lines.push("\nPERSONALIZATION — THIS PLAN IS WRITTEN FOR A SPECIFIC ATHLETE. USE THEIR ACTUAL DATA:");
+  lines.push(`Athlete: ${athleteName}. Reference them by name in week summaries and phase descriptions.`);
+
+  // Pace calculations from 2k time
+  const current2k = goals?.current_2k_time as string | null;
+  if (current2k && current2k !== "Not set" && current2k.trim()) {
+    const parts = current2k.trim().replace(",", ".").split(":");
+    let totalSec: number | null = null;
+    if (parts.length === 2) totalSec = parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+    else if (parts.length === 1) totalSec = parseFloat(parts[0]);
+
+    if (totalSec && totalSec > 0) {
+      const per500 = totalSec / 4;
+      const fmt = (s: number) => {
+        const m = Math.floor(s / 60);
+        const sec = Math.round(s % 60);
+        return `${m}:${sec.toString().padStart(2, "0")}`;
+      };
+      lines.push(`\nCOMPUTED PACE TARGETS from ${athleteName}'s 2k of ${current2k} (${fmt(per500)}/500m base split):`);
+      lines.push(`  UT2: ${fmt(per500 + 20)}–${fmt(per500 + 25)}/500m`);
+      lines.push(`  UT1: ${fmt(per500 + 15)}–${fmt(per500 + 20)}/500m`);
+      lines.push(`  AT:  ${fmt(per500 + 4)}–${fmt(per500 + 9)}/500m`);
+      lines.push(`  TR1: ${fmt(per500)}–${fmt(per500 + 4)}/500m`);
+      lines.push(`  TR2: faster than ${fmt(per500 - 2)}/500m`);
+      lines.push(`CRITICAL: Use these exact splits in every targetSplit field (e.g. "${fmt(per500 + 17)}/500m"). Do NOT write "2k+Xs" — write the actual split time.`);
+    }
+  } else {
+    lines.push(`\nNo 2k time on record. Use 2k+X offset format for targetSplit. Add this note in week 1 summary: "Set your 2K time in Profile Settings for personalized pace targets."`);
+    const exp = (profile?.experience_level || "").toLowerCase();
+    if (exp === "beginner" || exp === "novice") {
+      lines.push("Beginner athlete: add +10% to all zone pace targets (slower). Cap required sessions at 30 minutes.");
+    }
+  }
+
+  // Recent erg history
+  if (recentErg.length > 0) {
+    lines.push(`\nRECENT TRAINING for ${athleteName} (reference this in week 1 summary):`);
+    recentErg.slice(0, 3).forEach((w: any) => {
+      lines.push(`  - ${w.workout_date}: ${w.workout_type || "erg"}, ${w.distance || "?"}m, avg split: ${w.avg_split || "not recorded"}`);
+    });
+    lines.push("Acknowledge their current fitness level and what this plan builds toward.");
+  }
+
+  // Tryouts: phase naming with real dates
+  const goal = preferences.training_goal as string;
+  const goalDate = preferences.goal_date as string | null;
+  if (goal === "tryouts" && goalDate) {
+    const now = new Date();
+    const target = new Date(goalDate + "T00:00:00");
+    const weeksUntil = Math.max(1, Math.round((target.getTime() - now.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+    const totalW = Math.max(1, ((preferences.months as number) ?? 3) * 4);
+    const addWeeks = (d: Date, w: number) => { const n = new Date(d); n.setDate(d.getDate() + w * 7); return n; };
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    const baseWks = Math.floor(totalW * 0.4);
+    const buildWks = Math.floor(totalW * 0.3);
+    const peakWks = Math.floor(totalW * 0.2);
+    const taperWks = totalW - baseWks - buildWks - peakWks;
+    const b = now, be = addWeeks(b, baseWks), bu = addWeeks(be, buildWks), pe = addWeeks(bu, peakWks);
+    lines.push(`\nTRYOUT PHASE STRUCTURE (${weeksUntil} weeks to tryouts on ${goalDate}):`);
+    lines.push(`  Base Phase (${fmt(b)} – ${fmt(be)}, weeks 1–${baseWks}): aerobic foundation, technique`);
+    lines.push(`  Build Phase (${fmt(be)} – ${fmt(bu)}, weeks ${baseWks + 1}–${baseWks + buildWks}): threshold, AT pieces`);
+    lines.push(`  Peak Phase (${fmt(bu)} – ${fmt(pe)}, weeks ${baseWks + buildWks + 1}–${totalW - taperWks}): TR1/TR2, seat-racing simulations`);
+    lines.push(`  Taper (${fmt(pe)} – ${goalDate}, final ${taperWks} week(s)): reduced volume, race sharpening`);
+    lines.push("Use these exact date labels in every phase_label field.");
+  }
+
+  // Return from injury: strict volume rules
+  if (goal === "return_from_injury") {
+    lines.push(`\nRETURN FROM INJURY — NON-NEGOTIABLE RULES:`);
+    lines.push("Weeks 1–2: MAX 3 sessions per week. UT2 ONLY. No session longer than 20 minutes. No lifting whatsoever. At least 4 is_rest days per week. Week summary MUST include: 'Injury return — listen to your body, stop if pain returns.'");
+    lines.push("Weeks 3–4: 4 sessions max. UT2 and UT1 allowed. Optional lifting may appear but never required. No pieces. No intervals.");
+    lines.push("Week 5+: Gradual AT introduction only. TR1 not before week 5. Flag every week 1–4 summary with injury caution language.");
+  }
+
+  return lines.join("\n");
+}
+
 serve(async (req) => {
   console.log("generate-workout: function started");
 
@@ -136,15 +222,22 @@ serve(async (req) => {
 
     const today = new Date().toISOString().slice(0, 10);
     const prefKey = `${preferences.training_goal ?? "g"}:${preferences.intensity ?? "m"}:${preferences.include_lifting ?? 1}:${preferences.lifting_days_per_week ?? 2}:${preferences.include_two_a_days ?? 1}`;
-    const cacheKey = `training_plan_v2:${user_id}:${preferences.months ?? 3}:${prefKey}:${today}`;
+    const cacheKey = `training_plan_v3:${user_id}:${preferences.months ?? 3}:${prefKey}:${today}`;
+    const totalWeeksForCache = Math.max(1, ((preferences.months as number) ?? 3) * 4);
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      console.log("generate-workout: cache hit");
-      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
-      return new Response(JSON.stringify(cached), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
-      });
+      const cachedWeeks = Array.isArray((cached as any)?.plan) ? (cached as any).plan : (Array.isArray(cached) ? cached : []);
+      if (cachedWeeks.length >= totalWeeksForCache - 1) {
+        console.log("generate-workout: cache hit (complete plan)");
+        await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
+        return new Response(JSON.stringify(cached), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+        });
+      } else {
+        console.log(`generate-workout: cached plan incomplete (${cachedWeeks.length}/${totalWeeksForCache} weeks), regenerating`);
+        await supabase.from("ai_response_cache").delete().eq("cache_key", cacheKey);
+      }
     }
 
     const [profileRes, goalsRes, ergRes, strengthRes, teamMemberRes] = await Promise.all([
@@ -189,43 +282,34 @@ serve(async (req) => {
     }
     if (!philosophyPrompt) philosophyPrompt = FALLBACK_PHILOSOPHY;
 
-    const userContext = `
-USER PROFILE:
-- Name: ${profile?.full_name || "Unknown"}
-- Type: ${profile?.user_type || "rower"}
-- Experience: ${profile?.experience_level || "Unknown"}
-- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
-
-USER GOALS:
-- Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-
-RECENT ERG WORKOUTS:
-${recentErg.length ? recentErg.map((w: any) => `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, avg split: ${w.avg_split}`).join("\n") : "No recent erg workouts"}
-
-RECENT STRENGTH WORKOUTS:
-${recentStrength.length ? recentStrength.map((w: any) => `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`).join("\n") : "No recent strength workouts"}
-`.trim();
-
     const totalWeeks = Math.max(1, ((preferences.months as number) ?? 3) * 4);
     const durationLabel = `${preferences.months ?? 3} months (${totalWeeks} weeks)`;
 
     const prefPrompt = buildPreferencePrompt(preferences);
+    const personalizationPrompt = buildPersonalizationPrompt(profile, goals, recentErg, preferences);
 
     const systemPrompt = `${philosophyPrompt}
 ${prefPrompt}
+${personalizationPrompt}
 
-You are CrewSync AI, an expert rowing and strength training coach.
+You are CrewSync AI, an expert rowing and strength training coach generating a personalized plan.
 
-USER CONTEXT:
-${userContext}
+ATHLETE PROFILE:
+- Name: ${profile?.full_name || "Unknown"}
+- Type: ${profile?.user_type || "rower"}, Experience: ${profile?.experience_level || "Unknown"}
+- Age: ${profile?.age || "Unknown"}, Weight: ${profile?.weight || "Unknown"}kg, Height: ${profile?.height || "Unknown"}cm
+- 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
 
-LIFTING PROGRAM (when include_lifting is true):
+RECENT STRENGTH:
+${recentStrength.length ? recentStrength.map((w: any) => `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`).join("\n") : "No recent strength workouts"}
+
+LIFTING PROGRAM:
 Day A — Lower Power: Back Squat 5x3, Romanian Deadlift 4x5, Power Clean 4x3, Box Jump 4x5, Glute Ham Raise 3x8, Plank 3x60s
 Day B — Upper Pull: Deadlift 5x3, Weighted Pull-ups 4x5, Barbell Row 4x6, Single Arm DB Row 3x8, Face Pulls 3x15, Hanging Leg Raise 3x12
 Day C — Lower Endurance: Front Squat 4x6, Bulgarian Split Squat 3x8, Trap Bar Deadlift 4x8, Step-ups 3x10, Nordic Hamstring Curl 3x6, Pallof Press 3x12
 Day D — Upper Endurance: Hex Bar Deadlift 4x8, DB Romanian Deadlift 3x12, Lat Pulldown 4x10, Cable Row 4x12, DB Curl to Press 3x10, Copenhagen Plank 3x30s, Reverse Hyper 3x15
 
-CRITICAL STRUCTURE RULE — MUST FOLLOW:
+CRITICAL STRUCTURE RULE:
 Each day has exactly one required session. Optional sessions are always lower intensity.
 NEVER make lifting a standalone required session on Monday-Friday.
 Sunday always has is_rest: true, required: null, optional: null.
@@ -286,7 +370,7 @@ For lift required sessions (Saturday only): session_type must be "lift".
 For lift optional sessions: session_type must be "lift".
 For erg optional sessions: session_type must be "erg".
 For rest days: is_rest: true, required: null, optional: null.
-targetSplit MUST always be expressed as 2k+Xs/500m or 2k-Xs/500m.
+targetSplit: if athlete has a 2k time, use exact computed splits (e.g. "1:53/500m"). If no 2k time, use 2k+Xs/500m format.
 Each week MUST have 7 days (day 1=Monday through day 7=Sunday).
 Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
 
