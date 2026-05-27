@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   initBle, listDevices, connectToDevice, startStreaming, disconnectDevice,
-  startNotification, isNativePlatform, isWebBluetoothSupported,
+  startNotification, isNativePlatform, isWebBluetoothSupported, isMobileWebBrowser,
   BleDevice, BleInitStatus, PM5StreamData, parseHRMeasurement, HR_SERVICE, HR_MEASUREMENT,
 } from "@/lib/ble";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
@@ -191,7 +191,9 @@ const DeviceSection = () => {
       }
     } catch (e: any) {
       const msg: string = e?.message || "";
-      if (msg === 'PERMISSION_DENIED') {
+      if (msg === 'MOBILE_WEB_BLE') {
+        toast({ title: "Bluetooth not available", description: "Connect via the iOS app for live erg tracking.", variant: "destructive" });
+      } else if (msg === 'PERMISSION_DENIED') {
         setBleStatus('permission_denied');
         toast({ title: "Bluetooth permission denied", description: "Go to Settings → CrewSync → enable Bluetooth to connect your PM5.", variant: "destructive" });
       } else if (msg === 'BLUETOOTH_OFF') {
@@ -354,11 +356,25 @@ const DeviceSection = () => {
   const stateLabel = STATE_LABELS[ergData.workoutState ?? 5];
   const isRowing = ergData.workoutState === 2;
 
-  const webBtUnsupported = !isNativePlatform() && !isWebBluetoothSupported();
-  const btScanDisabled = webBtUnsupported || bleStatus === 'permission_denied' || bleStatus === 'bluetooth_off';
+  const mobileWeb = isMobileWebBrowser();
+  const webBtUnsupported = !isNativePlatform() && !mobileWeb && !isWebBluetoothSupported();
+  const btScanDisabled = mobileWeb || webBtUnsupported || bleStatus === 'permission_denied' || bleStatus === 'bluetooth_off';
 
   return (
     <div className="space-y-6">
+
+      {/* Mobile web — Bluetooth not available, direct to native app */}
+      {mobileWeb && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-500/40 bg-blue-500/10 p-4 text-sm text-blue-700 dark:text-blue-400">
+          <Smartphone className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Connect via the iOS app for live erg tracking</p>
+            <p className="mt-0.5 text-blue-600 dark:text-blue-500">
+              Bluetooth is not available in mobile browsers. Download the CrewSync app to connect your PM5 or heart rate monitor.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Browser compatibility warning */}
       {webBtUnsupported && (

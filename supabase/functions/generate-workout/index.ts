@@ -17,12 +17,85 @@ AT: 2k+4-9s, rate 26-28. Anaerobic threshold.
 TR1: 2k+0-4s, rate 26-32. Threshold, hard pieces.
 TR2: below 2k pace, rate 32+. Race specific, peak phase only within 6 weeks of race.
 
-WEEKLY STRUCTURE (erg season Jan-Mar): Mon UT1+lift, Tue lift only, Wed UT2/UT1 high volume, Thu lift only, Fri AT/TR1 quality, Sat lift/rest, Sun off.
-WEEKLY STRUCTURE (summer Jun-Aug): Mon lift, Tue TR1 required, Wed lift, Thu lift/UT1, Fri TR1/TR2, Sat lift, Sun off.
+CORRECT WEEKLY STRUCTURE — CRITICAL RULES:
+- Each day has EXACTLY ONE required session.
+- Lifting is ALWAYS optional — NEVER a standalone required session Monday through Friday.
+- Saturday may have lifting as the required session when erg is the optional.
+- Sunday is ALWAYS OFF — no required or optional sessions.
+
+Monday: Required — erg session (UT1). Optional — lift (Day A Lower Power) after erg.
+Tuesday: Required — erg session (AT or TR1, higher intensity). Optional — second easy erg (UT2) or lift (Day B Upper Pull).
+Wednesday: Required — erg session (UT2/UT1 high volume). Optional — lift (Day B Upper Pull or Day C Lower Endurance) after erg.
+Thursday: Required — erg session (moderate intensity) or rest depending on weekly load. Optional — lift (Day C Lower Endurance) or easy erg.
+Friday: Required — erg quality session (AT/TR1). Optional — second easy session.
+Saturday: Required — lift (Day D Upper Endurance) or easy erg. Optional — second erg or rest.
+Sunday: OFF. No sessions at all.
+
+NEVER generate Tuesday, Wednesday, or Thursday as "lift only" required days.
+NEVER generate more than one required session per day.
 
 3-WEEK LOADING CYCLE: Week 1 easy, Week 2 medium, Week 3 hard, Week 4 recovery (50% volume).
 
 Always specify piece duration/distance, rest interval, stroke rate, warmup, cooldown. Express paces as 2k +/- seconds, never absolute splits.`;
+
+// Build dynamic additions to the system prompt based on user preferences
+function buildPreferencePrompt(prefs: Record<string, unknown>): string {
+  const goal = prefs.training_goal as string || "general_fitness";
+  const intensity = prefs.intensity as string || "moderate";
+  const goalDate = prefs.goal_date as string | null;
+  const includeLift = prefs.include_lifting !== false;
+  const liftDays = (prefs.lifting_days_per_week as number) || 2;
+  const twoADays = prefs.include_two_a_days !== false;
+
+  const lines: string[] = [];
+
+  lines.push("\nATHLETE PREFERENCES — apply these to all sessions:");
+
+  // Intensity
+  if (intensity === "easy") {
+    lines.push("INTENSITY: Easy. Use 3-4 sessions per week. UT2 and UT1 only. No TR work unless goal date is within 4 weeks. Longer rest between pieces. Good for beginners or busy schedules.");
+  } else if (intensity === "hard") {
+    lines.push("INTENSITY: Hard. 6 sessions per week. Medium/Hard zone targets. TR1 introduced at 8 weeks from goal date. TR2 at 4 weeks from goal date. Tight rest intervals. Serious competitor program.");
+  } else {
+    lines.push("INTENSITY: Moderate. 5-6 sessions per week. Standard competitive program volume. UT1 and AT base, TR1 introduced at 6 weeks from goal date.");
+  }
+
+  // Training goal
+  if (goal === "erg_testing") {
+    lines.push("TRAINING GOAL: Erg Testing. Include a testing taper in the final week. Add 2k simulation pieces in week 3 of 4-week blocks. Sharp taper in final week before test date.");
+    if (goalDate) lines.push(`Test date: ${goalDate}. Peak the plan at this date.`);
+  } else if (goal === "upcoming_race") {
+    lines.push("TRAINING GOAL: Upcoming Race. Full periodization toward race date. TR2 work in final 3 weeks. Race-specific pieces.");
+    if (goalDate) lines.push(`Race date: ${goalDate}. Build toward this date.`);
+  } else if (goal === "tryouts") {
+    lines.push("TRAINING GOAL: Tryouts. Peak at tryout date. Include competitive pieces and seat-racing simulation efforts. High-intensity work in final 2 weeks.");
+    if (goalDate) lines.push(`Tryout date: ${goalDate}. Peak the plan at this date.`);
+  } else if (goal === "off_season") {
+    lines.push("TRAINING GOAL: Off Season. UT2 dominant. Low volume maintenance. No TR2 work. Focus on recovery and aerobic base preservation.");
+  } else if (goal === "return_from_injury") {
+    lines.push("TRAINING GOAL: Return from Injury. Start at 50% volume in week 1. Build 10% per week. No TR work for first 2 weeks. Gradual reintroduction only. Flag intensity caution.");
+  } else {
+    lines.push("TRAINING GOAL: General Fitness. Heavy UT2 and UT1. No TR2. No testing blocks. Steady progressive overload.");
+  }
+
+  // Lifting
+  if (!includeLift) {
+    lines.push("LIFTING: None. No lifting sessions anywhere in the plan. Erg-only program.");
+  } else if (liftDays === 3) {
+    lines.push("LIFTING: Optional 3 days per week — Monday (Day A Lower Power), Wednesday (Day B Upper Pull/Day C Lower Endurance), Saturday (Day D Upper Endurance). All lifting is OPTIONAL, never required Monday-Friday.");
+  } else {
+    lines.push("LIFTING: Optional 2 days per week — Monday (Day A Lower Power) and Thursday (Day C Lower Endurance). All lifting is OPTIONAL, never required Monday-Friday.");
+  }
+
+  // 2-a-days
+  if (!twoADays) {
+    lines.push("2-A-DAYS: Do NOT include optional second sessions. Single session per day only. Set optional to null for every day.");
+  } else {
+    lines.push("2-A-DAYS: Include optional second sessions Monday through Saturday. Optional sessions are always lower intensity than the required session. If required is TR1, optional is UT2. If required is UT1, optional is UT2. Sunday has no optional session.");
+  }
+
+  return lines.join("\n");
+}
 
 serve(async (req) => {
   console.log("generate-workout: function started");
@@ -33,21 +106,15 @@ serve(async (req) => {
 
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    console.log("generate-workout: ANTHROPIC_API_KEY present:", !!ANTHROPIC_API_KEY);
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("Missing ANTHROPIC_API_KEY");
-    }
+    if (!ANTHROPIC_API_KEY) throw new Error("Missing ANTHROPIC_API_KEY");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // ---------------------------
-    // SAFE JSON PARSING
-    // ---------------------------
     const raw = await req.text();
-    let body;
+    let body: Record<string, unknown>;
     try {
       body = JSON.parse(raw);
     } catch {
@@ -57,9 +124,8 @@ serve(async (req) => {
       });
     }
 
-    const user_id = body.user_id;
-    const workout_type = body.workout_type ?? "general";
-    const preferences = body.preferences ?? {};
+    const user_id = body.user_id as string;
+    const preferences = (body.preferences ?? {}) as Record<string, unknown>;
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
@@ -68,48 +134,25 @@ serve(async (req) => {
       });
     }
 
-    // ---------------------------
-    // CACHE CHECK — per athlete per month-count per calendar day
-    // ---------------------------
     const today = new Date().toISOString().slice(0, 10);
-    const cacheKey = `training_plan:${user_id}:${preferences.months ?? 3}:${today}`;
+    const prefKey = `${preferences.training_goal ?? "g"}:${preferences.intensity ?? "m"}:${preferences.include_lifting ?? 1}:${preferences.lifting_days_per_week ?? 2}:${preferences.include_two_a_days ?? 1}`;
+    const cacheKey = `training_plan_v2:${user_id}:${preferences.months ?? 3}:${prefKey}:${today}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      console.log("generate-workout: cache hit for", cacheKey);
+      console.log("generate-workout: cache hit");
       await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
-    console.log("generate-workout: cache miss for", cacheKey);
 
-    console.log("generate-workout: fetching user context for", user_id);
-
-    // ---------------------------
-    // FETCH USER CONTEXT
-    // ---------------------------
     const [profileRes, goalsRes, ergRes, strengthRes, teamMemberRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
-      supabase
-        .from("erg_workouts")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("workout_date", { ascending: false })
-        .limit(5),
-      supabase
-        .from("strength_workouts")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("workout_date", { ascending: false })
-        .limit(5),
-      supabase
-        .from("team_members")
-        .select("team_id")
-        .eq("user_id", user_id)
-        .limit(1)
-        .maybeSingle(),
+      supabase.from("erg_workouts").select("*").eq("user_id", user_id).order("workout_date", { ascending: false }).limit(5),
+      supabase.from("strength_workouts").select("*").eq("user_id", user_id).order("workout_date", { ascending: false }).limit(5),
+      supabase.from("team_members").select("team_id").eq("user_id", user_id).limit(1).maybeSingle(),
     ]);
 
     const profile = profileRes.data;
@@ -117,11 +160,6 @@ serve(async (req) => {
     const recentErg = ergRes.data || [];
     const recentStrength = strengthRes.data || [];
 
-    console.log("generate-workout: user context fetched. profile:", !!profile, "goals:", !!goals);
-
-    // ---------------------------
-    // FETCH TRAINING PHILOSOPHY (with fallback)
-    // ---------------------------
     let philosophyPrompt = "";
     try {
       const teamId = teamMemberRes.data?.team_id;
@@ -135,36 +173,22 @@ serve(async (req) => {
         if (sp) philosophyPrompt = sp;
       }
       if (!philosophyPrompt) {
-        const { data: defaultPhil, error: philError } = await supabase
+        const { data: defaultPhil } = await supabase
           .from("default_training_philosophy")
           .select("system_prompt")
           .eq("is_default", true)
           .maybeSingle();
-        if (philError) {
-          console.error("generate-workout: philosophy fetch error:", philError.message);
-        } else if (defaultPhil?.system_prompt) {
-          philosophyPrompt = defaultPhil.system_prompt;
-        }
+        if (defaultPhil?.system_prompt) philosophyPrompt = defaultPhil.system_prompt;
       }
     } catch (philErr) {
       console.error("generate-workout: philosophy fetch threw:", philErr);
     }
 
-    // Cap philosophy to 1500 chars to prevent system prompt token overflow/timeouts
     if (philosophyPrompt.length > 1500) {
-      philosophyPrompt = philosophyPrompt.slice(0, 1500) + "\n[see full methodology above — follow all rules]";
+      philosophyPrompt = philosophyPrompt.slice(0, 1500) + "\n[see full methodology — follow all rules]";
     }
+    if (!philosophyPrompt) philosophyPrompt = FALLBACK_PHILOSOPHY;
 
-    if (!philosophyPrompt) {
-      console.warn("generate-workout: using fallback philosophy");
-      philosophyPrompt = FALLBACK_PHILOSOPHY;
-    }
-
-    console.log("generate-workout: philosophy prompt length:", philosophyPrompt.length, "chars");
-
-    // ---------------------------
-    // BUILD USER CONTEXT
-    // ---------------------------
     const userContext = `
 USER PROFILE:
 - Name: ${profile?.full_name || "Unknown"}
@@ -174,63 +198,42 @@ USER PROFILE:
 
 USER GOALS:
 - Current 2K: ${goals?.current_2k_time || "Not set"} → Goal: ${goals?.goal_2k_time || "Not set"}
-- Current 5K: ${goals?.current_5k_time || "Not set"} → Goal: ${goals?.goal_5k_time || "Not set"}
-- Current 6K: ${goals?.current_6k_time || "Not set"} → Goal: ${goals?.goal_6k_time || "Not set"}
 
 RECENT ERG WORKOUTS:
-${
-  recentErg.length
-    ? recentErg
-        .map(
-          (w) =>
-            `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, duration: ${w.duration}, avg split: ${w.avg_split}`
-        )
-        .join("\n")
-    : "No recent erg workouts"
-}
+${recentErg.length ? recentErg.map((w: any) => `- ${w.workout_date}: ${w.workout_type}, ${w.distance}m, avg split: ${w.avg_split}`).join("\n") : "No recent erg workouts"}
 
 RECENT STRENGTH WORKOUTS:
-${
-  recentStrength.length
-    ? recentStrength
-        .map(
-          (w) =>
-            `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`
-        )
-        .join("\n")
-    : "No recent strength workouts"
-}
+${recentStrength.length ? recentStrength.map((w: any) => `- ${w.workout_date}: ${w.exercise}, ${w.sets}x${w.reps} @ ${w.weight}kg`).join("\n") : "No recent strength workouts"}
 `.trim();
 
-    // ---------------------------
-    // COMPUTE PLAN DIMENSIONS
-    // ---------------------------
-    const totalWeeks = Math.max(1, (preferences.months ?? 3) * 4);
+    const totalWeeks = Math.max(1, ((preferences.months as number) ?? 3) * 4);
     const durationLabel = `${preferences.months ?? 3} months (${totalWeeks} weeks)`;
 
-    // ---------------------------
-    // SYSTEM PROMPT
-    // ---------------------------
+    const prefPrompt = buildPreferencePrompt(preferences);
+
     const systemPrompt = `${philosophyPrompt}
+${prefPrompt}
 
 You are CrewSync AI, an expert rowing and strength training coach.
 
 USER CONTEXT:
 ${userContext}
 
-STRENGTH PROGRAM INTEGRATION — during erg season, lift days are: Monday (Day A — Lower Power), Tuesday (Day B — Upper Pull), Thursday (Day C — Lower Endurance), Saturday (Day D — Upper Endurance). Set day 1 (Monday) type to "LIFT" with workout "Day A — Lower Power: Back Squat 5x3, Romanian Deadlift 4x5, Power Clean 4x3, Box Jump 4x5, Glute Ham Raise 3x8, Plank 3x60s". Day 2 (Tuesday): "Day B — Upper Pull: Deadlift 5x3, Weighted Pull-ups 4x5, Barbell Row 4x6, Single Arm DB Row 3x8, Face Pulls 3x15, Hanging Leg Raise 3x12". Day 4 (Thursday): "Day C — Lower Endurance: Front Squat 4x6, Bulgarian Split Squat 3x8, Trap Bar Deadlift 4x8, Step-ups 3x10, Nordic Hamstring Curl 3x6, Pallof Press 3x12". Day 6 (Saturday) in 4-day version: "Day D — Upper Endurance: Hex Bar Deadlift 4x8, DB Romanian Deadlift 3x12, Lat Pulldown 4x10, Cable Row 4x12, DB Curl to Press 3x10, Copenhagen Plank 3x30s, Reverse Hyper 3x15". Scale intensity with erg loading week: easy erg week 75-80%, medium 80-85%, hard 85-90%, recovery week 60-65% cut volume half. The full weekly plan shows BOTH erg and lift sessions together each day.
+LIFTING PROGRAM (when include_lifting is true):
+Day A — Lower Power: Back Squat 5x3, Romanian Deadlift 4x5, Power Clean 4x3, Box Jump 4x5, Glute Ham Raise 3x8, Plank 3x60s
+Day B — Upper Pull: Deadlift 5x3, Weighted Pull-ups 4x5, Barbell Row 4x6, Single Arm DB Row 3x8, Face Pulls 3x15, Hanging Leg Raise 3x12
+Day C — Lower Endurance: Front Squat 4x6, Bulgarian Split Squat 3x8, Trap Bar Deadlift 4x8, Step-ups 3x10, Nordic Hamstring Curl 3x6, Pallof Press 3x12
+Day D — Upper Endurance: Hex Bar Deadlift 4x8, DB Romanian Deadlift 3x12, Lat Pulldown 4x10, Cable Row 4x12, DB Curl to Press 3x10, Copenhagen Plank 3x30s, Reverse Hyper 3x15
 
-You are generating a complete multi-week training plan.
-You MUST output the FULL plan, not a sample.
-You MUST output EVERY week explicitly from Week 1 through Week ${totalWeeks}.
-You MUST NOT summarize.
-You MUST NOT skip weeks.
-You MUST NOT say "repeat this pattern."
-You MUST NOT compress multiple weeks into one description.
-You MUST NOT output commentary before or after the JSON.
+CRITICAL STRUCTURE RULE — MUST FOLLOW:
+Each day has exactly one required session. Optional sessions are always lower intensity.
+NEVER make lifting a standalone required session on Monday-Friday.
+Sunday always has is_rest: true, required: null, optional: null.
 
-Your ONLY output should be a single valid JSON object with this exact structure:
+You MUST output the FULL plan, all ${totalWeeks} weeks. No summaries. No "repeat" instructions.
+Output ONLY valid JSON. No text before or after.
 
+JSON SCHEMA:
 {
   "duration": "${durationLabel}",
   "total_weeks": ${totalWeeks},
@@ -238,94 +241,79 @@ Your ONLY output should be a single valid JSON object with this exact structure:
     {
       "week": 1,
       "phase": "Base",
+      "phase_label": "Week 1 of ${totalWeeks} — Base Phase",
+      "summary": "Easy base building week. Focus on UT2 aerobic base. Two UT1 sessions.",
+      "intensity_label": "Easy Week",
       "days": [
         {
           "day": 1,
-          "type": "UT2",
-          "warmup": "10 min easy rowing",
-          "workout": "60 min steady state",
-          "rest": "",
-          "breakup": "continuous",
-          "rates": "r18-20",
-          "cooldown": "10 min easy",
-          "ergWorkout": {
-            "zone": "UT2",
-            "description": "60 min steady state at UT2 intensity",
-            "distance": "14000",
-            "duration": "60 min",
-            "targetSplit": "2k+22s/500m",
-            "rate": "r18-20",
-            "warmup": "10 min easy rowing",
-            "cooldown": "10 min easy",
+          "day_name": "Monday",
+          "is_rest": false,
+          "required": {
+            "session_type": "erg",
+            "zone": "UT1",
+            "title": "UT1 Steady State",
+            "description": "45 min steady state at UT1",
+            "distance": "10000",
+            "duration": "45 min",
+            "targetSplit": "2k+18s/500m",
+            "rate": "r20-22",
+            "warmup": "10 min easy at r18",
+            "cooldown": "5 min easy",
             "restPeriods": ""
+          },
+          "optional": {
+            "session_type": "lift",
+            "title": "Optional Lift — Day A (Lower Power)",
+            "description": "Back Squat 5x3, Romanian Deadlift 4x5, Power Clean 4x3, Box Jump 4x5, Glute Ham Raise 3x8, Plank 3x60s",
+            "note": "Complete only if energy allows after required erg session."
           }
+        },
+        {
+          "day": 7,
+          "day_name": "Sunday",
+          "is_rest": true,
+          "required": null,
+          "optional": null
         }
       ]
     }
   ]
 }
 
-Rules you MUST follow:
-- The JSON must be valid and parseable.
-- No trailing commas.
-- No markdown formatting.
-- No text outside the JSON.
-- The "plan" array MUST contain exactly ${totalWeeks} week objects.
-- Each week MUST contain 7 days.
-- Each week MUST have a "phase" field: one of "Base", "Build", "Peak", or "Taper".
-- Each day MUST have ALL of these fields:
-  - "day": integer 1 (Monday) through 7 (Sunday)
-  - "type": one of "UT2", "UT1", "TR", "AT", "LIFT", "REST", "OFF", or "CROSS"
-  - "warmup": short string (e.g. "10 min easy") or "" for rest days
-  - "workout": concise printable description (e.g. "4x2000m @AT" or "Squat 4x6, Deadlift 3x5") or "Rest" for rest days
-  - "rest": rest interval between pieces (e.g. "3:00 rest") or ""
-  - "breakup": piece structure (e.g. "4x2000m" or "3x20 min") or "" for continuous/rest
-  - "rates": stroke rate or lift tempo (e.g. "r20-22" or "controlled") or ""
-  - "cooldown": short string (e.g. "10 min easy") or "" for rest days
-  - "ergWorkout": object with { zone, description, distance (meters as string), duration (e.g. "60 min"), targetSplit (e.g. "2k+22s/500m"), rate, warmup, cooldown, restPeriods } — use null for non-erg days
-- The workouts MUST be specific, actionable, and unique for each day.
-- For strength/lift days set "type" to "LIFT" and set "ergWorkout" to null.
-- For rest/off days set "type" to "REST", set "workout" to "Rest", and set "ergWorkout" to null.
-- targetSplit MUST always be expressed as 2k+Xs/500m or 2k-Xs/500m — never absolute splits.
+For erg required sessions: session_type must be "erg".
+For lift required sessions (Saturday only): session_type must be "lift".
+For lift optional sessions: session_type must be "lift".
+For erg optional sessions: session_type must be "erg".
+For rest days: is_rest: true, required: null, optional: null.
+targetSplit MUST always be expressed as 2k+Xs/500m or 2k-Xs/500m.
+Each week MUST have 7 days (day 1=Monday through day 7=Sunday).
+Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
 
-Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
+    console.log("generate-workout: calling Anthropic API");
 
-    console.log("generate-workout: system prompt built, total chars:", systemPrompt.length);
-    console.log("generate-workout: calling Anthropic API, model: claude-sonnet-4-20250514");
-
-    // ---------------------------
-    // CALL ANTHROPIC (with prompt caching on system prompt)
-    // ---------------------------
-    const anthropicResponse = await fetch(
-      "https://api.anthropic.com/v1/messages",
-      {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-beta": "prompt-caching-2024-07-31",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 8000,
-          stream: false,
-          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-          messages: [
-            {
-              role: "user",
-              content: `Generate the complete ${durationLabel} training plan for this athlete. Output only the JSON object.`,
-            },
-          ],
-        }),
-      }
-    );
+    const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8000,
+        stream: false,
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: `Generate the complete ${durationLabel} training plan. Output only the JSON object.` }],
+      }),
+    });
 
     console.log("generate-workout: Anthropic response status:", anthropicResponse.status);
 
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
-      console.error("generate-workout: Anthropic error body:", t);
+      console.error("generate-workout: Anthropic error:", t);
       return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -335,8 +323,6 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
     const result = await anthropicResponse.json();
     const text = result?.content?.[0]?.text;
 
-    console.log("generate-workout: Anthropic response received, text length:", text?.length ?? 0);
-
     if (!text) {
       return new Response(JSON.stringify({ error: "Invalid AI response" }), {
         status: 500,
@@ -344,104 +330,31 @@ Now generate the FULL plan for all ${totalWeeks} weeks.`.trim();
       });
     }
 
-    // ---------------------------
-    // EXTRACT + PARSE JSON (with repair pass on failure)
-    // ---------------------------
     const tryParseJson = (raw: string): object | null => {
       const s = raw.indexOf("{");
       const e = raw.lastIndexOf("}");
       if (s === -1 || e === -1 || e <= s) return null;
-      try {
-        return JSON.parse(raw.slice(s, e + 1));
-      } catch {
-        return null;
-      }
+      try { return JSON.parse(raw.slice(s, e + 1)); } catch { return null; }
     };
 
     let parsed = tryParseJson(text);
 
     if (!parsed) {
       console.warn("generate-workout: first parse failed, attempting repair pass");
-
-      const repairSystemPrompt = `You are a strict JSON-only generator for RowSync's training-plan API.
-Your ONLY job is to take a natural-language training plan and output a fully valid JSON object that can be parsed by Supabase Edge Functions without errors.
-
-RULES:
-- Output MUST be valid JSON.
-- NO comments, no trailing commas, no explanations, no markdown.
-- Never wrap JSON in code fences.
-- Never include text before or after the JSON.
-- All strings must be double-quoted.
-- All null values must be literal null.
-- All numbers must be numbers, not strings.
-- If the input contains invalid JSON fragments, rewrite them into valid JSON.
-- Ensure arrays and objects are properly closed.
-- Ensure every week, day, and ergWorkout object is valid.
-
-EXPECTED OUTPUT SHAPE:
-{
-  "duration": "string",
-  "total_weeks": number,
-  "plan": [
-    {
-      "week": number,
-      "phase": "string",
-      "days": [
-        {
-          "day": number,
-          "type": "string",
-          "warmup": "string",
-          "workout": "string",
-          "rest": "string",
-          "breakup": "string",
-          "rates": "string",
-          "cooldown": "string",
-          "ergWorkout": {
-            "zone": "string",
-            "description": "string",
-            "distance": "string",
-            "duration": "string",
-            "targetSplit": "string",
-            "rate": "string",
-            "warmup": "string",
-            "cooldown": "string",
-            "restPeriods": "string"
-          }
-        }
-      ]
-    }
-  ]
-}
-
-When given ANY training plan text, return fully valid JSON matching the schema above. Fill missing fields with empty string or null.`;
-
       const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
+        headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 16000,
           stream: false,
-          system: repairSystemPrompt,
+          system: "You are a JSON repair tool. Output only valid JSON. No text before or after. Fix any syntax errors in the training plan JSON provided.",
           messages: [{ role: "user", content: text }],
         }),
       });
-
       if (repairResponse.ok) {
         const repairResult = await repairResponse.json();
-        const repairText = repairResult?.content?.[0]?.text ?? "";
-        parsed = tryParseJson(repairText);
-        if (parsed) {
-          console.log("generate-workout: repair pass succeeded");
-        } else {
-          console.error("generate-workout: repair pass also failed");
-        }
-      } else {
-        console.error("generate-workout: repair pass HTTP error:", repairResponse.status);
+        parsed = tryParseJson(repairResult?.content?.[0]?.text ?? "");
       }
     }
 
@@ -453,7 +366,6 @@ When given ANY training plan text, return fully valid JSON matching the schema a
     }
 
     const usage = result?.usage ?? {};
-    console.log("generate-workout: success, storing in cache and returning plan");
     await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
     await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
@@ -463,14 +375,9 @@ When given ANY training plan text, return fully valid JSON matching the schema a
     });
   } catch (e) {
     console.error("generate-workout: unhandled error:", e);
-    return new Response(
-      JSON.stringify({
-        error: e instanceof Error ? e.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

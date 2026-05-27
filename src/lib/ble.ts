@@ -191,6 +191,16 @@ export function isNativePlatform(): boolean {
 }
 
 /**
+ * Returns true if running on a mobile browser (iOS Safari, Chrome on iOS, etc.)
+ * where Web Bluetooth is unavailable and BLE operations will throw security errors.
+ */
+export function isMobileWebBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (Capacitor.isNativePlatform()) return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+/**
  * Returns true if the standard Web Bluetooth requestDevice API is available.
  * Chrome and Edge on desktop/Android support this. Safari and Firefox do not.
  */
@@ -215,6 +225,7 @@ const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 export type BleInitStatus = 'ready' | 'permission_denied' | 'bluetooth_off' | 'error';
 
 export async function initBle(): Promise<BleInitStatus> {
+  if (isMobileWebBrowser()) return 'error'; // Bluetooth unavailable on mobile web browsers
   if (!isNativePlatform()) return 'ready'; // Web Bluetooth needs no init
   if (initialized) return 'ready';
   try {
@@ -245,6 +256,9 @@ export async function initBle(): Promise<BleInitStatus> {
  */
 export async function listDevices(durationMs = 5000): Promise<BleDevice[]> {
   if (!isNativePlatform()) {
+    if (isMobileWebBrowser()) {
+      throw new Error('MOBILE_WEB_BLE');
+    }
     if (!isWebBluetoothSupported()) {
       throw new Error(
         'Web Bluetooth is not supported in this browser. Please use Chrome or Edge to connect via Bluetooth.'

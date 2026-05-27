@@ -6,6 +6,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/supabase';
 // Prevent SSR from using localStorage
 const isBrowser = typeof window !== "undefined";
 
+// Ensure realtime always uses wss:// — never ws:// — to avoid mixed-content blocks on mobile browsers
+const realtimeUrl = SUPABASE_URL.replace(/^http:\/\//, 'https://').replace(/^https:\/\//, 'wss://');
+
 export const supabase = createClient<Database>(
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
@@ -14,6 +17,11 @@ export const supabase = createClient<Database>(
       storage: isBrowser ? localStorage : undefined,
       persistSession: isBrowser,
       autoRefreshToken: isBrowser,
-    }
+    },
+    realtime: {
+      params: { eventsPerSecond: 10 },
+      // Explicit wss:// endpoint prevents mixed-content WebSocket errors on HTTPS pages
+      ...(isBrowser ? { endPoint: `${realtimeUrl}/realtime/v1/websocket` } : {}),
+    },
   }
 );

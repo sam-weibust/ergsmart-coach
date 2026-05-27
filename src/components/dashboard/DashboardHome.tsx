@@ -18,6 +18,7 @@ import { getLocalDate } from "@/lib/dateUtils";
 import { useToast } from "@/hooks/use-toast";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { getSessionUser } from '@/lib/getUser';
+import { DailyMotivation } from "./DailyMotivation";
 
 interface DashboardHomeProps {
   profile: any;
@@ -347,6 +348,7 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
 
   return (
     <div className="space-y-4">
+        <DailyMotivation />
 
         {/* Profile Card + Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

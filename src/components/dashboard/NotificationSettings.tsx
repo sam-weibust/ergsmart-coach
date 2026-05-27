@@ -10,6 +10,7 @@ import { EmailNotificationSettings } from "./EmailNotificationSettings";
 import { getSessionUser } from "@/lib/getUser";
 
 const PREF_ITEMS = [
+  { key: "training_reminders", label: "Training reminders", description: "Re-engagement notifications when you haven't trained in 7+ days" },
   { key: "lineup_published", label: "Lineup published", description: "When a coach posts your boat lineup" },
   { key: "practice_reminder", label: "Practice reminders", description: "Morning reminder on practice days" },
   { key: "direct_message", label: "Direct messages", description: "When a coach sends you a private message" },
@@ -21,6 +22,7 @@ const PREF_ITEMS = [
 ];
 
 const DEFAULT_PREFS: Record<string, boolean> = {
+  training_reminders: true,
   lineup_published: true,
   practice_reminder: true,
   direct_message: true,
