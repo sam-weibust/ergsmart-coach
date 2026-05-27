@@ -37,6 +37,57 @@ const SESSION_COLORS: Record<string, string> = {
 
 const SEASON_PHASES = ["general preparation", "early season", "competition", "championship taper", "recovery"] as const;
 
+function renderSessionBlock(session: any, label?: string) {
+  if (!session) return null;
+  const hasContent = session.warmup || session.main_set?.length > 0 || session.cooldown;
+  if (!hasContent) return null;
+  return (
+    <div className={cn("space-y-1.5 text-xs", label ? "mt-2 pt-2 border-t border-dashed border-border/60" : "")}>
+      {label && <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>}
+      {session.warmup && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium w-14 shrink-0">Warmup:</span>
+          <span>{session.warmup}</span>
+        </div>
+      )}
+      {session.main_set?.length > 0 && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium w-14 shrink-0">Main Set:</span>
+          <div className="space-y-1">
+            {session.main_set.map((seg: any, si: number) => (
+              <div key={si} className="flex items-center gap-1.5 flex-wrap">
+                <Badge className={cn("text-xs border", ZONE_COLORS[seg.zone] || "")} variant="outline">{seg.zone}</Badge>
+                <span>{seg.description}</span>
+                {seg.rate && <span className="text-muted-foreground">r{seg.rate}</span>}
+                {seg.rest && <span className="text-muted-foreground">/ {seg.rest} rest</span>}
+                {seg.notes && <span className="text-muted-foreground italic">({seg.notes})</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {session.cooldown && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium w-14 shrink-0">Cooldown:</span>
+          <span>{session.cooldown}</span>
+        </div>
+      )}
+      {session.varsity_notes && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium w-14 shrink-0">Varsity:</span>
+          <span>{session.varsity_notes}</span>
+        </div>
+      )}
+      {session.novice_notes && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium w-14 shrink-0">Novice:</span>
+          <span>{session.novice_notes}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TeamTrainingPlanSection = ({ teamId, teamName, teamMembers, isCoach }: Props) => {
   const { toast } = useToast();
   const [aiLoading, setAiLoading] = useState(false);
@@ -64,6 +115,7 @@ const TeamTrainingPlanSection = ({ teamId, teamName, teamMembers, isCoach }: Pro
         },
       });
       if (error) throw new Error(error.message);
+      console.log("[TrainingPlan] raw plan data:", JSON.stringify(data, null, 2));
       setPlan(data);
       setExpandedWeek(0);
       toast({ title: `${form.weeks}-week training plan generated!` });
@@ -90,15 +142,18 @@ const TeamTrainingPlanSection = ({ teamId, teamName, teamMembers, isCoach }: Pro
 
       const tableData: any[] = [];
       for (const day of (week.days || [])) {
-        const mainSetStr = (day.main_set || []).map((s: any) => `${s.description || ""} [${s.zone}]`).join("; ");
+        // Support both required/optional structure and old flat structure
+        const reqSession = day.required || (day.warmup || day.main_set ? day : null);
+        const mainSetStr = (reqSession?.main_set || []).map((s: any) => `${s.description || ""} [${s.zone}]`).join("; ");
+        const optStr = day.optional?.main_set?.length ? ` | OPT: ${day.optional.main_set.map((s: any) => s.description).join("; ")}` : "";
         tableData.push([
           day.day_name,
           day.title,
           day.session_type,
           day.total_meters ? `${(day.total_meters / 1000).toFixed(1)}km` : "—",
-          day.warmup || "—",
-          mainSetStr || "—",
-          day.cooldown || "—",
+          reqSession?.warmup || "—",
+          (mainSetStr || "—") + optStr,
+          reqSession?.cooldown || "—",
         ]);
       }
 
@@ -214,65 +269,34 @@ const TeamTrainingPlanSection = ({ teamId, teamName, teamMembers, isCoach }: Pro
                 {isExpanded && (
                   <CardContent className="pt-0">
                     <div className="space-y-3">
-                      {(week.days || []).map((day: any) => (
-                        <div key={day.day} className={cn("rounded-lg border p-3", SESSION_COLORS[day.session_type] || SESSION_COLORS.rest)}>
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <p className="text-sm font-semibold">{day.day_name} — {day.title}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <Badge variant="outline" className="text-xs capitalize">{day.session_type?.replace("_", " ")}</Badge>
-                                {day.total_meters > 0 && (
-                                  <span className="text-xs text-muted-foreground">{(day.total_meters / 1000).toFixed(1)}km</span>
-                                )}
+                      {(week.days || []).map((day: any) => {
+                        // Normalize: support both required/optional structure and old flat structure
+                        const requiredSession = day.required || (day.warmup || day.main_set?.length > 0 ? day : null);
+                        const optionalSession = day.optional || null;
+                        const isRest = day.session_type === "rest";
+                        return (
+                          <div key={day.day} className={cn("rounded-lg border p-3", SESSION_COLORS[day.session_type] || SESSION_COLORS.rest)}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <p className="text-sm font-semibold">{day.day_name} — {day.title}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <Badge variant="outline" className="text-xs capitalize">{day.session_type?.replace("_", " ")}</Badge>
+                                  {isRest && <Badge className="text-xs bg-green-100 text-green-800 border-green-200">Rest Day</Badge>}
+                                  {day.total_meters > 0 && (
+                                    <span className="text-xs text-muted-foreground">{(day.total_meters / 1000).toFixed(1)}km</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
+                            {!isRest && renderSessionBlock(requiredSession)}
+                            {optionalSession && (
+                              <div className="opacity-80">
+                                {renderSessionBlock(optionalSession, `Optional${optionalSession.title ? ` — ${optionalSession.title}` : ""}`)}
+                              </div>
+                            )}
                           </div>
-                          {day.session_type !== "rest" && (
-                            <div className="space-y-1.5 text-xs">
-                              {day.warmup && (
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground font-medium w-14 shrink-0">Warmup:</span>
-                                  <span>{day.warmup}</span>
-                                </div>
-                              )}
-                              {day.main_set?.length > 0 && (
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground font-medium w-14 shrink-0">Main Set:</span>
-                                  <div className="space-y-1">
-                                    {day.main_set.map((seg: any, si: number) => (
-                                      <div key={si} className="flex items-center gap-1.5 flex-wrap">
-                                        <Badge className={cn("text-xs border", ZONE_COLORS[seg.zone] || "")} variant="outline">{seg.zone}</Badge>
-                                        <span>{seg.description}</span>
-                                        {seg.rate && <span className="text-muted-foreground">r{seg.rate}</span>}
-                                        {seg.rest && <span className="text-muted-foreground">/ {seg.rest} rest</span>}
-                                        {seg.notes && <span className="text-muted-foreground italic">({seg.notes})</span>}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {day.cooldown && (
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground font-medium w-14 shrink-0">Cooldown:</span>
-                                  <span>{day.cooldown}</span>
-                                </div>
-                              )}
-                              {day.varsity_notes && (
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground font-medium w-14 shrink-0">Varsity:</span>
-                                  <span>{day.varsity_notes}</span>
-                                </div>
-                              )}
-                              {day.novice_notes && (
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground font-medium w-14 shrink-0">Novice:</span>
-                                  <span>{day.novice_notes}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CardContent>
                 )}

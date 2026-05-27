@@ -131,17 +131,15 @@ Injured/restricted athletes: ${JSON.stringify(injured_athletes)}
 Team average 2k watts: ${avgWatts2k?.toFixed(0) || "unknown"}
 High fatigue athletes: ${JSON.stringify(loadData?.filter(l => (l.fatigue_score || 0) >= 7).map(l => l.user_id) || [])}
 
-Generate a complete multi-week plan. Each session must have:
-- Warmup (specific, 10-15 min)
-- Main set (segments with distance/rate/zone/rest)
-- Cooldown (5-10 min)
+Generate a complete multi-week plan. Each practice day has a REQUIRED primary session and an OPTIONAL secondary session.
+- Required session: the main workout (warmup, main_set, cooldown, varsity_notes, novice_notes)
+- Optional session: a lighter add-on (e.g. easy UT2 row, short cross-training). May be null if rest day with no optional work.
+- Rest days: session_type="rest", required=null, optional may be an easy UT2 if appropriate.
 - Zones: UT2 (easy), UT1 (moderate), TR1/TR2 (threshold/race prep), AT (anaerobic threshold)
 - Express all target paces as 2k+Xs/500m or 2k-Xs/500m — never absolute splits
+- Varsity gets higher volume (~20%) than novice. Fatigue athletes get reduced load.
 
-Varsity gets higher volume (~20%) than novice.
-Fatigue athletes get reduced load this week.
-
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON (no markdown):
 {
   "weeks": [
     {
@@ -155,13 +153,23 @@ Respond with ONLY valid JSON:
           "session_type": "erg|on_water|rest|cross_training",
           "title": "Session title",
           "total_meters": 12000,
-          "warmup": "10 min easy paddle",
-          "main_set": [
-            {"segment": 1, "description": "4x2000m", "distance": 2000, "repeats": 4, "zone": "UT1", "rate": 20, "rest": "3 min", "notes": ""}
-          ],
-          "cooldown": "10 min easy",
-          "varsity_notes": "",
-          "novice_notes": ""
+          "required": {
+            "warmup": "10 min easy paddle",
+            "main_set": [
+              {"segment": 1, "description": "4x2000m", "distance": 2000, "repeats": 4, "zone": "UT1", "rate": 20, "rest": "3 min", "notes": ""}
+            ],
+            "cooldown": "10 min easy",
+            "varsity_notes": "",
+            "novice_notes": ""
+          },
+          "optional": {
+            "title": "Optional UT2",
+            "warmup": "5 min easy",
+            "main_set": [
+              {"segment": 1, "description": "20 min continuous", "distance": 4000, "repeats": 1, "zone": "UT2", "rate": 18, "rest": "", "notes": ""}
+            ],
+            "cooldown": "5 min easy"
+          }
         }
       ]
     }
