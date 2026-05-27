@@ -290,46 +290,6 @@ targetSplit MUST always be expressed as 2k+Xs/500m or 2k-Xs/500m.
 Each week MUST have 7 days (day 1=Monday through day 7=Sunday).
 Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
 
-    console.log("generate-workout: calling Anthropic API");
-
-    const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "prompt-caching-2024-07-31",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
-        stream: false,
-        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: `Generate the complete ${durationLabel} training plan. Output only the JSON object.` }],
-      }),
-    });
-
-    console.log("generate-workout: Anthropic response status:", anthropicResponse.status);
-
-    if (!anthropicResponse.ok) {
-      const t = await anthropicResponse.text();
-      console.error("generate-workout: Anthropic error:", t);
-      return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const result = await anthropicResponse.json();
-    const text = result?.content?.[0]?.text;
-
-    if (!text) {
-      return new Response(JSON.stringify({ error: "Invalid AI response" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const tryParseJson = (raw: string): object | null => {
       const s = raw.indexOf("{");
       const e = raw.lastIndexOf("}");
@@ -337,37 +297,160 @@ Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
       try { return JSON.parse(raw.slice(s, e + 1)); } catch { return null; }
     };
 
-    let parsed = tryParseJson(text);
+    const tryParseJsonArray = (raw: string): any[] | null => {
+      const s = raw.indexOf("[");
+      const e = raw.lastIndexOf("]");
+      if (s === -1 || e === -1 || e <= s) return null;
+      try { return JSON.parse(raw.slice(s, e + 1)); } catch { return null; }
+    };
 
-    if (!parsed) {
-      console.warn("generate-workout: first parse failed, attempting repair pass");
-      const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    let parsed: any;
+
+    if (totalWeeks > 12) {
+      // Chunked generation: 4 weeks per chunk
+      console.log(`generate-workout: chunked generation for ${totalWeeks} weeks`);
+      const allWeeks: any[] = [];
+      const chunkSize = 4;
+
+      for (let chunkStart = 1; chunkStart <= totalWeeks; chunkStart += chunkSize) {
+        const chunkEnd = Math.min(chunkStart + chunkSize - 1, totalWeeks);
+        console.log(`generate-workout: generating chunk weeks ${chunkStart}-${chunkEnd}`);
+
+        const chunkSystemPrompt = `${systemPrompt}
+
+CHUNK INSTRUCTION: Generate ONLY weeks ${chunkStart} through ${chunkEnd} (of the total ${totalWeeks} weeks).
+Output ONLY a valid JSON array containing exactly ${chunkEnd - chunkStart + 1} week objects. No wrapping object. No text before or after.
+Week number values must be ${chunkStart} through ${chunkEnd}.`;
+
+        const chunkResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 16000,
+            stream: false,
+            system: chunkSystemPrompt,
+            messages: [{ role: "user", content: `Generate weeks ${chunkStart} through ${chunkEnd} of the training plan as a JSON array. Week objects must have week numbers ${chunkStart}-${chunkEnd}.` }],
+          }),
+        });
+
+        if (!chunkResponse.ok) {
+          const t = await chunkResponse.text();
+          console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} error:`, t);
+          return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const chunkResult = await chunkResponse.json();
+        const chunkText = chunkResult?.content?.[0]?.text ?? "";
+        const chunkWeeks = tryParseJsonArray(chunkText);
+
+        if (!chunkWeeks) {
+          console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} parse failed`);
+          return new Response(JSON.stringify({ error: `AI returned invalid JSON for weeks ${chunkStart}-${chunkEnd}` }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        allWeeks.push(...chunkWeeks);
+        console.log(`generate-workout: chunk ${chunkStart}-${chunkEnd} added ${chunkWeeks.length} weeks (total so far: ${allWeeks.length})`);
+      }
+
+      parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
+    } else {
+      // Single call for <= 12 weeks
+      console.log("generate-workout: calling Anthropic API (single call)");
+
+      const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "prompt-caching-2024-07-31",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "claude-sonnet-4-20250514",
           max_tokens: 16000,
           stream: false,
-          system: "You are a JSON repair tool. Output only valid JSON. No text before or after. Fix any syntax errors in the training plan JSON provided.",
-          messages: [{ role: "user", content: text }],
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: `Generate the complete ${durationLabel} training plan. Output only the JSON object.` }],
         }),
       });
-      if (repairResponse.ok) {
-        const repairResult = await repairResponse.json();
-        parsed = tryParseJson(repairResult?.content?.[0]?.text ?? "");
+
+      console.log("generate-workout: Anthropic response status:", anthropicResponse.status);
+
+      if (!anthropicResponse.ok) {
+        const t = await anthropicResponse.text();
+        console.error("generate-workout: Anthropic error:", t);
+        return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
+
+      const result = await anthropicResponse.json();
+      const text = result?.content?.[0]?.text;
+
+      if (!text) {
+        return new Response(JSON.stringify({ error: "Invalid AI response" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      parsed = tryParseJson(text);
+
+      if (!parsed) {
+        console.warn("generate-workout: first parse failed, attempting repair pass");
+        const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 16000,
+            stream: false,
+            system: "You are a JSON repair tool. Output only valid JSON. No text before or after. Fix any syntax errors in the training plan JSON provided.",
+            messages: [{ role: "user", content: text }],
+          }),
+        });
+        if (repairResponse.ok) {
+          const repairResult = await repairResponse.json();
+          parsed = tryParseJson(repairResult?.content?.[0]?.text ?? "");
+        }
+      }
+
+      if (!parsed) {
+        return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const usage = result?.usage ?? {};
+      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     }
 
-    if (!parsed) {
-      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
-        status: 500,
+    // Validate week count
+    const planWeeks = Array.isArray(parsed?.plan) ? parsed.plan : [];
+    if (planWeeks.length < totalWeeks) {
+      console.warn(`generate-workout: incomplete plan: got ${planWeeks.length} weeks, expected ${totalWeeks}`);
+      return new Response(JSON.stringify({
+        error: `Plan generation incomplete — only ${planWeeks.length} of ${totalWeeks} weeks generated. Please try again.`,
+      }), {
+        status: 422,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const usage = result?.usage ?? {};
-    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-20250514", 0, 0);
 
     return new Response(JSON.stringify(parsed), {
       status: 200,

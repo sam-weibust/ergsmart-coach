@@ -1045,6 +1045,12 @@ export const WorkoutPlanSection = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
+      // Validate completeness before saving
+      const returnedWeeks = Array.isArray(data?.plan) ? data.plan : (Array.isArray(data) ? data : []);
+      if (returnedWeeks.length > 0 && returnedWeeks.length < totalWeeks) {
+        throw new Error(`Plan generation incomplete — only ${returnedWeeks.length} of ${totalWeeks} weeks generated. Please try again.`);
+      }
+
       return { data, prefs, user };
     },
     onSuccess: async ({ data, prefs, user }) => {
