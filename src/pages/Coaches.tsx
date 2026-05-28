@@ -58,7 +58,7 @@ const Coaches = () => {
   const stats = [
     { value: "51+", label: "Athletes on Platform" },
     { value: "1.8M", label: "Meters Tracked" },
-    { value: "Free", label: "30-Day Trial" },
+    { value: "Free", label: "During Beta" },
   ];
 
   return (
@@ -108,11 +108,11 @@ const Coaches = () => {
           <a href="/pricing" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/pricing"); }}>Pricing</a>
           <a href="/auth" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/auth"); }}>Login</a>
           <button className="btn-primary" style={{ padding: "8px 18px", fontSize: "14px" }} onClick={() => navigate("/auth/signup")}>
-            Start Free Trial
+            Get Started Free
           </button>
         </div>
         <button className="btn-primary hide-mobile" style={{ padding: "8px 18px", fontSize: "14px" }} onClick={() => navigate("/auth/signup")}>
-          Start Free Trial
+          Get Started Free
         </button>
       </nav>
 
@@ -138,18 +138,20 @@ const Coaches = () => {
               style={{ fontSize: "16px", padding: "15px 32px" }}
               onClick={() => navigate("/auth/signup")}
             >
-              Start Free 30-Day Trial
+              Get Started Free
             </button>
             <a
               href="/coach-quickstart.html"
               className="btn-outline"
               style={{ fontSize: "16px", padding: "15px 32px" }}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Download Quick Start Guide
             </a>
           </div>
           <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "14px", margin: 0 }}>
-            No credit card required.
+            Free during beta.
           </p>
         </div>
       </section>
@@ -234,14 +236,14 @@ const Coaches = () => {
             Simple pricing for your program.
           </h2>
           <p style={{ color: "#4a5568", fontSize: "16px", textAlign: "center", marginBottom: "48px" }}>
-            Start free for 30 days. No credit card required.
+            Free during beta — paid plans launch Fall 2026.
           </p>
 
           <div className="coaches-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "24px", marginBottom: "32px" }}>
             {/* Team Pro */}
             <div className="pricing-card" style={{ position: "relative" }}>
               <div style={{ position: "absolute", top: "-12px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#2d6be4", color: "#ffffff", fontSize: "11px", fontWeight: 700, padding: "4px 14px", borderRadius: "100px", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                FREE 30-DAY TRIAL
+                FREE DURING BETA
               </div>
               <h3 style={{ color: "#0a1628", fontWeight: 800, fontSize: "20px", margin: "16px 0 6px" }}>Team Pro</h3>
               <p style={{ color: "#4a5568", fontSize: "14px", margin: "0 0 4px" }}>Up to 30 athletes</p>
@@ -257,7 +259,7 @@ const Coaches = () => {
                 ))}
               </ul>
               <button className="btn-primary" style={{ width: "100%", textAlign: "center" }} onClick={() => navigate("/auth/signup")}>
-                Start Free Trial
+                Get Started Free
               </button>
             </div>
 
@@ -280,7 +282,7 @@ const Coaches = () => {
                 ))}
               </ul>
               <button className="btn-primary" style={{ width: "100%", textAlign: "center" }} onClick={() => navigate("/auth/signup")}>
-                Start Free Trial
+                Get Started Free
               </button>
             </div>
           </div>
@@ -304,16 +306,18 @@ const Coaches = () => {
             Ready to run a smarter program?
           </h2>
           <p style={{ color: "rgba(255,255,255,0.75)", fontSize: "17px", margin: "0 0 40px", lineHeight: 1.6 }}>
-            Get your team set up in under 10 minutes. Free for 30 days, no credit card required.
+            Get your team set up in under 10 minutes. Free during beta.
           </p>
           <div className="hero-btns" style={{ display: "flex", gap: "14px", justifyContent: "center" }}>
             <button className="btn-primary" style={{ fontSize: "16px", padding: "15px 32px" }} onClick={() => navigate("/auth/signup")}>
-              Start Free Trial
+              Get Started Free
             </button>
             <a
               href="/coach-quickstart.html"
               className="btn-outline"
               style={{ fontSize: "16px", padding: "15px 32px" }}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Download Quick Start Guide
             </a>

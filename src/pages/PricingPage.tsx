@@ -776,7 +776,7 @@ export default function PricingPage() {
               Go to dashboard
             </Link>
           </div>
-          <p className="text-white/40 text-xs">No credit card required. All features free until Fall 2026.</p>
+          <p className="text-white/40 text-xs">Free during beta — paid plans launch Fall 2026.</p>
         </div>
 
       </div>

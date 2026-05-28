@@ -9,7 +9,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!\\.well-known(?:/|$)).*)", "destination": "/index.html" }
+    { "source": "/((?!\\.well-known(?:/|$))(?!.*\\.html$).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

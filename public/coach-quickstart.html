@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CrewSync Coach Quick Start Guide</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8f9fb;
+      color: #1a202c;
+      line-height: 1.6;
+    }
+    header {
+      background: #0a1628;
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+    header p {
+      color: rgba(255,255,255,0.5);
+      font-size: 14px;
+      margin-top: 2px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(45,107,228,0.2);
+      border: 1px solid rgba(45,107,228,0.4);
+      color: #7ba7f0;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 100px;
+      letter-spacing: 0.05em;
+      margin-left: auto;
+    }
+    main {
+      max-width: 800px;
+      margin: 48px auto;
+      padding: 0 24px 80px;
+    }
+    .intro {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 32px 36px;
+      margin-bottom: 40px;
+    }
+    .intro h2 {
+      font-size: 26px;
+      font-weight: 900;
+      color: #0a1628;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+    .intro p {
+      color: #4a5568;
+      font-size: 15px;
+    }
+    .step {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+    .step-number {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #2d6be4;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-content h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #0a1628;
+      margin-bottom: 8px;
+    }
+    .step-content p {
+      color: #4a5568;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .step-content ul {
+      padding-left: 20px;
+      color: #4a5568;
+      font-size: 14px;
+    }
+    .step-content ul li {
+      margin-bottom: 4px;
+    }
+    .tip {
+      background: rgba(45,107,228,0.06);
+      border: 1px solid rgba(45,107,228,0.2);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #2d6be4;
+      font-weight: 500;
+    }
+    .cta {
+      text-align: center;
+      background: #0a1628;
+      border-radius: 16px;
+      padding: 48px 36px;
+      margin-top: 48px;
+    }
+    .cta h2 {
+      color: #fff;
+      font-size: 24px;
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+    .cta p {
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .cta a {
+      display: inline-block;
+      background: #2d6be4;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 10px;
+      transition: background 0.2s;
+    }
+    .cta a:hover { background: #2459c7; }
+    @media print {
+      header { background: #0a1628 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cta { background: #0a1628 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .step-number { background: #2d6be4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cta a { display: none; }
+    }
+    @media (max-width: 600px) {
+      header { padding: 20px 20px; flex-wrap: wrap; gap: 10px; }
+      .badge { margin-left: 0; }
+      main { margin: 24px auto; }
+      .step { flex-direction: column; gap: 14px; }
+      .intro, .step { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>CrewSync — Coach Quick Start Guide</h1>
+    <p>Get your program running in under 10 minutes</p>
+  </div>
+  <span class="badge">FREE DURING BETA</span>
+</header>
+
+<main>
+
+  <div class="intro">
+    <h2>Welcome, Coach.</h2>
+    <p>This guide walks you through the five core steps to get your program set up on CrewSync — from creating your account to managing your first practice. The whole process takes under 10 minutes.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h3>Create Your Account</h3>
+      <p>Go to <strong>crewsync.app/auth/signup</strong> and sign up with your email. Select "Coach" when asked about your role.</p>
+      <ul>
+        <li>Enter your name, program name, and team sport (rowing).</li>
+        <li>No credit card required — everything is free during beta.</li>
+        <li>You'll land on your coach dashboard immediately after signup.</li>
+      </ul>
+      <div class="tip">Tip: Use your school or club email for easy athlete verification later.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h3>Set Up Your Roster</h3>
+      <p>Navigate to <strong>Team &rarr; Athletes</strong> in the sidebar. Add athletes one of two ways:</p>
+      <ul>
+        <li><strong>Invite by email:</strong> Athletes receive a link to join your team automatically.</li>
+        <li><strong>Manual entry:</strong> Add athlete names and weights directly — useful before athletes create accounts.</li>
+      </ul>
+      <div class="tip">Tip: Athletes can connect their Concept2 logbook after joining so their erg data syncs automatically.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <h3>Build Your First Lineup</h3>
+      <p>Go to <strong>Lineup Builder</strong>. You can drag and drop athletes into boat seats, or use the seat racing tool to compare pairs.</p>
+      <ul>
+        <li>Set seat positions (bow, 2, 3 … stroke, cox) for any shell type.</li>
+        <li>Save multiple lineup scenarios — useful when you're deciding between boats.</li>
+        <li>Share a read-only lineup link with athletes or parents.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <h3>Schedule a Practice</h3>
+      <p>Go to <strong>Calendar</strong> and click any date to create a practice session.</p>
+      <ul>
+        <li>Set session type (on water, erg, weights, cross-training).</li>
+        <li>Attach an erg workout — athletes will see it in their dashboard.</li>
+        <li>Enable attendance tracking so you know who showed up.</li>
+      </ul>
+      <div class="tip">Tip: The load management view lets you see weekly training load per athlete at a glance — great for avoiding overtraining before regattas.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">5</div>
+    <div class="step-content">
+      <h3>Review Your Dashboard</h3>
+      <p>Your coach dashboard shows you everything in one view:</p>
+      <ul>
+        <li><strong>Team health:</strong> Wellness scores and load indicators.</li>
+        <li><strong>Erg leaderboard:</strong> Live rankings from Concept2 data.</li>
+        <li><strong>Upcoming sessions:</strong> What's on the calendar this week.</li>
+        <li><strong>Alerts:</strong> Athletes with high load or missed attendance.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cta">
+    <h2>Ready to get started?</h2>
+    <p>Free during beta — no credit card required.</p>
+    <a href="https://crewsync.app/auth/signup" target="_blank" rel="noopener noreferrer">Create Your Free Account</a>
+  </div>
+
+</main>
+
+</body>
+</html>
