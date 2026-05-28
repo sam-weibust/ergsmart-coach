@@ -697,6 +697,15 @@ const Dashboard = () => {
     profile != null &&
     ((profile as any)?.role === "organizer" || userRole === "organizer");
 
+  // Redirect coaches to the dedicated coach experience
+  useEffect(() => {
+    if (!profile) return;
+    const role = (profile as any)?.user_type || (profile as any)?.role;
+    if (role === "coach" || role === "head_coach") {
+      navigate("/teams/today", { replace: true });
+    }
+  }, [profile, navigate]);
+
   // Accept coach invite from URL token
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

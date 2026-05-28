@@ -11,6 +11,7 @@ import { BleProvider } from "./context/BleContext";
 import { TeamBrandingProvider } from "./context/TeamBrandingContext";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
+import CoachPage from "./pages/CoachPage";
 import Auth from "./pages/Auth";
 import AthleteProfile from "./pages/AthleteProfile";
 import Concept2Callback from "./pages/Concept2Callback";
@@ -190,6 +191,16 @@ function AppRouter() {
       }
     };
 
+    // Resolve the correct destination based on role.
+    const getDestinationForUser = async (userId: string): Promise<string> => {
+      try {
+        const { data: p } = await supabase.from("profiles").select("user_type, role").eq("id", userId).maybeSingle();
+        const role = (p as any)?.user_type || (p as any)?.role;
+        if (role === "coach" || role === "head_coach") return "/teams/today";
+      } catch {}
+      return "/dashboard";
+    };
+
     // Fast session check — reads from localStorage, resolves in <50ms typically.
     supabase.auth.getSession().then(async ({ data }) => {
       if (data.session && !isCallbackPath && !isPublicPath) {
@@ -199,7 +210,8 @@ function AppRouter() {
         if (recheckData.session) {
           // Touch last_active_at on login.
           await supabase.from("profiles").update({ last_active_at: new Date().toISOString() }).eq("id", data.session.user.id);
-          navigate("/dashboard", { replace: true });
+          const dest = await getDestinationForUser(data.session.user.id);
+          navigate(dest, { replace: true });
         } else {
           navigate(isNative ? "/auth" : "/", { replace: true });
         }
@@ -217,7 +229,7 @@ function AppRouter() {
       if (event === "SIGNED_IN" && session && !onCallback && !onPublic) {
         // Touch last_active_at on every sign-in.
         supabase.from("profiles").update({ last_active_at: new Date().toISOString() }).eq("id", session.user.id);
-        navigate("/dashboard", { replace: true });
+        getDestinationForUser(session.user.id).then(dest => navigate(dest, { replace: true }));
       } else if (event === "SIGNED_OUT") {
         queryClient.clear();
         navigate(isNative ? "/auth" : "/", { replace: true });
@@ -235,6 +247,7 @@ function AppRouter() {
       {/* Landing page is web-only. Native always routes to /auth if no session. */}
       <Route path="/" element={isNative ? <Navigate to="/auth" replace /> : <LandingPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/teams/today" element={<CoachPage />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/athlete/:username" element={<AthleteProfile />} />
       <Route path="/athlete/:username/prs" element={<PersonalRecordsPage />} />

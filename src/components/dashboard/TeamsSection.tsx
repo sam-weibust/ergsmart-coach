@@ -31,7 +31,6 @@ import { Label } from "@/components/ui/label";
 import { Shield } from "lucide-react";
 import TeamOptimizationDashboard from "./team-optimization/TeamOptimizationDashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { CoachComparison } from "./CoachComparison";
 
 interface TeamsSectionProps {
   profile: any;
@@ -245,9 +244,6 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Coach Comparison Dashboard */}
-      {isCoach && <CoachComparison />}
-
       {/* Header row: title + team selector dropdown */}
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Teams</h2>
@@ -268,8 +264,8 @@ const TeamsSection = ({ profile, isCoach }: TeamsSectionProps) => {
       </div>
 
       <div className="space-y-4">
-        {/* Create Team form — coaches only */}
-        {isCoach && (
+        {/* Create Team form — coaches only, hidden once they have a team */}
+        {isCoach && allTeams.filter(t => t._role === "coach").length === 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
