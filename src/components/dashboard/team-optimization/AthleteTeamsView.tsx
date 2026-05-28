@@ -15,6 +15,7 @@ import WorkoutHistory from "./WorkoutHistory";
 import TeamErgLeaderboard from "./TeamErgLeaderboard";
 import TeamMessageBoard from "./TeamMessageBoard";
 import DirectMessages from "./DirectMessages";
+import AthleteTeamTab from "./AthleteTeamTab";
 
 const ATHLETE_TABS = [
   { key: "today",       label: "Today",       Icon: Sun },
@@ -183,14 +184,24 @@ const AthleteRegattasTab = ({ teamId }: { teamId: string }) => {
   );
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const getTeamAbbr = (name: string): string => {
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) return name.slice(0, 4).toUpperCase();
+  return words.map((w) => w[0]).join("").slice(0, 5).toUpperCase();
+};
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const AthleteTeamsView = ({
   teamId, teamName, teamMembers, isCox, profile,
   safesportMode = true, boats = [], seasonId,
 }: Props) => {
+  const [topTab, setTopTab] = useState<"me" | "team">("me");
   const [activeTab, setActiveTab] = useState("today");
   const { logoUrl, primaryColor, fallbackLogo } = useTeamBranding();
+  const teamAbbr = getTeamAbbr(teamName);
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["athlete-unread-messages", teamId, profile?.id],
@@ -209,7 +220,7 @@ const AthleteTeamsView = ({
 
   const commonProps = { teamId, teamName, teamMembers, isCoach: false, profile, seasonId, boats };
 
-  const renderTab = () => {
+  const renderMeTab = () => {
     switch (activeTab) {
       case "today":
         return <TodayTab {...commonProps} onNavigate={setActiveTab} />;
@@ -265,42 +276,82 @@ const AthleteTeamsView = ({
         </div>
       </div>
 
-      {/* Sticky tab bar */}
+      {/* Top-level Me / Team tabs */}
       <div
-        className="sticky top-0 z-20 border-b border-white/10 -mx-4 px-0 mb-4"
+        className="sticky top-0 z-30 -mx-4 px-0 mb-0"
         style={{ background: primaryColor }}
       >
-        <div className="flex overflow-x-auto scrollbar-none">
-          {ATHLETE_TABS.map(({ key, label, Icon }) => {
-            const isActive = activeTab === key;
-            const showBadge = key === "messages" && unreadCount > 0;
-            return (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors relative",
-                  isActive
-                    ? "border-white text-white"
-                    : "border-transparent text-white/50 hover:text-white/80"
-                )}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                {label}
-                {showBadge && (
-                  <span className="absolute top-1.5 right-1.5 h-3.5 w-3.5 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex border-b border-white/10">
+          <button
+            onClick={() => setTopTab("me")}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-semibold border-b-2 transition-colors",
+              topTab === "me"
+                ? "border-white text-white"
+                : "border-transparent text-white/50 hover:text-white/80"
+            )}
+          >
+            Me
+          </button>
+          <button
+            onClick={() => setTopTab("team")}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-semibold border-b-2 transition-colors",
+              topTab === "team"
+                ? "border-white text-white"
+                : "border-transparent text-white/50 hover:text-white/80"
+            )}
+          >
+            {teamAbbr}
+          </button>
         </div>
+
+        {/* ATHLETE_TABS — only shown in "me" mode */}
+        {topTab === "me" && (
+          <div className="flex overflow-x-auto scrollbar-none border-t border-white/10">
+            {ATHLETE_TABS.map(({ key, label, Icon }) => {
+              const isActive = activeTab === key;
+              const showBadge = key === "messages" && unreadCount > 0;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors relative",
+                    isActive
+                      ? "border-white text-white"
+                      : "border-transparent text-white/50 hover:text-white/80"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {label}
+                  {showBadge && (
+                    <span className="absolute top-1.5 right-1.5 h-3.5 w-3.5 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 min-w-0">
-        {renderTab()}
+      <div className="flex-1 min-w-0 mt-4">
+        {topTab === "me" ? (
+          renderMeTab()
+        ) : (
+          <AthleteTeamTab
+            teamId={teamId}
+            teamName={teamName}
+            teamMembers={teamMembers}
+            isCox={isCox}
+            profile={profile}
+            boats={boats}
+            seasonId={seasonId}
+          />
+        )}
       </div>
     </div>
   );

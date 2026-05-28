@@ -35,6 +35,7 @@ import CoachManagement from "./CoachManagement";
 import DirectMessages from "./DirectMessages";
 import WorkoutComparison from "./WorkoutComparison";
 import TodayTab from "./TodayTab";
+import CoachTodayView from "./CoachTodayView";
 import ErgAssignments from "./ErgAssignments";
 import CoachAIAssistant from "./CoachAIAssistant";
 import MultiSeasonAnalytics from "./MultiSeasonAnalytics";
@@ -132,7 +133,7 @@ const TeamOptimizationDashboard = ({ teamId, teamName, teamMembers, isCoach, isC
 
   const renderSection = () => {
     switch (activeSection) {
-      case "today": return <TodayTab {...commonProps} onNavigate={(s) => setActiveSection(s)} />;
+      case "today": return <CoachTodayView teamId={teamId} teamName={teamName} teamMembers={teamMembers} profile={profile} boats={boats} seasonId={effectiveSeasonId} onNavigate={(s) => setActiveSection(s)} />;
       case "erg_assignments": return <ErgAssignments teamId={teamId} teamMembers={teamMembers} isCoach={isCoach} profile={profile} boats={boats} />;
       case "overview": return <TeamOverview {...commonProps} />;
       case "calendar": return <TeamCalendar {...commonProps} />;
