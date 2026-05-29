@@ -512,7 +512,10 @@ const TodayTab = ({ teamId, teamName, teamMembers = [], isCoach, profile, boats 
           </CardHeader>
           <CardContent className="space-y-4">
             {todayLineups.map((lineup: any) => {
-              const seats = Array.isArray(lineup.seats) ? lineup.seats : [];
+              const rawSeats: any[] = Array.isArray(lineup.seats) ? lineup.seats : [];
+              const SEAT_ORDER = [0, 8, 7, 6, 5, 4, 3, 2, 1];
+              const seatNums = new Set(rawSeats.map((s: any) => s.seat_number));
+              const seats = SEAT_ORDER.filter(n => seatNums.has(n)).map(n => rawSeats.find((s: any) => s.seat_number === n)!);
               const lineupAttendance = todayAttendance.filter((a: any) => a.lineup_id === lineup.id);
               const attMap = Object.fromEntries(lineupAttendance.map((a: any) => [a.user_id, a.status]));
               const boat = boats.find((b: any) => b.id === lineup.boat_id);

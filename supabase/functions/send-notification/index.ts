@@ -211,11 +211,15 @@ serve(async (req) => {
       await supabase.from("notifications").insert(notifRecords);
     }
 
+    console.log(`[send-notification] team_id=${team_id ?? "n/a"}, recipients=${recipients.length}, eligible=${eligibleRecipients.length}`);
+
     // Send push notifications
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("id, user_id, token, platform")
       .in("user_id", eligibleRecipients);
+
+    console.log(`[send-notification] push_tokens found=${tokens?.length ?? 0}`);
 
     const invalidTokenIds: string[] = [];
     const extraData = data ?? {};
@@ -240,6 +244,7 @@ serve(async (req) => {
     const total = (tokens ?? []).length;
     const failed = invalidTokenIds.length;
     const sent = total - failed;
+    console.log(`[send-notification] sent=${sent}, failed=${failed}, total=${total}`);
     return new Response(
       JSON.stringify({ success: true, sent, failed, total }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

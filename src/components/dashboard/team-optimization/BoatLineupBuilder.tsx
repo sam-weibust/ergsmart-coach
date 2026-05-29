@@ -186,11 +186,12 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
     const count = BOAT_SEAT_COUNTS[boatClass] || 8;
     const hasCox = HAS_COX[boatClass];
     const newSeats: SeatAssignment[] = [];
+    const rowerCount = hasCox ? count - 1 : count;
+    // Order: Cox (0) at top, then stroke (8) down to bow (1)
     if (hasCox) {
       newSeats.push({ seat_number: 0, user_id: null, name: "Cox" });
     }
-    const rowerCount = hasCox ? count - 1 : count;
-    for (let i = 1; i <= rowerCount; i++) {
+    for (let i = rowerCount; i >= 1; i--) {
       newSeats.push({ seat_number: i, user_id: null, name: `Seat ${i}` });
     }
     return newSeats;
