@@ -8,6 +8,9 @@ import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import CoachTodayView from "@/components/dashboard/team-optimization/CoachTodayView";
 import CoachMoreGrid from "./CoachMoreGrid";
 import CoachSettings from "./CoachSettings";
+import ImportTeamPlan from "./ImportTeamPlan";
+import GenerateTeamPlan from "./GenerateTeamPlan";
+import TeamPlans from "./TeamPlans";
 import TeamOptimizationDashboard from "@/components/dashboard/team-optimization/TeamOptimizationDashboard";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
 import { Home, Grid3X3, Settings } from "lucide-react";
@@ -127,6 +130,18 @@ const CoachApp = ({ profile }: Props) => {
 
     if (activeTab === "more") {
       if (moreSection && coachTeam) {
+        if (moreSection === "import_team_plan") {
+          return <ImportTeamPlan teamId={coachTeam.id} coachId={profile.id} />;
+        }
+        if (moreSection === "generate_team_plan_default") {
+          return <GenerateTeamPlan teamId={coachTeam.id} coachId={profile.id} profile={profile} mode="default" />;
+        }
+        if (moreSection === "generate_team_plan_custom") {
+          return <GenerateTeamPlan teamId={coachTeam.id} coachId={profile.id} profile={profile} mode="custom" />;
+        }
+        if (moreSection === "team_plans") {
+          return <TeamPlans teamId={coachTeam.id} coachId={profile.id} />;
+        }
         // Render the full TeamOptimizationDashboard at the requested section
         return (
           <TeamOptimizationDashboard

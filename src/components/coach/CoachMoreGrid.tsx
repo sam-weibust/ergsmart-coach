@@ -3,7 +3,7 @@ import {
   Ship, Dumbbell, ArrowLeftRight, CalendarDays, Activity, GitCompare,
   Sparkles, Bot, BarChart3, GraduationCap,
   Settings, UserPlus, Mail, Building2,
-  Globe, Trophy, Package,
+  Globe, Trophy, Package, Upload, Brain, ClipboardList,
 } from "lucide-react";
 
 interface MoreGridItem {
@@ -27,6 +27,10 @@ const SECTIONS: MoreGridSection[] = [
       { key: "calendar", label: "Practice Calendar", icon: CalendarDays },
       { key: "load", label: "Load Management", icon: Activity },
       { key: "workout_comparison", label: "Workout Compare", icon: GitCompare },
+      { key: "import_team_plan", label: "Import Team Plan", icon: Upload },
+      { key: "generate_team_plan_default", label: "Generate Plan — Default", icon: Sparkles },
+      { key: "generate_team_plan_custom", label: "Generate Plan — My Style", icon: Brain },
+      { key: "team_plans", label: "Team Plans", icon: ClipboardList },
     ],
   },
   {

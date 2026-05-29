@@ -40,6 +40,8 @@ type WorkoutPlan = {
   description?: string | null;
   workout_data: any;
   created_at?: string;
+  is_coach_assigned?: boolean;
+  coach_plan_id?: string | null;
 };
 
 type Friend = {
@@ -679,6 +681,14 @@ const PlanList = ({
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4">
+                    {plan.is_coach_assigned && (
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                        <span className="text-blue-600 mt-0.5 shrink-0 text-base">ℹ</span>
+                        <p className="text-sm text-blue-700 dark:text-blue-400">
+                          This plan was assigned by your coach. Personalized to your 2K time.
+                        </p>
+                      </div>
+                    )}
                     {workoutWeeks.length > 0 && workoutWeeks[0]?.fileUrl && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -751,9 +761,11 @@ const PlanList = ({
                         <Download className="h-4 w-4 mr-2" />
                         Export .ics
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => onDeletePlan(plan.id)}>
-                        Delete Plan
-                      </Button>
+                      {!plan.is_coach_assigned && (
+                        <Button variant="destructive" size="sm" onClick={() => onDeletePlan(plan.id)}>
+                          Delete Plan
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </AccordionContent>
