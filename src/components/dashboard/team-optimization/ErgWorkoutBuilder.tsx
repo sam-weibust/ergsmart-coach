@@ -227,23 +227,17 @@ const ErgWorkoutBuilder = ({ teamId, teamMembers, profile, boats, onClose, editA
           }
 
           // Send push notifications
-          const pushTokensResult = await supabase
-            .from("push_tokens")
-            .select("token, platform, user_id")
-            .in("user_id", assignedAthletes.map(m => m.user_id));
-
-          if (pushTokensResult.data?.length) {
-            for (const token of pushTokensResult.data) {
-              await supabase.functions.invoke("send-notification", {
-                body: {
-                  token: token.token,
-                  platform: token.platform,
-                  title: "New Workout Assigned",
-                  body: title,
-                  data: { type: "erg_assignment", assignment_id: assignment.id },
-                },
-              });
-            }
+          const assignedUserIds = assignedAthletes.map(m => m.user_id);
+          if (assignedUserIds.length > 0) {
+            const coachName = profile?.full_name || profile?.username || "Your coach";
+            supabase.functions.invoke("send-notification", {
+              body: {
+                user_ids: assignedUserIds,
+                title: "New Workout Assigned",
+                body: `${coachName} assigned a workout: ${title}`,
+                data: { type: "erg_assignment", assignment_id: assignment.id, team_id: teamId },
+              },
+            }).catch(() => {});
           }
         }
       }

@@ -148,10 +148,22 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { user_id, user_ids, notify_all, title, body, type, data } = await req.json();
+    const { user_id, user_ids, notify_all, team_id, exclude_coaches = true, title, body, type, data } = await req.json();
     let recipients: string[];
 
-    if (notify_all) {
+    if (team_id) {
+      // Fetch all team members; optionally exclude coaches
+      const { data: members } = await supabase
+        .from("team_members")
+        .select("user_id, profiles!inner(role)")
+        .eq("team_id", team_id);
+      const filtered = (members ?? []).filter((m: any) => {
+        if (!exclude_coaches) return true;
+        const role = m.profiles?.role ?? "";
+        return role !== "coach" && role !== "head_coach";
+      });
+      recipients = filtered.map((m: any) => m.user_id);
+    } else if (notify_all) {
       const { data: profiles } = await supabase.from("profiles").select("id");
       recipients = (profiles ?? []).map((p: any) => p.id);
     } else {
@@ -225,8 +237,11 @@ serve(async (req) => {
       await supabase.from("push_tokens").delete().in("id", invalidTokenIds);
     }
 
+    const total = (tokens ?? []).length;
+    const failed = invalidTokenIds.length;
+    const sent = total - failed;
     return new Response(
-      JSON.stringify({ success: true, sent: eligibleRecipients.length, push_sent: (tokens ?? []).length - invalidTokenIds.length }),
+      JSON.stringify({ success: true, sent, failed, total }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {

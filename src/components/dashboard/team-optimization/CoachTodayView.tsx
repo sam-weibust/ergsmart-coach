@@ -174,6 +174,16 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
       toast({ title: "Workout published!", description: "Athletes can now see today's workout." });
       setEditingWorkout(false);
       queryClient.invalidateQueries({ queryKey: ["today-practice-entry", teamId, todayStr] });
+      const coachName = profile?.full_name || profile?.username || "Your coach";
+      supabase.functions.invoke("send-notification", {
+        body: {
+          team_id: teamId,
+          title: "Workout Posted",
+          body: `${coachName} posted today's workout. Check the app to see your assignment.`,
+          data: { type: "workout_published", team_id: teamId, date: todayStr },
+          exclude_coaches: true,
+        },
+      }).catch(() => {});
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -190,6 +200,17 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
       toast({ title: "Lineup published!" });
       setLineupEdits(prev => { const n = { ...prev }; delete n[lineupId]; return n; });
       queryClient.invalidateQueries({ queryKey: ["today-lineups-all", teamId, todayStr] });
+      const coachName = profile?.full_name || profile?.username || "Your coach";
+      const dateLabel = new Date(todayStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+      supabase.functions.invoke("send-notification", {
+        body: {
+          team_id: teamId,
+          title: "Lineup Posted",
+          body: `${coachName} posted the lineup for ${dateLabel}. Check the app to see your seat.`,
+          data: { type: "lineup_published", team_id: teamId, date: todayStr },
+          exclude_coaches: true,
+        },
+      }).catch(() => {});
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
