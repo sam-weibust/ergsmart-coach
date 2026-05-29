@@ -226,6 +226,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
   const attendanceByUser = Object.fromEntries(todayAttendance.map((a: any) => [a.user_id, a]));
   const confirmedCount = todayAttendance.filter((a: any) => a.status === "present").length;
   const absentCount = todayAttendance.filter((a: any) => a.status === "absent").length;
+  const noResponseCount = teamMembers.length - confirmedCount - absentCount;
 
   const hasDraft = !!(practiceEntry as any)?.workout_draft;
   const hasPublished = !!(practiceEntry as any)?.workout_description;
@@ -443,8 +444,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
                   <Users className="h-4 w-4 text-primary" />
                   Roster
                   <span className="text-xs text-muted-foreground font-normal">
-                    · {teamMembers.length} members · {confirmedCount} confirmed
-                    {absentCount > 0 && ` · ${absentCount} absent`}
+                    · {confirmedCount} confirmed · {absentCount} absent · {noResponseCount} no response
                   </span>
                 </CardTitle>
                 {rosterOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}

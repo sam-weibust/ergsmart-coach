@@ -88,11 +88,11 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
     queryKey: ["attendance-by-date", teamId, assignment.scheduled_date],
     queryFn: async () => {
       if (!assignment.scheduled_date) return [];
-      const { data } = await supabase
-        .from("practice_attendance" as any)
-        .select("*, lineup:lineup_id(practice_date, team_id)")
-        .eq("lineup.team_id", teamId)
-        .eq("lineup.practice_date", assignment.scheduled_date);
+      const { data } = await (supabase as any)
+        .from("attendance")
+        .select("user_id, status")
+        .eq("team_id", teamId)
+        .eq("date", assignment.scheduled_date);
       return data || [];
     },
     enabled: !!assignment.scheduled_date,
@@ -264,7 +264,7 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
               const loggedBy = result.logged_by;
 
               // Auto-excuse absent athletes
-              if (attendance?.status === "no" && result.status === "pending") {
+              if (attendance?.status === "absent" && result.status === "pending") {
                 excuseAbsentMutation.mutate(result.athlete_id);
               }
 
@@ -278,7 +278,7 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">{displayName(member?.profile)}</span>
                         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[result.status] || ""}`}>
-                          {result.status === "excused" && attendance?.status === "no" ? "Excused - Absent" : result.status}
+                          {result.status === "excused" && attendance?.status === "absent" ? "Excused — Absent" : result.status}
                         </Badge>
                         {loggedBy && result.logged_by_role === "coxswain" && (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-500/10 text-blue-400 border-blue-500/20">

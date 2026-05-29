@@ -39,6 +39,7 @@ const AthleteTeamTab = ({
 
   const [rosterOpen, setRosterOpen] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<"present" | "absent" | null>(null);
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ const AthleteTeamTab = ({
   const checkIn = useMutation({
     mutationFn: async (status: "present" | "absent") => {
       if (!profile?.id) throw new Error("Not authenticated");
+      setPendingStatus(status);
 
       const { error } = await (supabase as any)
         .from("attendance")
@@ -158,13 +160,17 @@ const AthleteTeamTab = ({
       }
     },
     onSuccess: (_, status) => {
+      setPendingStatus(null);
       toast({
         title: status === "present" ? "Confirmed! See you at practice." : "Got it. Your coach has been notified.",
       });
       queryClient.invalidateQueries({ queryKey: ["my-team-checkin", teamId, todayStr, profile?.id] });
       queryClient.invalidateQueries({ queryKey: ["today-attendance-team", teamId, todayStr] });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      setPendingStatus(null);
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
   });
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -209,22 +215,22 @@ const AthleteTeamTab = ({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <Button
-                className="h-14 text-sm bg-green-600 hover:bg-green-700 text-white gap-2 font-semibold"
+                className="h-16 text-sm bg-green-600 hover:bg-green-700 text-white gap-2 font-semibold"
                 onClick={() => checkIn.mutate("present")}
                 disabled={checkIn.isPending}
               >
-                {checkIn.isPending
+                {checkIn.isPending && pendingStatus === "present"
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <CheckCircle2 className="h-5 w-5" />
                 }
                 I'll Be There
               </Button>
               <Button
-                className="h-14 text-sm bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
+                className="h-16 text-sm bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
                 onClick={() => checkIn.mutate("absent")}
                 disabled={checkIn.isPending}
               >
-                {checkIn.isPending
+                {checkIn.isPending && pendingStatus === "absent"
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <XCircle className="h-5 w-5" />
                 }
