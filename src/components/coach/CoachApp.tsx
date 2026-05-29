@@ -7,15 +7,15 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import CoachTodayView from "@/components/dashboard/team-optimization/CoachTodayView";
 import CoachMoreGrid from "./CoachMoreGrid";
-import CoachProfile from "./CoachProfile";
+import CoachSettings from "./CoachSettings";
 import TeamOptimizationDashboard from "@/components/dashboard/team-optimization/TeamOptimizationDashboard";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
-import { Home, Grid3X3, User } from "lucide-react";
+import { Home, Grid3X3, Settings } from "lucide-react";
 import { format } from "date-fns";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import { Loader2 } from "lucide-react";
 
-type CoachTab = "today" | "more" | "profile";
+type CoachTab = "today" | "more" | "settings";
 
 interface Props {
   profile: any;
@@ -117,19 +117,12 @@ const CoachApp = ({ profile }: Props) => {
   const NAV_TABS = [
     { id: "today" as CoachTab, label: "Today", icon: Home },
     { id: "more" as CoachTab, label: "More", icon: Grid3X3 },
-    { id: "profile" as CoachTab, label: "Profile", icon: User },
+    { id: "settings" as CoachTab, label: "Settings", icon: Settings },
   ];
 
   const renderContent = () => {
-    if (activeTab === "profile") {
-      return (
-        <CoachProfile
-          onNavigateToSettings={() => {
-            setMoreSection("settings");
-            setActiveTab("more");
-          }}
-        />
-      );
+    if (activeTab === "settings") {
+      return <CoachSettings profile={profile} coachTeam={coachTeam} />;
     }
 
     if (activeTab === "more") {
@@ -248,6 +241,7 @@ const CoachApp = ({ profile }: Props) => {
                     handleMoreTabClick();
                   } else {
                     setActiveTab(tab.id);
+                    if (tab.id !== "more") setMoreSection(null);
                   }
                 }}
                 className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] relative transition-colors"
