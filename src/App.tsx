@@ -248,6 +248,8 @@ function AppRouter() {
       <Route path="/" element={isNative ? <Navigate to="/auth" replace /> : <LandingPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/teams/today" element={<CoachPage />} />
+      <Route path="/coach/today" element={<CoachPage />} />
+      <Route path="/coach" element={<Navigate to="/coach/today" replace />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/athlete/:username" element={<AthleteProfile />} />
       <Route path="/athlete/:username/prs" element={<PersonalRecordsPage />} />
