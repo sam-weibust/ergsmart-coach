@@ -28,7 +28,9 @@ const BleContext = createContext<BleContextValue>({
   disconnectPM5: () => {},
 });
 
-export function BleProvider({ children }: { children: React.ReactNode }) {
+const isNative = Capacitor.isNativePlatform();
+
+function BleProviderNative({ children }: { children: React.ReactNode }) {
   const [ergDeviceId, setErgDeviceId]     = useState<string | null>(null);
   const [ergDeviceName, setErgDeviceName] = useState<string | null>(null);
   const [ergConnected, setErgConnected]   = useState(false);
@@ -137,6 +139,23 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       {children}
     </BleContext.Provider>
   );
+}
+
+const disabledValue: BleContextValue = {
+  ergDeviceId: null,
+  ergDeviceName: null,
+  ergConnected: false,
+  ergConnecting: false,
+  webErgDevice: null,
+  connectPM5: async () => {},
+  disconnectPM5: () => {},
+};
+
+export function BleProvider({ children }: { children: React.ReactNode }) {
+  if (!isNative) {
+    return <BleContext.Provider value={disabledValue}>{children}</BleContext.Provider>;
+  }
+  return <BleProviderNative>{children}</BleProviderNative>;
 }
 
 export function useBle() { return useContext(BleContext); }

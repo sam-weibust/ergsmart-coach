@@ -176,23 +176,32 @@ const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"]
 
 // ── Component ──────────────────────────────────────────────────
 export default function LiveErgView() {
+  if (!Capacitor.isNativePlatform()) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="text-center p-8">
+          <Bluetooth className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+          <p className="text-lg font-semibold mb-2">Connect via the iOS app for live erg tracking</p>
+          <p className="text-sm text-gray-400">Live BLE connection to your PM5 requires the native iOS app.</p>
+        </div>
+      </div>
+    );
+  }
+  return <LiveErgViewNative />;
+}
+
+function LiveErgViewNative() {
   const { toast } = useToast();
 
   const { ergDeviceId, ergDeviceName, ergConnected, ergConnecting, webErgDevice, connectPM5, disconnectPM5 } = useBle();
 
-  // Assume supported; only set false if BleClient.initialize() actually fails on native,
-  // or if Web Bluetooth is absent on web. Never block on uncertain permission state.
   const [btSupported, setBtSupported] = useState(true);
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      BleClient.initialize({ requestBluetooth: true }).catch((err) => {
-        console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
-        setBtSupported(false);
-      });
-    } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
+    BleClient.initialize({ requestBluetooth: true }).catch((err) => {
+      console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
       setBtSupported(false);
-    }
+    });
   }, []);
 
   const [hrConnected,  setHrConnected]  = useState(false);
