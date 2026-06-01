@@ -198,6 +198,7 @@ function LiveErgViewNative() {
   const [btSupported, setBtSupported] = useState(true);
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) { setBtSupported(false); return; }
     BleClient.initialize({ requestBluetooth: true }).catch((err) => {
       console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
       setBtSupported(false);
