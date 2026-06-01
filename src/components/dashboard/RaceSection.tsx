@@ -603,6 +603,16 @@ export default function RaceSection() {
     setAppState("home");
   }, [room, myUserId]);
 
+  // ── Cleanup all channels on unmount ──────────────────────────
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
+      if (queueChannelRef.current) { supabase.removeChannel(queueChannelRef.current); queueChannelRef.current = null; }
+      if (inviteChannelRef.current) { supabase.removeChannel(inviteChannelRef.current); inviteChannelRef.current = null; }
+      if (uploadIntervalRef.current) { clearInterval(uploadIntervalRef.current); uploadIntervalRef.current = null; }
+    };
+  }, []);
+
   // ── Replay chart data ─────────────────────────────────────────
   function buildReplayData(athletes: RaceParticipant[]) {
     const allDists = [...new Set(
