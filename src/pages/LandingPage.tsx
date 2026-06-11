@@ -1,161 +1,171 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import logoIcon from "@/assets/crewsync-logo-icon.jpg";
-import logoFull from "@/assets/crewsync-logo-full.jpg";
 import { supabase } from "@/integrations/supabase/client";
 import { Capacitor } from "@capacitor/core";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-interface Stats {
-  total_users: number;
-  average_2k: string;
-  total_workouts: number;
-  total_meters: string;
-}
+const FALLBACK_METERS = 1_800_000;
+const FALLBACK_ATHLETES = 53;
 
-// ─── Hooks ───────────────────────────────────────────────────────────────────
+const PATH_1 =
+  "M0,56 C14,56 22,52 34,42 C48,26 56,8 76,5 C90,3 100,11 112,26 C122,40 128,52 138,57 C146,60 152,57 164,56 C178,56 186,52 198,42 C212,26 220,8 240,5 C254,3 264,11 276,26 C286,40 292,52 302,57 C310,60 316,57 328,56 C342,56 350,52 362,42 C376,26 384,8 404,5 C418,3 428,11 440,26 C450,40 456,52 466,57 C474,60 480,57 492,56 C506,56 514,52 526,42 C540,26 548,8 568,5 C582,3 592,11 604,26 C614,40 620,52 630,57 C638,60 644,57 680,56";
 
-const CACHE_KEY = "crewsync_stats_cache_v5";
-const CACHE_TTL = 5 * 60 * 1000;
+const PATH_2 =
+  "M0,56 C12,56 20,54 30,44 C44,28 52,7 72,4 C88,2 100,10 114,24 C124,38 130,50 142,57 C150,60 158,57 170,56 C186,56 194,54 206,44 C220,28 228,7 248,4 C264,2 276,10 290,24 C300,38 306,50 318,57 C326,60 334,57 346,56 C362,56 370,54 382,44 C396,28 404,7 424,4 C440,2 452,10 466,24 C476,38 482,50 494,57 C502,60 510,57 522,56 C538,56 546,54 558,44 C572,28 580,7 600,4 C616,2 628,10 642,24 C652,38 658,50 670,57 C678,60 680,57 680,56";
 
-function useStats() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+const PATH_3 =
+  "M0,56 C10,56 18,55 28,46 C40,30 48,5 68,2 C84,0 96,9 110,22 C122,36 128,49 140,57 C148,60 156,57 168,56 C182,56 190,55 200,46 C212,30 220,5 240,2 C256,0 268,9 282,22 C294,36 300,49 312,57 C320,60 328,57 340,56 C354,56 362,55 372,46 C384,30 392,5 412,2 C428,0 440,9 454,22 C466,36 472,49 484,57 C492,60 500,57 512,56 C526,56 534,55 544,46 C556,30 564,5 584,2 C600,0 612,9 626,22 C638,36 644,49 656,57 C664,60 672,57 680,56";
 
-  useEffect(() => {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      try {
-        const { data, ts } = JSON.parse(cached);
-        if (Date.now() - ts < CACHE_TTL) {
-          setStats(data);
-          setLoading(false);
-          return;
-        }
-      } catch {}
+// ─── Hooks ────────────────────────────────────────────────────────────────────
+
+function useLiveStats() {
+  const [meters, setMeters] = useState(FALLBACK_METERS);
+  const [athletes, setAthletes] = useState(FALLBACK_ATHLETES);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [metersRes, athletesRes] = await Promise.all([
+        supabase.rpc("get_total_meters"),
+        supabase.rpc("get_user_count"),
+      ]);
+      const m = metersRes.data as number | null;
+      const a = athletesRes.data as number | null;
+      if (m && m > 0) setMeters(m);
+      if (a && a > 0) setAthletes(a);
+    } catch {
+      // keep fallback values
     }
-
-    async function fetchStats() {
-      try {
-        const [usersRes, workoutsRes, metersRes, twoKRes] = await Promise.all([
-          supabase.rpc("get_user_count"),
-          supabase.from("erg_scores").select("id", { count: "exact", head: true }),
-          supabase.rpc("get_total_meters"),
-          supabase.rpc("get_avg_verified_2k"),
-        ]);
-
-        const total_users = (usersRes.data as number) ?? 0;
-        const total_workouts = workoutsRes.count ?? 0;
-
-        const rawMeters = (metersRes.data as number) ?? 0;
-        const total_meters =
-          rawMeters >= 1_000_000
-            ? `${(rawMeters / 1_000_000).toFixed(1)}M`
-            : rawMeters >= 1_000
-            ? `${(rawMeters / 1_000).toFixed(0)}K`
-            : String(rawMeters);
-
-        const avgSec = twoKRes.data as number | null;
-        let average_2k = "---";
-        if (avgSec && avgSec > 0) {
-          const m = Math.floor(avgSec / 60);
-          const s = Math.round(avgSec % 60);
-          average_2k = `${m}:${s.toString().padStart(2, "0")}`;
-        }
-
-        const result: Stats = { total_users, average_2k, total_workouts, total_meters };
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, ts: Date.now() }));
-        setStats(result);
-      } catch {
-        setStats({ total_users: 0, average_2k: "---", total_workouts: 0, total_meters: "0" });
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStats();
   }, []);
 
-  return { stats, loading };
+  useEffect(() => {
+    fetchStats();
+    const id = setInterval(fetchStats, 30_000);
+    return () => clearInterval(id);
+  }, [fetchStats]);
+
+  return { meters, athletes };
 }
 
-function useCountUp(target: number, active: boolean, duration = 1800) {
-  const [value, setValue] = useState(0);
+function useAnimatedNumber(target: number): number {
+  const [displayed, setDisplayed] = useState(0);
+  const fromRef = useRef(0);
+  const isFirstRef = useRef(true);
+  const rafRef = useRef<number | undefined>(undefined);
+
   useEffect(() => {
-    if (!active || target === 0) return;
+    const from = fromRef.current;
+    const duration = isFirstRef.current ? 2000 : 800;
+    isFirstRef.current = false;
+    fromRef.current = target;
+
     const start = Date.now();
-    const raf = (cb: FrameRequestCallback) => requestAnimationFrame(cb);
     const step = () => {
       const elapsed = Date.now() - start;
       const progress = Math.min(elapsed / duration, 1);
       const ease = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(target * ease));
-      if (progress < 1) raf(step);
+      setDisplayed(Math.round(from + (target - from) * ease));
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      }
     };
-    raf(step);
-  }, [target, active, duration]);
-  return value;
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target]);
+
+  return displayed;
 }
 
-function useInView(ref: React.RefObject<Element>) {
-  const [inView, setInView] = useState(false);
+function useReveal(threshold = 0.08) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold: 0.1 });
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { threshold }
+    );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
-  return inView;
+  }, [threshold]);
+
+  return { ref, visible };
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function StatNumber({ value, suffix = "" }: { value: string | number; suffix?: string }) {
-  return (
-    <span style={{ color: "#ffffff", fontSize: "2.5rem", fontWeight: 800, lineHeight: 1 }}>
-      {value}{suffix}
-    </span>
-  );
+function formatMeters(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toString();
 }
 
-function StatSkeleton() {
-  return (
-    <div style={{ height: "2.5rem", width: "120px", background: "rgba(255,255,255,0.08)", borderRadius: "6px", animation: "pulse 1.5s ease-in-out infinite" }} />
-  );
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+interface RevealProps {
+  children: React.ReactNode;
+  delay?: number;
+  style?: React.CSSProperties;
+  className?: string;
 }
 
-function LiveStatBar({ stats, loading }: { stats: Stats | null; loading: boolean }) {
-  const ref = useRef<HTMLDivElement>(null!);
-  const inView = useInView(ref);
-
-  const usersCount = useCountUp(stats?.total_users ?? 0, inView && !loading);
-  const workoutsCount = useCountUp(stats?.total_workouts ?? 0, inView && !loading);
-
-  const items = [
-    { label: "Athletes Training", value: loading ? null : usersCount, raw: null },
-    { label: "Avg 2k on CrewSync", value: null, raw: loading ? null : stats?.average_2k },
-    { label: "Workouts Logged", value: loading ? null : workoutsCount, raw: null },
-    { label: "Meters Tracked", value: null, raw: loading ? null : stats?.total_meters },
-  ];
-
+function Reveal({ children, delay = 0, style, className }: RevealProps) {
+  const { ref, visible } = useReveal();
   return (
-    <div ref={ref} style={{ backgroundColor: "#112240", padding: "28px 24px", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-      <div style={{ maxWidth: "1100px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "24px", textAlign: "center" }}>
-        {items.map(({ label, value, raw }) => (
-          <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {label === "Athletes Training" && (
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e", display: "inline-block", boxShadow: "0 0 6px #22c55e" }} />
-              )}
-              {loading ? <StatSkeleton /> : <StatNumber value={raw ?? value ?? 0} />}
-            </div>
-            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
-          </div>
-        ))}
-      </div>
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(20px)",
+        transition: `opacity 0.6s ease ${delay}s, transform 0.6s ease ${delay}s`,
+        ...style,
+      }}
+    >
+      {children}
     </div>
+  );
+}
+
+function ForceCurveTile({ path, tileId }: { path: string; tileId: number }) {
+  const closedPath = `${path} L680,60 L0,60 Z`;
+  return (
+    <svg
+      width="680"
+      height="72"
+      viewBox="0 0 680 72"
+      fill="none"
+      style={{ flexShrink: 0, display: "block" }}
+    >
+      <defs>
+        <linearGradient
+          id={`fc-grad-${tileId}`}
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="60"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0%" stopColor="#2272FF" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#2272FF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1="0" y1="60" x2="680" y2="60" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+      <path d={closedPath} fill={`url(#fc-grad-${tileId})`} />
+      <path d={path} fill="none" stroke="#2272FF" strokeWidth="7" opacity="0.1" />
+      <path d={path} fill="none" stroke="#2272FF" strokeWidth="1.5" opacity="0.9" />
+    </svg>
   );
 }
 
@@ -163,487 +173,1334 @@ function LiveStatBar({ stats, loading }: { stats: Stats | null; loading: boolean
 
 const LandingPage = () => {
   const navigate = useNavigate();
-  const { stats, loading } = useStats();
+  const { meters, athletes } = useLiveStats();
+  const animatedMeters = useAnimatedNumber(meters);
+  const animatedAthletes = useAnimatedNumber(athletes);
 
-  // On native iOS/Android skip the landing page entirely
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        navigate("/dashboard", { replace: true });
-      } else {
-        navigate("/auth", { replace: true });
-      }
+      if (data.session) navigate("/dashboard", { replace: true });
+      else navigate("/auth", { replace: true });
     });
   }, [navigate]);
 
-  const featureCards = [
-    {
-      icon: "🧠",
-      title: "Personalized Training Engine",
-      desc: "AI plans spanning 3–12 months, goal-specific for 2k, endurance, and recruiting. Auto-adjusts as you improve.",
-    },
-    {
-      icon: "📊",
-      title: "AI Performance Analytics",
-      desc: "Split and pacing breakdown after every workout. Stroke efficiency, weakness detection, and trend tracking.",
-    },
-    {
-      icon: "⚡",
-      title: "Live PM5 Tracking",
-      desc: "Real-time split, stroke rate, distance, watts, and calories. Force curves, target split pacer. Auto-saves on finish.",
-    },
-    {
-      icon: "🔄",
-      title: "Concept2 Logbook Sync",
-      desc: "Full workout history imports automatically. Intervals, splits, heart rate, drag factor. Daily background sync.",
-    },
-    {
-      icon: "🏆",
-      title: "Head to Head Racing",
-      desc: "Race anyone, anywhere in real time. 2–8 athletes per room, matchmaking by ability, full race replay.",
-    },
-    {
-      icon: "💪",
-      title: "Strength & Nutrition",
-      desc: "Erg-specific lifting programs, meal plan generator, weight tracking, hydration, sleep, and recovery score.",
-    },
-    {
-      icon: "🎓",
-      title: "Recruiting Tools",
-      desc: "Public athlete profile, exportable PDF, college target list with AI fit scores, virtual combine, national ranking.",
-    },
-    {
-      icon: "🛌",
-      title: "Recovery Intelligence",
-      desc: "Sleep, hydration, and calorie correlation. AI weekly insight summary, fatigue modeling, injury risk scoring.",
-    },
-  ];
-
-  const coachFeatures = [
-    "Full roster management",
-    "Drag-and-drop lineup builder with AI optimization",
-    "Seat racing analysis and cumulative rankings",
-    "Race lineup optimizer",
-    "Team training plan generator",
-    "Load management and fatigue heatmap",
-    "Athlete check-in system",
-    "SafeSport compliant messaging — all coach-athlete messages visible to all coaches",
-    "Recruiting profiles auto-generated for all athletes",
-    "Coaches Hub with recruit discovery and recruiting board",
-    "Parent weekly email reports",
-    "Season recap AI report",
-    "Athletic director dashboard",
-  ];
-
-  const competitionCards = [
-    { icon: "⚡", title: "Head-to-Head Erg Racing", desc: "Race live against anyone in the world. Real-time PM5 sync.", badge: "Beta" },
-    { icon: "🌍", title: "Global Leaderboards", desc: "Filtered by age and weight class. See where you rank nationally." },
-    { icon: "📅", title: "Weekly Challenges", desc: "Points, streaks, and a live leaderboard. New challenge every Monday." },
-    { icon: "🏅", title: "Achievement Badges", desc: "Earn badges and build streaks that show up on your athlete profile." },
-  ];
-
-  const calculatorCards = [
-    { icon: "🧮", title: "2k Predictor", tag: "AI Powered" },
-    { icon: "⚡", title: "Split to Watts Converter", tag: null },
-    { icon: "⚖️", title: "Weight Adjustment Calculator", tag: null },
-    { icon: "❤️", title: "Training Zones Calculator", tag: null },
-    { icon: "📐", title: "Race Splits Planner", tag: null },
-    { icon: "📈", title: "2k Improvement Timeline", tag: null },
-  ];
-
-  const s: React.CSSProperties = {};
-  void s;
-
   return (
-    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", margin: 0, padding: 0, backgroundColor: "#ffffff" }}>
+    <div
+      style={{
+        fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
+        margin: 0,
+        padding: 0,
+        backgroundColor: "var(--navy)",
+        color: "var(--text)",
+      }}
+    >
       <style>{`
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .nav-link { color: rgba(255,255,255,0.85); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
-        .nav-link:hover { color: #ffffff; }
-        .feature-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; transition: box-shadow 0.2s, transform 0.2s; }
-        .feature-card:hover { box-shadow: 0 8px 30px rgba(45,107,228,0.12); transform: translateY(-2px); }
-        .pricing-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 28px; transition: box-shadow 0.2s; }
-        .pricing-card:hover { box-shadow: 0 8px 30px rgba(45,107,228,0.12); }
-        .btn-primary { background: #2d6be4; color: #ffffff; border: none; padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s, transform 0.1s; }
-        .btn-primary:hover { background: #2459c7; transform: translateY(-1px); }
-        .btn-outline { background: transparent; color: rgba(255,255,255,0.9); border: 1.5px solid rgba(255,255,255,0.4); padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
-        .btn-outline:hover { border-color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.06); }
-        @media (max-width: 768px) {
-          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .features-grid { grid-template-columns: 1fr !important; }
-          .coach-cols { flex-direction: column !important; }
-          .comp-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .calc-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .pricing-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .hide-mobile { display: none !important; }
-          .hero-btns { flex-direction: column !important; align-items: center !important; }
-          .hero-pills { flex-wrap: wrap !important; justify-content: center !important; }
-          .nav-links-row { display: none !important; }
-          .footer-links { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+        :root {
+          --navy: #08121F;
+          --navy-mid: #0E1A2E;
+          --navy-light: #152235;
+          --blue: #2272FF;
+          --accent: #3D8FD4;
+          --off-white: #EBF0F8;
+          --muted: #4E6580;
+          --text: #A8BECD;
         }
-        @media (max-width: 480px) {
-          .stats-grid { grid-template-columns: 1fr !important; }
-          .comp-grid { grid-template-columns: 1fr !important; }
-          .calc-grid { grid-template-columns: 1fr !important; }
-          .pricing-grid { grid-template-columns: 1fr !important; }
+        * { box-sizing: border-box; }
+        @keyframes scrollCurve {
+          from { transform: translateX(0); }
+          to { transform: translateX(-680px); }
+        }
+        @keyframes pulseDot {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,114,255,0.6); }
+          50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34,114,255,0); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(24px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .lp-nav-link {
+          color: rgba(235,240,248,0.65);
+          text-decoration: none;
+          font-size: 12px;
+          font-family: 'Space Grotesk', sans-serif;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          transition: color 0.2s;
+          cursor: pointer;
+          background: none;
+          border: none;
+          padding: 0;
+        }
+        .lp-nav-link:hover { color: #EBF0F8; }
+        .lp-btn-primary {
+          background: var(--blue);
+          color: #ffffff;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 4px;
+          font-size: 13px;
+          font-family: 'Space Grotesk', sans-serif;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.2s, transform 0.15s;
+          text-decoration: none;
+          display: inline-block;
+          line-height: 1;
+        }
+        .lp-btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+        .lp-btn-ghost {
+          background: transparent;
+          color: var(--off-white);
+          border: 1px solid rgba(235,240,248,0.22);
+          padding: 10px 20px;
+          border-radius: 4px;
+          font-size: 13px;
+          font-family: 'Space Grotesk', sans-serif;
+          font-weight: 500;
+          cursor: pointer;
+          transition: border-color 0.2s, background 0.2s;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          text-decoration: none;
+          line-height: 1;
+        }
+        .lp-btn-ghost:hover { border-color: rgba(235,240,248,0.5); background: rgba(235,240,248,0.04); }
+        .lp-btn-ghost .lp-arrow { display: inline-block; transition: transform 0.2s; }
+        .lp-btn-ghost:hover .lp-arrow { transform: translateX(4px); }
+        .feature-card-new {
+          position: relative;
+          overflow: hidden;
+          background: var(--navy-mid);
+          padding: 28px 24px 24px;
+          transition: background 0.2s;
+          display: flex;
+          flex-direction: column;
+        }
+        .feature-card-new::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: var(--blue);
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 0.3s ease;
+        }
+        .feature-card-new:hover { background: var(--navy-light); }
+        .feature-card-new:hover::after { transform: scaleX(1); }
+        @media (max-width: 768px) {
+          .lp-nav-desktop { display: none !important; }
+          .lp-nav-mobile { display: flex !important; }
+          .lp-hero-btns { flex-direction: column !important; align-items: flex-start !important; }
+          .lp-stats-row { flex-direction: column !important; gap: 20px !important; }
+          .lp-stats-row > div { border-right: none !important; border-bottom: 1px solid rgba(255,255,255,0.07) !important; padding-left: 0 !important; padding-right: 0 !important; padding-bottom: 20px !important; }
+          .lp-stats-row > div:last-child { border-bottom: none !important; padding-bottom: 0 !important; }
+          .lp-problem-grid { grid-template-columns: 1fr !important; }
+          .lp-problem-col { border-right: none !important; padding-left: 0 !important; padding-right: 0 !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; }
+          .lp-problem-col:last-child { border-bottom: none !important; }
+          .lp-features-grid { grid-template-columns: 1fr !important; }
+          .lp-pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; }
+          .lp-cta-btns { flex-direction: column !important; align-items: center !important; }
+          .lp-footer-inner { flex-direction: column !important; gap: 24px !important; }
+          .lp-footer-links { flex-direction: column !important; gap: 12px !important; }
+          .lp-hero-section { padding: 100px 24px 60px !important; }
+          .lp-section-pad { padding: 72px 24px !important; }
         }
       `}</style>
 
-      {/* ── NAVBAR ───────────────────────────────────────────── */}
-      <nav style={{
-        backgroundColor: "#0a1628", padding: "0 24px", display: "flex", alignItems: "center",
-        justifyContent: "space-between", height: "64px", position: "sticky", top: 0, zIndex: 100,
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <img src={logoIcon} alt="CrewSync" style={{ height: "36px", width: "36px", objectFit: "contain", borderRadius: "8px" }} />
-          <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px", letterSpacing: "-0.3px" }}>CrewSync</span>
+      {/* ── NAV ────────────────────────────────────────────────────── */}
+      <nav
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "62px",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 40px",
+          background: "rgba(8,18,31,0.95)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+        }}
+      >
+        {/* Logo */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
+          onClick={() => navigate("/")}
+        >
+          <img
+            src={logoIcon}
+            alt="CrewSync"
+            style={{ height: "30px", width: "30px", objectFit: "contain", borderRadius: "6px" }}
+          />
+          <span
+            style={{
+              color: "#ffffff",
+              fontWeight: 700,
+              fontSize: "16px",
+              fontFamily: "'Space Grotesk', sans-serif",
+              letterSpacing: "-0.3px",
+            }}
+          >
+            CrewSync
+          </span>
         </div>
-        <div className="nav-links-row" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
-          {["Features", "Competition"].map((link) => (
-            <a key={link} href={`#${link.toLowerCase().replace(" ", "-")}`} className="nav-link">{link}</a>
-          ))}
-          <a href="/coaches" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/coaches"); }}>For Coaches</a>
-          <a href="/pricing" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/pricing"); }}>Pricing</a>
-          <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); navigate("/auth"); }}>Login</a>
-          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: "14px" }} onClick={() => navigate("/auth")}>Get Started</button>
+
+        {/* Desktop links */}
+        <div
+          className="lp-nav-desktop"
+          style={{ display: "flex", alignItems: "center", gap: "32px" }}
+        >
+          <button
+            className="lp-nav-link"
+            onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
+          >
+            Features
+          </button>
+          <button
+            className="lp-nav-link"
+            onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+          >
+            Pricing
+          </button>
+          <button className="lp-nav-link" onClick={() => navigate("/coaches")}>
+            For Coaches
+          </button>
+          <button
+            className="lp-btn-primary"
+            style={{ padding: "8px 16px", fontSize: "12px" }}
+            onClick={() => navigate("/auth/signup")}
+          >
+            Get Started
+          </button>
         </div>
-        <button className="btn-primary hide-mobile" style={{ padding: "8px 18px", fontSize: "14px" }} onClick={() => navigate("/auth")}>Get Started</button>
+
+        {/* Mobile CTA only */}
+        <div className="lp-nav-mobile" style={{ display: "none" }}>
+          <button
+            className="lp-btn-primary"
+            style={{ padding: "8px 16px", fontSize: "12px" }}
+            onClick={() => navigate("/auth/signup")}
+          >
+            Get Started
+          </button>
+        </div>
       </nav>
 
-      {/* ── HERO ─────────────────────────────────────────────── */}
-      <section style={{
-        backgroundColor: "#0a1628", padding: "90px 24px 70px", textAlign: "center",
-        display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden",
-      }}>
-        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(45,107,228,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ position: "relative", maxWidth: "800px", animation: "fadeInUp 0.7s ease both" }}>
-          <img src={logoFull} alt="CrewSync" style={{ height: "120px", width: "auto", objectFit: "contain", marginBottom: "28px", borderRadius: "16px", display: "block", margin: "0 auto 28px" }} />
-          <span style={{ display: "inline-block", backgroundColor: "rgba(45,107,228,0.15)", border: "1px solid rgba(45,107,228,0.35)", color: "#7ba7f0", fontSize: "13px", fontWeight: 600, padding: "6px 16px", borderRadius: "100px", marginBottom: "28px", letterSpacing: "0.03em" }}>
-            Built for competitive rowers
-          </span>
-          <h1 style={{ color: "#ffffff", fontSize: "clamp(2.4rem, 5vw, 3.8rem)", fontWeight: 900, lineHeight: 1.1, margin: "0 0 20px", letterSpacing: "-0.03em" }}>
-            Train smarter.<br />Row faster.<br />Compete better.
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: "clamp(1rem, 2vw, 1.2rem)", lineHeight: 1.6, margin: "0 0 14px", maxWidth: "640px" }}>
-            AI-generated training plans, live PM5 tracking, head-to-head racing, and full team management — everything in one platform.
-          </p>
-          <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "15px", margin: "0 0 40px" }}>
-            From your first 2k to your college recruiting profile — CrewSync has every layer covered.
-          </p>
-          <div className="hero-btns" style={{ display: "flex", gap: "14px", justifyContent: "center", marginBottom: "44px" }}>
-            <button className="btn-primary" style={{ fontSize: "16px", padding: "15px 32px" }} onClick={() => navigate("/auth")}>
-              Get My Training Plan — Free
-            </button>
-            <button className="btn-outline" style={{ fontSize: "16px", padding: "15px 32px" }} onClick={() => navigate("/auth")}>
-              For Coaches
-            </button>
-          </div>
-          <div className="hero-pills" style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
-            {["PM5 Native Sync", "AI Training Plans", "H2H Live Racing", "C2 Logbook Sync"].map((pill) => (
-              <span key={pill} style={{
-                backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-                color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: 500, padding: "7px 16px", borderRadius: "100px",
-              }}>{pill}</span>
-            ))}
-            <span style={{
-              backgroundColor: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)",
-              color: "#93c5fd", fontSize: "13px", fontWeight: 600, padding: "7px 16px", borderRadius: "100px",
-              display: "flex", alignItems: "center", gap: "6px",
-            }}>
-              <span style={{ fontSize: "11px" }}>🛡</span> SafeSport Compliant
+      {/* ── HERO ───────────────────────────────────────────────────── */}
+      <section
+        className="lp-hero-section"
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "120px 52px 80px",
+          position: "relative",
+          overflow: "hidden",
+          backgroundColor: "var(--navy)",
+        }}
+      >
+        {/* Radial glow */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "radial-gradient(ellipse at 80% 60%, rgba(34,114,255,0.06) 0%, transparent 60%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div style={{ position: "relative", maxWidth: "680px" }}>
+          {/* Eyebrow */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "28px",
+              animation: "fadeInUp 0.5s ease both",
+            }}
+          >
+            <div
+              style={{
+                width: "24px",
+                height: "1px",
+                background: "var(--accent)",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: "11px",
+                fontFamily: "'Space Grotesk', sans-serif",
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                fontWeight: 500,
+                letterSpacing: "0.12em",
+              }}
+            >
+              Crew Management Platform
             </span>
           </div>
-        </div>
-      </section>
 
-      {/* ── LIVE STATS BAR ───────────────────────────────────── */}
-      <LiveStatBar stats={stats} loading={loading} />
+          {/* Headline */}
+          <h1
+            style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontWeight: 400,
+              fontSize: "clamp(54px, 6.5vw, 92px)",
+              color: "#ffffff",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.05,
+              margin: "0 0 24px",
+              animation: "fadeInUp 0.5s ease 0.08s both",
+            }}
+          >
+            The data behind
+            <br />
+            every <em>decision.</em>
+          </h1>
 
-      {/* ── PROBLEM SECTION ──────────────────────────────────── */}
-      <section id="features" style={{ backgroundColor: "#f8f9fb", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, textAlign: "center", marginBottom: "48px", letterSpacing: "-0.02em" }}>
-            Most athletes are piecing it together.
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }} className="comp-grid">
-            {[
-              { label: "Spreadsheets for training", bad: true },
-              { label: "Separate apps for tracking", bad: true },
-              { label: "No real feedback loop", bad: true },
-              { label: null, good: true },
-            ].map((item, i) =>
-              item.good ? (
-                <div key={i} style={{ backgroundColor: "#0a1628", border: "2px solid #2d6be4", borderRadius: "14px", padding: "28px 20px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "8px" }}>
-                  <div style={{ width: "36px", height: "36px", backgroundColor: "#2d6be4", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "4px" }}>
-                    <span style={{ color: "#fff", fontSize: "18px", fontWeight: 800 }}>C</span>
-                  </div>
-                  <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px" }}>CrewSync</span>
-                  <span style={{ color: "rgba(255,255,255,0.85)", fontSize: "14px" }}>One system. Every layer.</span>
-                </div>
-              ) : (
-                <div key={i} style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "28px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <span style={{ display: "inline-block", backgroundColor: "#fef2f2", color: "#dc2626", fontSize: "11px", fontWeight: 700, padding: "4px 10px", borderRadius: "6px", width: "fit-content", letterSpacing: "0.05em" }}>PROBLEM</span>
-                  <p style={{ color: "#0a1628", fontWeight: 600, fontSize: "16px", margin: 0 }}>{item.label}</p>
-                </div>
-              )
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CORE FEATURES ────────────────────────────────────── */}
-      <section style={{ backgroundColor: "#ffffff", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, textAlign: "center", marginBottom: "48px", letterSpacing: "-0.02em" }}>
-            Everything you need to improve.
-          </h2>
-          <div className="features-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "18px" }}>
-            {featureCards.map((card) => (
-              <div key={card.title} className="feature-card">
-                <div style={{ fontSize: "28px", marginBottom: "12px" }}>{card.icon}</div>
-                <h3 style={{ color: "#0a1628", fontWeight: 700, fontSize: "15px", margin: "0 0 8px" }}>{card.title}</h3>
-                <p style={{ color: "#4a5568", fontSize: "14px", lineHeight: 1.6, margin: 0 }}>{card.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── INTEGRATIONS SECTION ─────────────────────────────── */}
-      <section style={{ backgroundColor: "#f8f9fb", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "700px", margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.4rem, 2.8vw, 2.2rem)", fontWeight: 800, marginBottom: "12px", letterSpacing: "-0.02em" }}>
-            Works with the tools you already use.
-          </h2>
-          <p style={{ color: "#4a5568", fontSize: "15px", marginBottom: "40px" }}>
-            Connect your devices and import your data automatically.
+          {/* Subheadline */}
+          <p
+            style={{
+              fontSize: "17px",
+              fontWeight: 300,
+              fontFamily: "'Space Grotesk', sans-serif",
+              color: "var(--muted)",
+              maxWidth: "440px",
+              lineHeight: 1.72,
+              margin: "0 0 40px",
+              animation: "fadeInUp 0.5s ease 0.16s both",
+            }}
+          >
+            CrewSync connects every erg score, every on-water split, and every
+            lineup decision in one place. Built for programs that take the sport
+            seriously.
           </p>
-          <div style={{ display: "flex", gap: "20px", justifyContent: "center", flexWrap: "wrap", marginBottom: "28px" }}>
-            {[
-              { logo: "/c2logo.png", name: "Concept2", desc: "Full logbook sync and live PM5 tracking." },
-              { logo: "/whooplogo.png", name: "Whoop", desc: "Recovery score, HRV, and sleep data." },
-            ].map((item) => (
-              <div key={item.name} style={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #e5e7eb",
-                borderRadius: "16px",
-                padding: "28px 32px",
-                width: "240px",
+
+          {/* Buttons */}
+          <div
+            className="lp-hero-btns"
+            style={{
+              display: "flex",
+              gap: "12px",
+              alignItems: "center",
+              marginBottom: "48px",
+              animation: "fadeInUp 0.5s ease 0.24s both",
+            }}
+          >
+            <button
+              className="lp-btn-primary"
+              style={{ padding: "13px 30px", fontSize: "13px" }}
+              onClick={() => navigate("/auth/signup")}
+            >
+              Get Started Free
+            </button>
+            <button className="lp-btn-ghost" onClick={() => navigate("/coaches")}>
+              For Coaches <span className="lp-arrow">→</span>
+            </button>
+          </div>
+
+          {/* Force curve */}
+          <div style={{ animation: "fadeInUp 0.5s ease 0.32s both" }}>
+            {/* Label */}
+            <div
+              style={{
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
-                gap: "14px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-              }}>
-                <img src={item.logo} alt={item.name} style={{ height: 32, width: "auto", objectFit: "contain" }} />
-                <div>
-                  <p style={{ color: "#0a1628", fontWeight: 700, fontSize: "15px", margin: "0 0 6px" }}>{item.name}</p>
-                  <p style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.5, margin: 0 }}>{item.desc}</p>
-                </div>
+                gap: "8px",
+                marginBottom: "10px",
+              }}
+            >
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--blue)",
+                  flexShrink: 0,
+                  animation: "pulseDot 2s ease infinite",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  color: "var(--muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  fontWeight: 500,
+                }}
+              >
+                Live Force Curve — PM5 Bluetooth
+              </span>
+            </div>
+            {/* Viewport */}
+            <div
+              style={{
+                height: "72px",
+                overflow: "hidden",
+                position: "relative",
+                WebkitMaskImage:
+                  "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
+                maskImage:
+                  "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  width: "2720px",
+                  animation: "scrollCurve 8s linear infinite",
+                }}
+              >
+                <ForceCurveTile path={PATH_1} tileId={1} />
+                <ForceCurveTile path={PATH_2} tileId={2} />
+                <ForceCurveTile path={PATH_3} tileId={3} />
+                <ForceCurveTile path={PATH_1} tileId={4} />
               </div>
-            ))}
+            </div>
           </div>
-          <p style={{ color: "#9ca3af", fontSize: "13px" }}>
-            More integrations coming soon — Garmin, Apple Health, Strava.
-          </p>
         </div>
       </section>
 
-      {/* ── COACHING SECTION ─────────────────────────────────── */}
-      <section id="for-coaches" style={{ backgroundColor: "#0a1628", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div className="coach-cols" style={{ display: "flex", gap: "64px", alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <span style={{ display: "inline-block", backgroundColor: "rgba(45,107,228,0.15)", border: "1px solid rgba(45,107,228,0.35)", color: "#7ba7f0", fontSize: "12px", fontWeight: 700, padding: "5px 14px", borderRadius: "100px", marginBottom: "20px", letterSpacing: "0.05em" }}>
-                FOR COACHES
-              </span>
-              <h2 style={{ color: "#ffffff", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, margin: "0 0 28px", letterSpacing: "-0.02em" }}>
-                Built for real rowing programs.
-              </h2>
-              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "12px" }}>
-                {coachFeatures.map((f) => (
-                  <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: "10px", color: "rgba(255,255,255,0.85)", fontSize: "15px" }}>
-                    <span style={{ color: "#2d6be4", fontWeight: 700, marginTop: "1px" }}>✓</span>
+      {/* ── LIVE STATS ─────────────────────────────────────────────── */}
+      <div
+        style={{
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          padding: "28px 52px",
+          backgroundColor: "var(--navy)",
+        }}
+      >
+        <div
+          className="lp-stats-row"
+          style={{ display: "flex", maxWidth: "680px" }}
+        >
+          {/* Meters */}
+          <div
+            id="stat-meters"
+            style={{
+              flex: 1,
+              paddingRight: "32px",
+              borderRight: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(24px, 3vw, 36px)",
+                fontWeight: 700,
+                color: "#ffffff",
+                fontFamily: "'Space Grotesk', sans-serif",
+                lineHeight: 1,
+                marginBottom: "6px",
+              }}
+            >
+              {formatMeters(animatedMeters)}
+            </div>
+            <div
+              style={{
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--muted)",
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              Meters Logged
+            </div>
+          </div>
+
+          {/* Athletes */}
+          <div
+            id="stat-athletes"
+            style={{
+              flex: 1,
+              paddingLeft: "32px",
+              paddingRight: "32px",
+              borderRight: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(24px, 3vw, 36px)",
+                fontWeight: 700,
+                color: "#ffffff",
+                fontFamily: "'Space Grotesk', sans-serif",
+                lineHeight: 1,
+                marginBottom: "6px",
+              }}
+            >
+              {animatedAthletes}
+            </div>
+            <div
+              style={{
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--muted)",
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              Active Athletes
+            </div>
+          </div>
+
+          {/* Free */}
+          <div style={{ flex: 1, paddingLeft: "32px" }}>
+            <div
+              style={{
+                fontSize: "clamp(24px, 3vw, 36px)",
+                fontWeight: 700,
+                color: "var(--blue)",
+                fontFamily: "'Space Grotesk', sans-serif",
+                lineHeight: 1,
+                marginBottom: "6px",
+              }}
+            >
+              Free
+            </div>
+            <div
+              style={{
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--muted)",
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              During Beta
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PROBLEM SECTION ────────────────────────────────────────── */}
+      <section
+        className="lp-section-pad"
+        style={{
+          padding: "96px 52px",
+          backgroundColor: "var(--navy)",
+        }}
+      >
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <Reveal>
+            <p
+              style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontStyle: "italic",
+                fontSize: "clamp(20px, 2.5vw, 28px)",
+                color: "rgba(255,255,255,0.45)",
+                marginBottom: "56px",
+                fontWeight: 400,
+                lineHeight: 1.4,
+              }}
+            >
+              The data is there. It just does not talk to itself.
+            </p>
+          </Reveal>
+          <div
+            className="lp-problem-grid"
+            style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)" }}
+          >
+            {[
+              {
+                num: "01",
+                title: "Your best lineup is in a spreadsheet.",
+                desc: "Built on memory and gut feel with no record of why a decision was made or whether it worked.",
+              },
+              {
+                num: "02",
+                title: "Your erg data is in Concept2.",
+                desc: "Where you cannot see it alongside lineup decisions, on-water results, or anything that matters.",
+              },
+              {
+                num: "03",
+                title: "Your on-water splits are on paper.",
+                desc: "Written after practice, then lost. Never connected to the lineup that rowed the piece.",
+              },
+            ].map((col, i) => (
+              <Reveal
+                key={col.num}
+                delay={i * 0.1}
+                className="lp-problem-col"
+                style={{
+                  padding: "40px 40px 40px 0",
+                  borderRight: i < 2 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  paddingLeft: i > 0 ? "40px" : "0",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "12px",
+                    right: i < 2 ? "20px" : "0",
+                    fontSize: "96px",
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    fontWeight: 400,
+                    color: "rgba(255,255,255,0.025)",
+                    lineHeight: 1,
+                    userSelect: "none",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {col.num}
+                </div>
+                <h3
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "var(--off-white)",
+                    margin: "0 0 14px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {col.title}
+                </h3>
+                <p
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: "15px",
+                    fontWeight: 300,
+                    color: "var(--muted)",
+                    margin: 0,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {col.desc}
+                </p>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FEATURES SECTION ───────────────────────────────────────── */}
+      <section
+        id="features"
+        className="lp-section-pad"
+        style={{
+          backgroundColor: "var(--navy-mid)",
+          borderTop: "1px solid rgba(34,114,255,0.15)",
+          borderBottom: "1px solid rgba(34,114,255,0.15)",
+          padding: "96px 52px",
+        }}
+      >
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <Reveal style={{ marginBottom: "56px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                fontFamily: "'Space Grotesk', sans-serif",
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                fontWeight: 500,
+                display: "block",
+                marginBottom: "12px",
+              }}
+            >
+              Platform
+            </span>
+            <h2
+              style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontWeight: 400,
+                fontSize: "clamp(32px, 4vw, 52px)",
+                color: "#ffffff",
+                margin: 0,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              One platform. Every tool.
+            </h2>
+          </Reveal>
+
+          <div
+            className="lp-features-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "1px",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          >
+            {[
+              {
+                tag: "Coach Daily",
+                title: "Today Tab",
+                desc: "Every morning — lineups, attendance responses, workout, and weather in one screen. Know who is coming before you leave the house.",
+                data: "Push notification on every absence",
+              },
+              {
+                tag: "Coach Lineups",
+                title: "Lineup Builder",
+                desc: "Drag athletes into any boat configuration. Save templates. AI optimizer recommends the best lineup using erg, on-water, and seat race data together.",
+                data: "Erg 40% · On-water 30% · Seat race 30%",
+              },
+              {
+                tag: "Coach Assignments",
+                title: "Erg Workout Assignment",
+                desc: "Set target splits as 2K plus or minus seconds — they personalize automatically to each athlete's pace. See every result color coded the moment they log.",
+                data: "One target. Every athlete sees their number.",
+              },
+              {
+                tag: "Coach History",
+                title: "Practice Calendar",
+                desc: "Every session stored permanently — lineup, planned workout, logged splits, weather, attendance. Tap any day. See the full picture.",
+                data: "Your program's institutional memory",
+              },
+              {
+                tag: "Athlete Erg",
+                title: "Live PM5 Tracking",
+                desc: "Connect to any PM5 via Bluetooth. Split, watts, stroke rate, drive length, and force curves in real time. Full Concept2 logbook sync via OAuth.",
+                data: "Verified scores only on the leaderboard",
+              },
+              {
+                tag: "Athlete Training",
+                title: "AI Training Plans",
+                desc: "Personalized plans built on real competitive rowing methodology. Every pace target relative to your 2K. Choose your goal, intensity, and target date.",
+                data: "UT2 to UT1 to AT to TR1 to TR2",
+              },
+            ].map((card, i) => (
+              <Reveal
+                key={card.title}
+                delay={(i % 3) * 0.1}
+                className="feature-card-new"
+              >
+                <div
+                  style={{
+                    fontSize: "9px",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                    color: "var(--accent)",
+                    marginBottom: "14px",
+                  }}
+                >
+                  {card.tag}
+                </div>
+                <h3
+                  style={{
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    fontWeight: 400,
+                    fontSize: "22px",
+                    color: "#ffffff",
+                    margin: "0 0 12px",
+                    letterSpacing: "-0.01em",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {card.title}
+                </h3>
+                <p
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontWeight: 300,
+                    fontSize: "14px",
+                    color: "var(--text)",
+                    lineHeight: 1.7,
+                    margin: "0 0 20px",
+                    flexGrow: 1,
+                  }}
+                >
+                  {card.desc}
+                </p>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--blue)",
+                    marginTop: "auto",
+                  }}
+                >
+                  {card.data}
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRICING SECTION ────────────────────────────────────────── */}
+      <section
+        id="pricing"
+        className="lp-section-pad"
+        style={{
+          padding: "96px 52px",
+          backgroundColor: "var(--navy)",
+        }}
+      >
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <Reveal style={{ marginBottom: "56px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                fontFamily: "'Space Grotesk', sans-serif",
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                fontWeight: 500,
+                display: "block",
+                marginBottom: "12px",
+              }}
+            >
+              Pricing
+            </span>
+            <h2
+              style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontWeight: 400,
+                fontSize: "clamp(32px, 4vw, 52px)",
+                color: "#ffffff",
+                margin: "0 0 16px",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Simple pricing. Free during beta.
+            </h2>
+            <p
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: "16px",
+                fontWeight: 300,
+                color: "var(--muted)",
+                margin: 0,
+              }}
+            >
+              Paid plans launch Fall 2026. Sign up now and lock in 20% off for life.
+            </p>
+          </Reveal>
+
+          <div
+            className="lp-pricing-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: "1px",
+              background: "rgba(255,255,255,0.07)",
+              maxWidth: "700px",
+            }}
+          >
+            {/* Team Pro */}
+            <Reveal
+              style={{
+                background: "var(--navy-mid)",
+                padding: "36px 32px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "12px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "var(--muted)",
+                  marginBottom: "12px",
+                }}
+              >
+                Team Pro
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "4px",
+                  marginBottom: "4px",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    fontSize: "36px",
+                    color: "#ffffff",
+                    fontWeight: 400,
+                    lineHeight: 1,
+                  }}
+                >
+                  $199
+                </span>
+                <span
+                  style={{
+                    fontSize: "15px",
+                    color: "var(--muted)",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                  }}
+                >
+                  /mo
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "var(--muted)",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  marginBottom: "16px",
+                  fontStyle: "italic",
+                }}
+              >
+                from
+              </div>
+              <div
+                style={{
+                  display: "inline-block",
+                  background: "rgba(34,114,255,0.1)",
+                  color: "var(--blue)",
+                  fontSize: "11px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontWeight: 600,
+                  padding: "5px 10px",
+                  borderRadius: "3px",
+                  marginBottom: "28px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Up to 30 athletes — Free during beta
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  margin: "0 0 28px",
+                  padding: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                {[
+                  "Full coaching tools",
+                  "Lineup builder and seat racing",
+                  "Erg workout assignments",
+                  "Practice calendar",
+                  "Athletes inherit Pro",
+                ].map((f) => (
+                  <li
+                    key={f}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      fontSize: "14px",
+                      fontFamily: "'Space Grotesk', sans-serif",
+                      fontWeight: 300,
+                      color: "var(--text)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "var(--accent)",
+                        flexShrink: 0,
+                        marginTop: "2px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      ✓
+                    </span>
                     {f}
                   </li>
                 ))}
               </ul>
-              <button className="btn-primary" style={{ marginTop: "32px" }} onClick={() => navigate("/auth")}>
-                Get Coach Access
+              <button
+                className="lp-btn-ghost"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => navigate("/auth/signup")}
+              >
+                Get Started Free
+              </button>
+            </Reveal>
+
+            {/* Elite Team */}
+            <Reveal
+              delay={0.1}
+              style={{
+                background: "var(--navy-mid)",
+                padding: "36px 32px",
+                position: "relative",
+              }}
+            >
+              {/* Popular badge */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "20px",
+                  right: "20px",
+                  background: "var(--blue)",
+                  color: "#ffffff",
+                  fontSize: "10px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontWeight: 600,
+                  padding: "4px 10px",
+                  borderRadius: "3px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Popular
+              </div>
+              <div
+                style={{
+                  fontSize: "12px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "var(--muted)",
+                  marginBottom: "12px",
+                }}
+              >
+                Elite Team
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "4px",
+                  marginBottom: "4px",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    fontSize: "36px",
+                    color: "#ffffff",
+                    fontWeight: 400,
+                    lineHeight: 1,
+                  }}
+                >
+                  $329
+                </span>
+                <span
+                  style={{
+                    fontSize: "15px",
+                    color: "var(--muted)",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                  }}
+                >
+                  /mo
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "var(--muted)",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  marginBottom: "16px",
+                  fontStyle: "italic",
+                }}
+              >
+                from
+              </div>
+              <div
+                style={{
+                  display: "inline-block",
+                  background: "rgba(34,114,255,0.1)",
+                  color: "var(--blue)",
+                  fontSize: "11px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontWeight: 600,
+                  padding: "5px 10px",
+                  borderRadius: "3px",
+                  marginBottom: "28px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Up to 30 athletes — Free during beta
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  margin: "0 0 28px",
+                  padding: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                {[
+                  "Everything in Team Pro",
+                  "Unlimited AI features",
+                  "Race lineup optimizer",
+                  "Coach AI assistant",
+                  "Athletes inherit Elite",
+                ].map((f) => (
+                  <li
+                    key={f}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      fontSize: "14px",
+                      fontFamily: "'Space Grotesk', sans-serif",
+                      fontWeight: 300,
+                      color: "var(--text)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "var(--blue)",
+                        flexShrink: 0,
+                        marginTop: "2px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      ✓
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="lp-btn-primary"
+                style={{ width: "100%", padding: "13px 20px", fontSize: "13px" }}
+                onClick={() => navigate("/auth/signup")}
+              >
+                Get Started Free
+              </button>
+            </Reveal>
+          </div>
+
+          <Reveal style={{ marginTop: "20px" }}>
+            <p
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: "13px",
+                fontStyle: "italic",
+                color: "var(--muted)",
+                margin: 0,
+              }}
+            >
+              Individual plans from free.{" "}
+              <a
+                href="/pricing"
+                style={{ color: "var(--accent)", textDecoration: "none" }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/pricing");
+                }}
+              >
+                See full pricing →
+              </a>
+            </p>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── CTA SECTION ────────────────────────────────────────────── */}
+      <section
+        className="lp-section-pad"
+        style={{
+          padding: "96px 52px",
+          backgroundColor: "var(--navy-mid)",
+          textAlign: "center",
+          borderTop: "1px solid rgba(255,255,255,0.04)",
+        }}
+      >
+        <div style={{ maxWidth: "640px", margin: "0 auto" }}>
+          <Reveal>
+            <h2
+              style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontWeight: 400,
+                fontSize: "clamp(36px, 5vw, 60px)",
+                color: "#ffffff",
+                margin: "0 0 20px",
+                letterSpacing: "-0.01em",
+                lineHeight: 1.1,
+              }}
+            >
+              Every meter. Every decision. <em>Connected.</em>
+            </h2>
+          </Reveal>
+          <Reveal delay={0.1}>
+            <p
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: "17px",
+                fontWeight: 300,
+                color: "var(--muted)",
+                margin: "0 0 36px",
+                lineHeight: 1.7,
+              }}
+            >
+              Set up your program in five minutes. Free during beta.
+            </p>
+          </Reveal>
+          <Reveal delay={0.2}>
+            <div
+              className="lp-cta-btns"
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "center",
+                alignItems: "center",
+                marginBottom: "24px",
+              }}
+            >
+              <button
+                className="lp-btn-primary"
+                style={{ padding: "13px 30px", fontSize: "13px" }}
+                onClick={() => navigate("/auth/signup")}
+              >
+                Get Started Free
+              </button>
+              <button className="lp-btn-ghost" onClick={() => navigate("/coaches")}>
+                For Coaches <span className="lp-arrow">→</span>
               </button>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ backgroundColor: "#112240", borderRadius: "16px", padding: "28px", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-                  <span style={{ color: "#ffffff", fontWeight: 700, fontSize: "16px" }}>Coaching Dashboard</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#22c55e", fontSize: "12px", fontWeight: 600 }}>
-                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#22c55e", display: "inline-block" }} />
-                    Live
-                  </span>
-                </div>
-                {[
-                  { label: "Roster Size", value: "24 Athletes" },
-                  { label: "Avg Team 2k", value: "7:04.2" },
-                  { label: "Next Regatta", value: "May 3 — Head of the Charles" },
-                ].map((row) => (
-                  <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "13px" }}>{row.label}</span>
-                    <span style={{ color: "#ffffff", fontWeight: 600, fontSize: "14px" }}>{row.value}</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: "20px" }}>
-                  <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fatigue Heatmap</span>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "4px", marginTop: "10px" }}>
-                    {Array.from({ length: 24 }, (_, i) => {
-                      const level = [0.2, 0.4, 0.6, 0.8, 1.0, 0.7, 0.3, 0.5][i % 8];
-                      return (
-                        <div key={i} style={{ height: "24px", borderRadius: "4px", backgroundColor: `rgba(45,107,228,${level})` }} />
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
-                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "11px" }}>Low fatigue</span>
-                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "11px" }}>High fatigue</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            <p
+              style={{
+                fontSize: "11px",
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "var(--muted)",
+                margin: 0,
+              }}
+            >
+              iOS App Store · crewsync.app · No credit card required
+            </p>
+          </Reveal>
         </div>
       </section>
 
-      {/* ── COMPETITION SECTION ───────────────────────────────── */}
-      <section id="competition" style={{ backgroundColor: "#ffffff", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, textAlign: "center", marginBottom: "48px", letterSpacing: "-0.02em" }}>
-            Make training competitive.
-          </h2>
-          <div className="comp-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "18px" }}>
-            {competitionCards.map((card) => (
-              <div key={card.title} className="feature-card">
-                <div style={{ fontSize: "28px", marginBottom: "12px" }}>{card.icon}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <h3 style={{ color: "#0a1628", fontWeight: 700, fontSize: "15px", margin: 0 }}>{card.title}</h3>
-                  {card.badge && (
-                    <span style={{ backgroundColor: "#eff6ff", color: "#2d6be4", fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.05em" }}>BETA</span>
-                  )}
-                </div>
-                <p style={{ color: "#4a5568", fontSize: "14px", lineHeight: 1.6, margin: 0 }}>{card.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CALCULATORS ──────────────────────────────────────── */}
-      <section style={{ backgroundColor: "#f8f9fb", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, marginBottom: "12px", letterSpacing: "-0.02em" }}>
-            Every rowing calculator you need.
-          </h2>
-          <p style={{ color: "#4a5568", fontSize: "16px", marginBottom: "40px" }}>Free tools built specifically for erg athletes.</p>
-          <div className="calc-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "36px" }}>
-            {calculatorCards.map((c) => (
-              <div key={c.title} onClick={() => navigate("/calculators")} style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "22px 20px", cursor: "pointer", textAlign: "left", transition: "box-shadow 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(45,107,228,0.1)")}
-                onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}>
-                <div style={{ fontSize: "24px", marginBottom: "10px" }}>{c.icon}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ color: "#0a1628", fontWeight: 600, fontSize: "15px" }}>{c.title}</span>
-                  {c.tag && <span style={{ backgroundColor: "#eff6ff", color: "#2d6be4", fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "100px" }}>{c.tag}</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="btn-primary" onClick={() => navigate("/calculators")}>Try the Calculators</button>
-        </div>
-      </section>
-
-      {/* ── REGATTAS ─────────────────────────────────────────── */}
-      <section style={{ backgroundColor: "#ffffff", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ color: "#0a1628", fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, marginBottom: "16px", letterSpacing: "-0.02em" }}>
-            Find regattas and track your results.
-          </h2>
-          <p style={{ color: "#4a5568", fontSize: "16px", maxWidth: "560px", margin: "0 auto 32px" }}>
-            Search upcoming regattas, browse results, and claim your finishes to build your racing history.
-          </p>
-          <button className="btn-primary" onClick={() => navigate("/regattas")}>Browse Regattas</button>
-        </div>
-      </section>
-
-      {/* ── SOCIAL PROOF ─────────────────────────────────────── */}
-      <section style={{ backgroundColor: "#0a1628", padding: "80px 24px" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "32px", textAlign: "center" }} className="stats-grid">
-            {[
-              { label: "Athletes Training", value: stats?.total_users ?? "—" },
-              { label: "Avg 2k", value: stats?.average_2k ?? "—" },
-              { label: "Workouts Logged", value: stats?.total_workouts ?? "—" },
-              { label: "Meters Tracked", value: stats?.total_meters ?? "—" },
-            ].map(({ label, value }) => (
-              <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                <span style={{ color: "#ffffff", fontSize: "2.2rem", fontWeight: 800 }}>{value}</span>
-                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ─────────────────────────────────────────── */}
-      <section style={{ backgroundColor: "#0a1628", padding: "96px 24px", textAlign: "center" }}>
-        <div style={{ maxWidth: "640px", margin: "0 auto" }}>
-          <h2 style={{ color: "#ffffff", fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.03em" }}>
-            Start building your training system today.
-          </h2>
-          <p style={{ color: "rgba(255,255,255,0.75)", fontSize: "17px", margin: "0 0 40px", lineHeight: 1.6 }}>
-            Get a structured plan built from your performance data in minutes.
-          </p>
-          <div className="hero-btns" style={{ display: "flex", gap: "14px", justifyContent: "center" }}>
-            <button className="btn-primary" style={{ fontSize: "16px", padding: "15px 32px" }} onClick={() => navigate("/auth")}>
-              Create My Training Plan
-            </button>
-            <button className="btn-outline" style={{ fontSize: "16px", padding: "15px 32px" }} onClick={() => navigate("/auth")}>
-              I'm a Coach
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer style={{ backgroundColor: "#112240", padding: "48px 24px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "32px", marginBottom: "36px" }}>
+      {/* ── FOOTER ─────────────────────────────────────────────────── */}
+      <footer
+        style={{
+          backgroundColor: "#0A1628",
+          padding: "48px 52px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <div
+            className="lp-footer-inner"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              gap: "32px",
+              marginBottom: "36px",
+            }}
+          >
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <img src={logoIcon} alt="CrewSync" style={{ height: "32px", width: "32px", objectFit: "contain", borderRadius: "6px" }} />
-                <span style={{ color: "#ffffff", fontWeight: 800, fontSize: "18px" }}>CrewSync</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "10px",
+                  cursor: "pointer",
+                }}
+                onClick={() => navigate("/")}
+              >
+                <img
+                  src={logoIcon}
+                  alt="CrewSync"
+                  style={{
+                    height: "30px",
+                    width: "30px",
+                    objectFit: "contain",
+                    borderRadius: "6px",
+                  }}
+                />
+                <span
+                  style={{
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "16px",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                  }}
+                >
+                  CrewSync
+                </span>
               </div>
-              <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px", margin: 0 }}>Built for rowers who want more.</p>
+              <p
+                style={{
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "14px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  margin: 0,
+                  fontWeight: 300,
+                }}
+              >
+                Built for rowers who take the sport seriously.
+              </p>
             </div>
-            <nav className="footer-links" style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "center" }}>
+            <nav
+              className="lp-footer-links"
+              style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "center" }}
+            >
               {[
-                { label: "Features", href: "#features" },
-                { label: "Pricing", href: "/pricing" },
-                { label: "Regattas", href: "/regattas" },
-                { label: "Calculators", href: "/calculators" },
-                { label: "Community", href: "#" },
-                { label: "Login", href: "/auth" },
-              ].map(({ label, href }) => (
-                <a key={label} href={href} onClick={(e) => { if (href.startsWith("/")) { e.preventDefault(); navigate(href); } }} style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ffffff")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.6)")}>
+                {
+                  label: "Features",
+                  action: () =>
+                    document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }),
+                },
+                { label: "Pricing", action: () => navigate("/pricing") },
+                { label: "Regattas", action: () => navigate("/regattas") },
+                { label: "Calculators", action: () => navigate("/calculators") },
+                { label: "For Coaches", action: () => navigate("/coaches") },
+                { label: "Login", action: () => navigate("/auth") },
+              ].map(({ label, action }) => (
+                <a
+                  key={label}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    action();
+                  }}
+                  style={{
+                    color: "rgba(255,255,255,0.5)",
+                    textDecoration: "none",
+                    fontSize: "14px",
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontWeight: 400,
+                    transition: "color 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.9)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.5)")}
+                >
                   {label}
                 </a>
               ))}
             </nav>
           </div>
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "24px" }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "13px", margin: 0 }}>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "24px" }}>
+            <p
+              style={{
+                color: "rgba(255,255,255,0.3)",
+                fontSize: "13px",
+                fontFamily: "'Space Grotesk', sans-serif",
+                margin: 0,
+              }}
+            >
               © {new Date().getFullYear()} CrewSync. All rights reserved.
             </p>
           </div>
