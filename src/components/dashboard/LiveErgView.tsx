@@ -1,11 +1,17 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
-import { toDataView } from "@/lib/ble";
+import {
+  toDataView,
+  parseCharacteristic,
+  parseHRMeasurement,
+  PM5_FORCE_CURVE_CHAR,
+  PM5_FORCE_CURVE_LEGACY,
+} from "@/lib/ble";
 import { useBle } from "@/context/BleContext";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, AreaChart, Area,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,12 +23,13 @@ import ForceCurveCanvas from "./ForceCurveCanvas";
 import { getSessionUser } from '@/lib/getUser';
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
-const C2_SERVICE      = "ce060000-43e5-11e4-916c-0800200c9a66";
 const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
 const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66"; // primary status
 const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66"; // power & calories
 const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66"; // drive metrics
-const C2_FORCE_CURVE  = "ce060035-43e5-11e4-916c-0800200c9a66"; // force curve (0x0035!)
+// Per user spec: force curve characteristic UUID ce060393
+const C2_FORCE_CURVE  = PM5_FORCE_CURVE_CHAR;
+const C2_FORCE_CURVE_FALLBACK = PM5_FORCE_CURVE_LEGACY;
 const HR_SVC          = "heart_rate";
 const HR_CHAR         = "heart_rate_measurement";
 
@@ -47,74 +54,6 @@ interface StrokePoint {
   split: number;   // centiseconds / 500 m (lower = faster)
   spm: number;
   hr: number;
-}
-
-// ── Debug hex logger (first 3 per char) ────────────────────────
-const _lev_dbg: Record<string, number> = {};
-function _lev_log(tag: string, dv: DataView, parsed: object) {
-  _lev_dbg[tag] = (_lev_dbg[tag] ?? 0) + 1;
-  if (_lev_dbg[tag] > 3) return;
-  const hex = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
-    .map(b => b.toString(16).padStart(2, '0')).join(' ');
-  console.log(`[PM5 ${tag}] #${_lev_dbg[tag]} hex: ${hex} | parsed:`, parsed);
-}
-
-// ── Parsing helpers ────────────────────────────────────────────
-// 0x0031 – Rowing General Status
-// 0-2: elapsed time (uint24 LE, 0.01s)
-// 3-5: distance (uint24 LE, 0.1m)
-// 6-7: split pace (uint16 LE, 0.5s/500m) → ×50 = centiseconds
-// 8:   stroke rate (uint8, spm)
-// 9:   stroke/workout state (uint8)
-// 9-10: heart rate (uint16 LE, bpm) — only show if 40–220
-function parseGenStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 10) return {};
-  const elapsedTime  = dv.getUint8(0) + dv.getUint8(1) * 256 + dv.getUint8(2) * 65536;
-  const rawDist      = dv.getUint8(3) + dv.getUint8(4) * 256 + dv.getUint8(5) * 65536;
-  const distance     = rawDist / 10;
-  const rawSplit     = dv.getUint16(6, true);           // 0.5s/500m units
-  const splitPace    = Math.round(rawSplit * 50);        // → centiseconds
-  const strokeRate   = dv.getUint8(8) || 0;
-  const workoutState = dv.getUint8(9);
-  const rawHr        = dv.byteLength >= 12 ? dv.getUint16(10, true) : 0;
-  const heartRate    = rawHr >= 40 && rawHr <= 220 ? rawHr : 0;
-  const parsed = { elapsedTime, distance, splitPace, strokeRate, workoutState, heartRate };
-  _lev_log('0031', dv, parsed);
-  return parsed;
-}
-
-// 0x0032 – Rowing Additional Status
-// 0-2: elapsed time (uint24 LE, 0.01s)
-// 3-4: split pace (uint16 LE, 0.5s/500m) → ×50 = centiseconds
-// 5-6: stroke power (uint16 LE, watts) — read directly, do NOT compute from split
-// 7:   stroke calories
-// 8-9: average pace (uint16 LE, 0.5s/500m)
-function parseAddStatus(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 7) return {};
-  const rawSplit  = dv.getUint16(3, true);
-  const splitPace = Math.round(rawSplit * 50);           // → centiseconds
-  const power     = dv.getUint16(5, true);               // watts, direct read
-  const calories  = dv.byteLength >= 8 ? dv.getUint8(7) : 0;
-  const parsed = { splitPace, power, calories };
-  _lev_log('0032', dv, parsed);
-  return parsed;
-}
-
-// 0x0033 – Rowing Additional Status 2 (per-stroke drive metrics)
-// 0-2: elapsed time (uint24 LE, 0.01s)
-// 3-4: drive length (uint16 LE, 0.01m = centimetres)
-// 5-6: drive time (uint16 LE, 0.01s = centiseconds)
-// 7-8: stroke recovery time (uint16 LE, 0.01s = centiseconds)
-// 9-10: stroke count (uint16 LE)
-function parseAdd2Status(dv: DataView): Partial<LiveData> {
-  if (dv.byteLength < 9) return {};
-  const driveLength   = dv.byteLength >= 5 ? dv.getUint16(3, true) : 0;  // cm
-  const driveTime     = dv.byteLength >= 7 ? dv.getUint16(5, true) : 0;  // centiseconds
-  const recoveryTime  = dv.byteLength >= 9 ? dv.getUint16(7, true) : 0;  // centiseconds
-  const strokeCount   = dv.byteLength >= 11 ? dv.getUint16(9, true) : 0;
-  const parsed = { driveLength, driveTime, recoveryTime, strokeCount };
-  _lev_log('0033', dv, parsed);
-  return parsed;
 }
 
 // ── Formatters ─────────────────────────────────────────────────
@@ -149,19 +88,6 @@ function fmtDriveTime(cs: number): string {
 function fmtDriveLength(cm: number): string {
   if (!cm) return "--";
   return `${(cm / 100).toFixed(2)}m`;
-}
-
-// 0x0035 – Force Curve Data
-// Raw uint8 values, one per force sample through drive phase (16-32 samples/stroke).
-// No count prefix byte — parse all bytes directly.
-function parseForceCurve(dv: DataView): number[] {
-  if (dv.byteLength === 0) return [];
-  const samples: number[] = [];
-  for (let i = 0; i < dv.byteLength; i++) {
-    samples.push(dv.getUint8(i));
-  }
-  _lev_log('0035', dv, { samples: samples.length, peak: Math.max(...samples) });
-  return samples;
 }
 
 function parseSplitInput(str: string): number | null {
@@ -199,6 +125,7 @@ function LiveErgViewNative() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) { setBtSupported(false); return; }
+    // BleClient.initialize is guarded by isNativePlatform check above
     BleClient.initialize({ requestBluetooth: true }).catch((err) => {
       console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
       setBtSupported(false);
@@ -257,34 +184,50 @@ function LiveErgViewNative() {
     (async () => {
       const isNative = Capacitor.isNativePlatform();
       if (isNative && ergDeviceId) {
-        const tryNotify = async (service: string, char: string, handler: (dv: DataView) => void) => {
+        const tryNotify = async (service: string, char: string) => {
+          if (!Capacitor.isNativePlatform()) return;
           try {
             await BleClient.startNotifications(ergDeviceId, service, char, (value) => {
-              if (!cancelled) handler(toDataView(value));
+              if (cancelled) return;
+              const dv = toDataView(value);
+              const parsed = parseCharacteristic(char, dv);
+              accumulateStroke(parsed as Partial<LiveData>);
             });
           } catch {}
         };
-        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulateStroke(parseGenStatus(dv)));
-        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulateStroke(parseAddStatus(dv)));
-        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS2, (dv) => accumulateStroke(parseAdd2Status(dv)));
-        // Force curve: 0x0035, raw uint8 samples per stroke
-        try {
-          await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, C2_FORCE_CURVE, (value) => {
-            if (cancelled) return;
-            const dv = toDataView(value);
-            const forces = parseForceCurve(dv);
-            if (forces.length > 0) {
-              setForceCurveSupported(true);
-              setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
-              setCurrentCurve(forces);
-              setAllCurves(prev => [...prev, forces]);
-            } else {
-              if (!cancelled) setForceCurveSupported(false);
-            }
-          });
-          if (!cancelled) setForceCurveSupported(true);
-        } catch {
-          if (!cancelled) setForceCurveSupported(false);
+        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS);
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS);
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS2);
+
+        // Force curve subscription — try primary (ce060393) then fallback (ce060035)
+        let forceCurveSubscribed = false;
+        const subscribeForceCurve = async (charUuid: string) => {
+          if (!Capacitor.isNativePlatform()) return false;
+          try {
+            await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, charUuid, (value) => {
+              if (cancelled) return;
+              const dv = toDataView(value);
+              const parsed = parseCharacteristic(charUuid, dv);
+              const forces = (parsed as any).forceCurve as number[] | undefined;
+              if (forces && forces.length > 0) {
+                setForceCurveSupported(true);
+                setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
+                setCurrentCurve(forces);
+                setAllCurves(prev => [...prev, forces]);
+              }
+            });
+            return true;
+          } catch {
+            return false;
+          }
+        };
+
+        forceCurveSubscribed = await subscribeForceCurve(C2_FORCE_CURVE);
+        if (!forceCurveSubscribed) {
+          forceCurveSubscribed = await subscribeForceCurve(C2_FORCE_CURVE_FALLBACK);
+        }
+        if (!cancelled) {
+          setForceCurveSupported(forceCurveSubscribed);
         }
       } else if (!Capacitor.isNativePlatform() && webErgDevice?.gatt?.connected) {
         await resubscribeErg(webErgDevice.gatt);
@@ -310,7 +253,11 @@ function LiveErgViewNative() {
     // Only record when actually rowing and we have a valid split
     setData(prev => {
       const next = { ...prev, ...d };
-      if ((next.workoutState === 2) && latestSplit.current > 0 && latestDist.current > 0) {
+      // If workoutState is not present, infer "rowing" from increasing distance + valid split
+      const inferRowing = (next.workoutState === undefined || next.workoutState === null) &&
+        latestSplit.current > 0 && latestDist.current > 0;
+      const isRowing = (next.workoutState === 2) || inferRowing;
+      if (isRowing && latestSplit.current > 0 && latestDist.current > 0) {
         const point: StrokePoint = {
           dist:  Math.round(latestDist.current),
           split: latestSplit.current,
@@ -353,7 +300,10 @@ function LiveErgViewNative() {
       const avgWatts = pts.length > 0 && d.power
         ? Math.round(d.power) : null;
 
-      await (supabase.from("erg_workouts") as any).insert({
+      // Per user spec: save the last 10 force curves to the erg workout record
+      const lastTenCurves = allCurvesRef.current.slice(-10);
+
+      const baseRow: any = {
         user_id:        user.id,
         workout_type:   "steady_state",
         distance:       dist,
@@ -367,7 +317,27 @@ function LiveErgViewNative() {
           if (pts.length > 0 && hasCurves) return { strokes: pts, forceCurves: allCurvesRef.current };
           return pts.length > 0 ? pts : null;
         })(),
-      });
+      };
+
+      // Try with force_curves column (added by migration 20260611000000).
+      // If the column doesn't exist on this database yet, retry without.
+      const rowWithCurves = lastTenCurves.length > 0
+        ? { ...baseRow, force_curves: lastTenCurves }
+        : baseRow;
+      let insertErr: any = null;
+      try {
+        const { error } = await (supabase.from("erg_workouts") as any).insert(rowWithCurves);
+        if (error) insertErr = error;
+      } catch (e) { insertErr = e; }
+      if (insertErr) {
+        const msg = String(insertErr?.message ?? insertErr ?? '');
+        if (/force_curves/i.test(msg) || /column/i.test(msg)) {
+          // Column doesn't exist yet — fall back to no-column insert
+          await (supabase.from("erg_workouts") as any).insert(baseRow);
+        } else {
+          throw insertErr;
+        }
+      }
 
       // Save to erg_scores for leaderboard-eligible distances
       const BENCHMARK_DISTANCES: Record<number, string> = {
@@ -423,20 +393,24 @@ function LiveErgViewNative() {
         // Native: use BleClient for HR
         const HR_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
         const HR_CHAR_UUID    = '00002a37-0000-1000-8000-00805f9b34fb';
+        // Filter scan by HR service UUID
         const device = await BleClient.requestDevice({ services: [HR_SERVICE_UUID] });
         const deviceId = device.deviceId;
         hrNativeDeviceIdRef.current = deviceId;
+        if (!Capacitor.isNativePlatform()) return;
         await BleClient.connect(deviceId, () => {
           setHrConnected(false);
           setHrBpm(null);
           toast({ title: "HR Monitor Disconnected" });
         });
+        if (!Capacitor.isNativePlatform()) return;
         await BleClient.startNotifications(deviceId, HR_SERVICE_UUID, HR_CHAR_UUID, (value) => {
           const dv = toDataView(value);
-          const isU16 = dv.getUint8(0) & 0x1;
-          const hr = isU16 ? dv.getUint16(1, true) : dv.getUint8(1);
-          setHrBpm(hr);
-          latestHr.current = hr;
+          const hr = parseHRMeasurement(dv);
+          if (hr !== null) {
+            setHrBpm(hr);
+            latestHr.current = hr;
+          }
         });
         setHrConnected(true);
         toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
@@ -503,7 +477,8 @@ function LiveErgViewNative() {
       const gc = await svc.getCharacteristic(C2_GEN_STATUS);
       await gc.startNotifications();
       gc.addEventListener("characteristicvaluechanged", (e: any) => {
-        accumulateStroke(parseGenStatus(e.target.value));
+        const dv = e.target.value as DataView;
+        accumulateStroke(parseCharacteristic(C2_GEN_STATUS, dv) as Partial<LiveData>);
       });
     } catch {}
 
@@ -511,7 +486,8 @@ function LiveErgViewNative() {
       const ac = await svc.getCharacteristic(C2_ADD_STATUS);
       await ac.startNotifications();
       ac.addEventListener("characteristicvaluechanged", (e: any) => {
-        accumulateStroke(parseAddStatus(e.target.value));
+        const dv = e.target.value as DataView;
+        accumulateStroke(parseCharacteristic(C2_ADD_STATUS, dv) as Partial<LiveData>);
       });
     } catch {}
 
@@ -519,27 +495,36 @@ function LiveErgViewNative() {
       const a2c = await svc.getCharacteristic(C2_ADD_STATUS2);
       await a2c.startNotifications();
       a2c.addEventListener("characteristicvaluechanged", (e: any) => {
-        accumulateStroke(parseAdd2Status(e.target.value));
+        const dv = e.target.value as DataView;
+        accumulateStroke(parseCharacteristic(C2_ADD_STATUS2, dv) as Partial<LiveData>);
       });
     } catch {}
 
-    // Force curve 0x0035 — raw uint8 samples per stroke
-    try {
-      const fcc = await svc.getCharacteristic(C2_FORCE_CURVE);
-      await fcc.startNotifications();
-      fcc.addEventListener("characteristicvaluechanged", (e: any) => {
-        const forces = parseForceCurve(e.target.value as DataView);
-        if (forces.length > 0) {
-          setForceCurveSupported(true);
-          setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
-          setCurrentCurve(forces);
-          setAllCurves(prev => [...prev, forces]);
-        }
-      });
-      setForceCurveSupported(true);
-    } catch {
-      setForceCurveSupported(false);
-    }
+    // Force curve — try primary then fallback
+    const subscribeFC = async (charUuid: string) => {
+      try {
+        const fcc = await svc.getCharacteristic(charUuid);
+        await fcc.startNotifications();
+        fcc.addEventListener("characteristicvaluechanged", (e: any) => {
+          const dv = e.target.value as DataView;
+          const parsed = parseCharacteristic(charUuid, dv);
+          const forces = (parsed as any).forceCurve as number[] | undefined;
+          if (forces && forces.length > 0) {
+            setForceCurveSupported(true);
+            setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
+            setCurrentCurve(forces);
+            setAllCurves(prev => [...prev, forces]);
+          }
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    let ok = await subscribeFC(C2_FORCE_CURVE);
+    if (!ok) ok = await subscribeFC(C2_FORCE_CURVE_FALLBACK);
+    setForceCurveSupported(ok);
   };
 
   const disconnectErg = useCallback(() => {
@@ -593,6 +578,13 @@ function LiveErgViewNative() {
   const splitValues = strokes.map(s => s.split).filter(Boolean);
   const minSplit = splitValues.length ? Math.min(...splitValues) - 500 : 6000;
   const maxSplit = splitValues.length ? Math.max(...splitValues) + 500 : 12000;
+
+  // ── Force curve area chart data (per user spec) ──────────────────────────
+  // X axis: sample index. Y axis: force 0-800N. Line color #2272FF, strokeWidth 2.
+  const forceCurveAreaData = currentCurve.length > 0
+    ? currentCurve.map((force, i) => ({ idx: i, force }))
+    // Empty state: flat baseline line, not a crashed/blank component
+    : Array.from({ length: 20 }, (_, i) => ({ idx: i, force: 0 }));
 
   const statBlocks = [
     { label: "Split /500m",   value: fmtPace(data.splitPace ?? 0),                               big: true  },
@@ -775,7 +767,30 @@ function LiveErgViewNative() {
         )}
       </div>
 
-      {/* ── Force Curve (Canvas) ── */}
+      {/* ── Force Curve Area Chart (per user spec) ── */}
+      <div className="px-4 pb-2">
+        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Force Curve</div>
+        <div className="h-32 bg-gray-900 rounded-lg overflow-hidden">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={forceCurveAreaData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+              <YAxis domain={[0, 800]} hide />
+              <XAxis dataKey="idx" hide />
+              <Area
+                type="monotone"
+                dataKey="force"
+                stroke="#2272FF"
+                strokeWidth={2}
+                fill="#2272FF"
+                fillOpacity={0.2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ── Force Curve (Canvas) — detailed view ── */}
       {forceCurveSupported !== false && currentCurve.length > 0 && (
         <div className="px-4 pb-4">
           <ForceCurveCanvas
@@ -790,7 +805,7 @@ function LiveErgViewNative() {
       )}
 
       {/* ── Force curve not supported note ── */}
-      {forceCurveSupported === false && (
+      {forceCurveSupported === false && currentCurve.length === 0 && (
         <div className="px-4 pb-3">
           <p className="text-xs text-gray-600 text-center">
             Force curve data not available for this PM5 firmware version.

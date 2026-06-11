@@ -6,6 +6,9 @@ import { initBle, isNativePlatform } from '@/lib/ble';
 const PM5_SERVICE        = 'ce060000-43e5-11e4-916c-0800200c9a66';
 const PM5_ROWING_SERVICE = 'ce060030-43e5-11e4-916c-0800200c9a66';
 
+// Connection timeout (10 seconds per user spec)
+const CONNECT_TIMEOUT_MS = 10000;
+
 interface BleContextValue {
   /** deviceId string on native, BluetoothDevice.id on web */
   ergDeviceId: string | null;
@@ -43,9 +46,10 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
   const connectPM5 = useCallback(async () => {
     setErgConnecting(true);
     try {
-      if (isNativePlatform()) {
+      if (Capacitor.isNativePlatform()) {
         await initBle();
 
+        // Per user spec: filter scan by PM5 service UUID — no unfiltered scans
         const device = await BleClient.requestDevice({
           services: [PM5_SERVICE],
           optionalServices: [PM5_ROWING_SERVICE],
@@ -54,11 +58,13 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
         ergDeviceIdRef.current = id;
 
         const handleDisconnect = () => {
+          // Always reset connected state and deviceId on any disconnect
           setErgConnected(false);
-          // Auto-reconnect
+          // Auto-reconnect (best-effort)
           setTimeout(async () => {
             const currentId = ergDeviceIdRef.current;
             if (!currentId) return;
+            if (!Capacitor.isNativePlatform()) return;
             try {
               await BleClient.connect(currentId, handleDisconnect);
               setErgConnected(true);
@@ -66,16 +72,37 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
           }, 2000);
         };
 
-        await BleClient.connect(id, handleDisconnect);
+        // Wrap connect in a 10-second timeout race
+        const connectPromise = BleClient.connect(id, handleDisconnect);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('CONNECT_TIMEOUT')), CONNECT_TIMEOUT_MS)
+        );
+        try {
+          await Promise.race([connectPromise, timeoutPromise]);
+        } catch (e: any) {
+          if (e?.message === 'CONNECT_TIMEOUT') {
+            console.error('[BleContext] PM5 connect timed out after 10s');
+            // Ensure state is cleared on timeout
+            setErgConnected(false);
+            ergDeviceIdRef.current = null;
+            // Best-effort cleanup
+            try {
+              if (Capacitor.isNativePlatform()) await BleClient.disconnect(id);
+            } catch {}
+            throw new Error('Connection timed out. Make sure your PM5 is on and nearby, then try again.');
+          }
+          throw e;
+        }
         setErgDeviceId(id);
         setErgDeviceName(device.name || 'Concept2 PM5');
         setErgConnected(true);
       } else {
-        // Web Bluetooth
+        // Web Bluetooth — safe disabled state on mobile web, otherwise picker
         if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
           console.error('[BleContext] Web Bluetooth not available');
           return;
         }
+        // Per user spec: filter by PM5 service UUID
         const device = await (navigator as any).bluetooth.requestDevice({
           filters: [
             { services: [PM5_SERVICE] },
@@ -96,7 +123,24 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
         };
 
         device.addEventListener('gattserverdisconnected', handleWebDisconnect);
-        await device.gatt.connect();
+
+        // 10s timeout on web GATT connect as well
+        const webConnectPromise = device.gatt.connect();
+        const webTimeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('CONNECT_TIMEOUT')), CONNECT_TIMEOUT_MS)
+        );
+        try {
+          await Promise.race([webConnectPromise, webTimeoutPromise]);
+        } catch (e: any) {
+          if (e?.message === 'CONNECT_TIMEOUT') {
+            console.error('[BleContext] Web PM5 connect timed out');
+            setErgConnected(false);
+            ergDeviceIdRef.current = null;
+            try { device.gatt.disconnect(); } catch {}
+            throw new Error('Connection timed out. Make sure your PM5 is on and nearby, then try again.');
+          }
+          throw e;
+        }
 
         ergDeviceIdRef.current = device.id;
         setErgDeviceId(device.id);
@@ -108,19 +152,26 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
       if (e.name !== 'NotFoundError') {
         console.error('[BleContext] connectPM5 failed:', e.message);
       }
+      // Ensure state is fully reset on any failure
+      setErgConnected(false);
+      ergDeviceIdRef.current = null;
     } finally {
       setErgConnecting(false);
     }
   }, []);
 
   const disconnectPM5 = useCallback(() => {
+    const idToDisconnect = ergDeviceIdRef.current ?? ergDeviceId;
     ergDeviceIdRef.current = null;
-    if (isNativePlatform() && ergDeviceId) {
-      BleClient.disconnect(ergDeviceId).catch(() => {});
+    if (Capacitor.isNativePlatform() && idToDisconnect) {
+      try {
+        BleClient.disconnect(idToDisconnect).catch(() => {});
+      } catch {}
     } else if (webErgDevice) {
       try { webErgDevice.gatt.disconnect(); } catch {}
       setWebErgDevice(null);
     }
+    // ALWAYS reset state regardless of how disconnect was triggered
     setErgDeviceId(null);
     setErgDeviceName(null);
     setErgConnected(false);
@@ -147,7 +198,10 @@ const disabledValue: BleContextValue = {
   ergConnected: false,
   ergConnecting: false,
   webErgDevice: null,
-  connectPM5: async () => {},
+  // On web: return safe disabled state — never throw
+  connectPM5: async () => {
+    console.warn('[BleContext] BLE not available on this platform — no-op connect.');
+  },
   disconnectPM5: () => {},
 };
 

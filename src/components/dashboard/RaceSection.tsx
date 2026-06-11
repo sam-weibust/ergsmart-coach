@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
-import { toDataView } from "@/lib/ble";
+import { toDataView, parseCharacteristic } from "@/lib/ble";
 import { useBle } from "@/context/BleContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,31 +27,8 @@ const C2_ADD_STATUS  = "ce060032-43e5-11e4-916c-0800200c9a66";
 const C2_STROKE_DATA = "ce060034-43e5-11e4-916c-0800200c9a66";
 
 // ── BLE Parsers ─────────────────────────────────────────────────
-function parseGenStatus(dv: DataView) {
-  if (dv.byteLength < 18) return {};
-  const elapsedTime  = dv.getUint8(0) | (dv.getUint8(1) << 8) | (dv.getUint8(2) << 16);
-  const rawDist      = dv.getUint8(3) | (dv.getUint8(4) << 8) | (dv.getUint8(5) << 16);
-  const distance     = rawDist / 10;
-  const workoutState = dv.getUint8(8);
-  const strokeRate   = dv.byteLength > 14 ? dv.getUint8(14) : 0;
-  return { elapsedTime, distance, workoutState, strokeRate };
-}
-function parseAddStatus(dv: DataView) {
-  if (dv.byteLength < 4) return {};
-  const splitPace = dv.getUint16(0, true);
-  const power     = dv.byteLength >= 6 ? dv.getUint16(4, true) : 0;
-  console.log('[PM5 raw RaceSection] splitPace (centiseconds/500m):', splitPace, '| power (watts):', power, '| byteLength:', dv.byteLength);
-  const paceSec = splitPace > 0 ? splitPace / 100 : 0;
-  const derivedPower = paceSec > 0 ? Math.round(2.80 / Math.pow(paceSec / 500, 3)) : power;
-  return { splitPace, power: derivedPower };
-}
-function parseStrokeDataBle(dv: DataView) {
-  if (dv.byteLength < 4) return {};
-  const driveLength  = dv.getUint8(0);
-  const driveTime    = dv.getUint8(1);
-  const recoveryTime = dv.byteLength >= 4 ? dv.getUint16(2, true) : 0;
-  return { driveLength, driveTime, recoveryTime };
-}
+// Use shared parseCharacteristic from @/lib/ble for consistency.
+// All offsets per user's exact spec.
 
 // ── Formatters ──────────────────────────────────────────────────
 function fmtPace(cs: number | null | undefined): string {
@@ -115,6 +92,7 @@ export default function RaceSection() {
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
+      // Guarded: only call BleClient on native platforms
       BleClient.initialize({ requestBluetooth: true }).catch(() => setBtSupported(false));
     } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
       setBtSupported(false);
@@ -231,31 +209,37 @@ export default function RaceSection() {
 
     (async () => {
       if (Capacitor.isNativePlatform() && ergDeviceId) {
-        const tryNotify = async (service: string, char: string, handler: (dv: DataView) => void) => {
+        const tryNotify = async (service: string, char: string) => {
+          if (!Capacitor.isNativePlatform()) return;
           try {
             await BleClient.startNotifications(ergDeviceId, service, char, (value) => {
-              if (!cancelled) handler(toDataView(value));
+              if (cancelled) return;
+              const dv = toDataView(value);
+              accumulate(parseCharacteristic(char, dv) as Partial<BleData>);
             });
           } catch {}
         };
-        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS,  (dv) => accumulate(parseGenStatus(dv)));
-        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS,  (dv) => accumulate(parseAddStatus(dv)));
-        await tryNotify(C2_ROW_SVC, C2_STROKE_DATA, (dv) => accumulate(parseStrokeDataBle(dv)));
+        await tryNotify(C2_ROW_SVC, C2_GEN_STATUS);
+        await tryNotify(C2_ROW_SVC, C2_ADD_STATUS);
+        // Subscribe to 0x0033 (Additional Status 2) for drive metrics instead of 0x0034
+        await tryNotify(C2_ROW_SVC, "ce060033-43e5-11e4-916c-0800200c9a66");
       } else if (!Capacitor.isNativePlatform() && webErgDevice?.gatt?.connected) {
         const server = webErgDevice.gatt;
         const svc = await server.getPrimaryService(C2_ROW_SVC);
-        const tryNotifyWeb = async (char: string, handler: (dv: DataView) => void) => {
+        const tryNotifyWeb = async (char: string) => {
           try {
             const c = await svc.getCharacteristic(char);
             await c.startNotifications();
             c.addEventListener("characteristicvaluechanged", (e: any) => {
-              if (!cancelled) handler(e.target.value as DataView);
+              if (cancelled) return;
+              const dv = e.target.value as DataView;
+              accumulate(parseCharacteristic(char, dv) as Partial<BleData>);
             });
           } catch {}
         };
-        await tryNotifyWeb(C2_GEN_STATUS,  (dv) => accumulate(parseGenStatus(dv)));
-        await tryNotifyWeb(C2_ADD_STATUS,  (dv) => accumulate(parseAddStatus(dv)));
-        await tryNotifyWeb(C2_STROKE_DATA, (dv) => accumulate(parseStrokeDataBle(dv)));
+        await tryNotifyWeb(C2_GEN_STATUS);
+        await tryNotifyWeb(C2_ADD_STATUS);
+        await tryNotifyWeb("ce060033-43e5-11e4-916c-0800200c9a66");
       }
     })();
 
