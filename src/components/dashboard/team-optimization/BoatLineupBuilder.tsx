@@ -15,7 +15,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Ship, Loader2, Wand2, Save, GripVertical, Trash2, Send, CheckCircle, XCircle, Clock, HelpCircle, BookTemplate, FolderOpen } from "lucide-react";
-import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName } from "./constants";
+import { BOAT_CLASSES, BOAT_SEAT_COUNTS, HAS_COX, displayName, sortSeats } from "./constants";
 
 interface Props {
   teamId: string;
@@ -341,21 +341,30 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
       }).eq("id", lineup.id);
       if (pubErr) throw pubErr;
 
-      // Create attendance records for each athlete
-      if (athleteIds.length > 0) {
-        const records = athleteIds.map(uid => ({
+      // Create attendance records for each athlete.
+      // Delete existing rows then insert fresh to avoid "cannot update row a second time"
+      // upsert conflicts when the same user_id appears in multiple seats or in retried calls.
+      const uniqueAthleteIds = Array.from(new Set(athleteIds));
+      if (uniqueAthleteIds.length > 0) {
+        const { error: delErr } = await supabase
+          .from("practice_attendance")
+          .delete()
+          .eq("lineup_id", lineup.id);
+        if (delErr) throw delErr;
+
+        const records = uniqueAthleteIds.map(uid => ({
           lineup_id: lineup.id,
           user_id: uid,
           status: "no_response",
         }));
-        const { error: attErr } = await supabase.from("practice_attendance").upsert(records, { onConflict: "lineup_id,user_id" });
+        const { error: attErr } = await supabase.from("practice_attendance").insert(records);
         if (attErr) throw attErr;
 
         // Send push + in-app notifications
         const dateStr = lineup.practice_date ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "upcoming practice";
         supabase.functions.invoke("send-notification", {
           body: {
-            user_ids: athleteIds,
+            user_ids: uniqueAthleteIds,
             type: "lineup_published",
             title: "Lineup Posted",
             body: `Your lineup for ${dateStr} has been posted. Tap to view your seat.`,
@@ -559,7 +568,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                         </div>
                       </CardHeader>
                       <CardContent>
-                        {tSeats.slice(0, 4).map((s: any) => (
+                        {sortSeats(tSeats).slice(0, 4).map((s: any) => (
                           <div key={s.seat_number} className="flex gap-2 text-xs py-0.5">
                             <span className="text-muted-foreground w-12 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
                             <span className="font-medium">{s.name || "—"}</span>
@@ -683,7 +692,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
                     </div>
                   )}
 
-                  {seatsArr.slice(0, 4).map((s: any) => (
+                  {sortSeats(seatsArr).slice(0, 4).map((s: any) => (
                     <div key={s.seat_number} className="flex gap-2 text-xs py-0.5">
                       <span className="text-muted-foreground w-12 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
                       <span className="font-medium">{s.name || s.user_id || "—"}</span>

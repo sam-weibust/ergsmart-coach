@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, Ship, TrendingDown, TrendingUp, Minus,
   Target, Video, Zap, Battery, Moon, AlertTriangle,
 } from "lucide-react";
-import { formatSplit } from "./constants";
+import { formatSplit, sortSeats } from "./constants";
 
 interface Props {
   teamId: string;
@@ -555,7 +555,7 @@ const LineupHistory = ({ teamId, isCoach, boats }: Props) => {
                               <div className={session.lineup.workout_plan ? "" : "pt-3"}>
                                 <p className="text-xs font-medium text-muted-foreground mb-1">Lineup</p>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                                  {(Array.isArray(session.lineup.seats) ? session.lineup.seats : []).map((s: any) => (
+                                  {sortSeats(Array.isArray(session.lineup.seats) ? session.lineup.seats : []).map((s: any) => (
                                     <div key={s.seat_number} className="flex gap-1.5 text-xs items-center">
                                       <span className="text-muted-foreground w-10 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
                                       <span className="font-medium truncate">{s.name || "—"}</span>

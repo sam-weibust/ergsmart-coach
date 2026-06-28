@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Loader2, Wand2, Save, Download, AlertTriangle } from "lucide-react";
-import { BOAT_CLASSES, displayName } from "./constants";
+import { BOAT_CLASSES, displayName, sortSeats } from "./constants";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -273,7 +273,7 @@ const RaceLineupOptimizer = ({ teamId, teamName, teamMembers, isCoach, profile }
                   <span className="text-xs text-muted-foreground">{aiResult.cox?.rationale}</span>
                 </div>
               )}
-              {(aiResult.seats || []).map((seat: any) => {
+              {sortSeats(aiResult.seats || []).map((seat: any) => {
                 const athlete = allAthletes.find(a => a.id === seat.user_id);
                 return (
                   <div key={seat.seat_number} className="flex items-center gap-3 p-2 rounded border">

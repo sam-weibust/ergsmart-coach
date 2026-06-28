@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,15 +99,32 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
   });
 
   const excuseAbsentMutation = useMutation({
-    mutationFn: async (athleteId: string) => {
+    mutationFn: async (athleteIds: string[]) => {
+      if (athleteIds.length === 0) return;
       await supabase
         .from("erg_assignment_results" as any)
         .update({ status: "excused" })
         .eq("assignment_id", assignment.id)
-        .eq("athlete_id", athleteId);
+        .in("athlete_id", athleteIds);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["erg-assignment-results", assignment.id] }),
   });
+
+  // Auto-excuse any pending result for an athlete marked absent that day.
+  // Runs once per (results, attendance) change instead of during render.
+  const excusedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const absentIds = new Set(
+      (attendanceData as any[]).filter((a: any) => a.status === "absent").map((a: any) => a.user_id)
+    );
+    const toExcuse = (results as any[])
+      .filter((r: any) => r.status === "pending" && absentIds.has(r.athlete_id) && !excusedRef.current.has(r.athlete_id))
+      .map((r: any) => r.athlete_id);
+    if (toExcuse.length > 0) {
+      toExcuse.forEach(id => excusedRef.current.add(id));
+      excuseAbsentMutation.mutate(toExcuse);
+    }
+  }, [results, attendanceData]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendFeedbackMutation = useMutation({
     mutationFn: async ({ athleteId, feedback }: { athleteId: string; feedback: string }) => {
@@ -262,11 +279,6 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
               const attendance = attendanceData.find((a: any) => a.user_id === result.athlete_id);
               const isExpanded = expandedAthlete === result.athlete_id;
               const loggedBy = result.logged_by;
-
-              // Auto-excuse absent athletes
-              if (attendance?.status === "absent" && result.status === "pending") {
-                excuseAbsentMutation.mutate(result.athlete_id);
-              }
 
               return (
                 <div key={result.id} className="border border-border rounded-lg overflow-hidden">

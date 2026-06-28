@@ -11,6 +11,7 @@ import PieceTracker from "./PieceTracker";
 import DrillTracker from "./DrillTracker";
 import CoxRatings from "./CoxRatings";
 import PracticeVideoUpload from "./PracticeVideoUpload";
+import { sortSeats } from "./constants";
 
 interface Props {
   teamId: string;
@@ -158,7 +159,7 @@ const PracticeDetail = ({ teamId, isCoach, profile, seasonId }: Props) => {
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Lineup</p>
                   <div className="flex flex-wrap gap-1">
-                    {(selectedSession.lineup.seats as any[]).filter((s: any) => s.user_id).map((s: any) => (
+                    {sortSeats((selectedSession.lineup.seats as any[]).filter((s: any) => s.user_id)).map((s: any) => (
                       <Badge key={s.seat_number} variant="secondary" className="text-[10px]">
                         {s.seat_number === 0 ? "Cox" : `#${s.seat_number}`}: {s.name || "?"}
                       </Badge>

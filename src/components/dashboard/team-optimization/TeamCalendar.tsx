@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, Wind, Waves, Users, LayoutGrid, List, Save, AlertCircle, Plus, X } from "lucide-react";
-import { formatSplit } from "./constants";
+import { formatSplit, sortSeats } from "./constants";
 import { useToast } from "@/hooks/use-toast";
 import TeamEventModal, { getEventColor, EVENT_TYPES } from "./TeamEventModal";
 import { useTeamBranding } from "@/context/TeamBrandingContext";
@@ -469,7 +469,7 @@ const TeamCalendar = ({ teamId, isCoach, profile, boats = [] }: Props) => {
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Lineup</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                          {lineup.seats.map((s: any) => (
+                          {sortSeats(lineup.seats).map((s: any) => (
                             <div key={s.seat_number} className="flex gap-1.5 text-xs">
                               <span className="text-muted-foreground w-10 shrink-0">{s.seat_number === 0 ? "Cox" : `Seat ${s.seat_number}`}</span>
                               <span className="font-medium truncate">{s.name || "—"}</span>

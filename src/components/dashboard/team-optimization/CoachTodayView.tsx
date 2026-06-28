@@ -408,14 +408,18 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
                     {hasEdits && (
                       <Badge className="bg-yellow-500/20 text-yellow-700 border-yellow-500/40 text-[10px]">Unsaved edits</Badge>
                     )}
-                    <Button
-                      size="sm" className="h-7 text-xs shrink-0 gap-1"
-                      onClick={() => handlePublishLineup(lineup)}
-                      disabled={publishLineup.isPending}
-                    >
-                      <Send className="h-3 w-3" />
-                      {isPublished && !hasEdits ? "Re-publish" : "Publish"}
-                    </Button>
+                    {isPublished && !hasEdits && (
+                      <Badge className="bg-green-500/15 text-green-700 border-green-500/40 text-[10px]">Published</Badge>
+                    )}
+                    {(!isPublished || hasEdits) && (
+                      <Button
+                        size="sm" className="h-7 text-xs shrink-0 gap-1"
+                        onClick={() => handlePublishLineup(lineup)}
+                        disabled={publishLineup.isPending}
+                      >
+                        <Send className="h-3 w-3" />Publish
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">

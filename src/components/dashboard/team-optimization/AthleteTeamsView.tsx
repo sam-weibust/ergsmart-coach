@@ -350,6 +350,7 @@ const AthleteTeamsView = ({
             profile={profile}
             boats={boats}
             seasonId={seasonId}
+            onLogPractice={() => { setTopTab("me"); setActiveTab("workouts"); }}
           />
         )}
       </div>

@@ -14,6 +14,17 @@ export const HAS_COX: Record<string, boolean> = {
   "8+": true, "4+": true, "2-": true, "4-": false, "2x": false, "1x": false,
 };
 
+// Canonical seat display order: Cox at top, then stroke (8) down to bow (1)
+export const SEAT_ORDER = [0, 8, 7, 6, 5, 4, 3, 2, 1];
+
+export function sortSeats<T extends { seat_number: number }>(seats: T[]): T[] {
+  const rank = (n: number) => {
+    const i = SEAT_ORDER.indexOf(n);
+    return i === -1 ? 999 : i;
+  };
+  return [...seats].sort((a, b) => rank(a.seat_number) - rank(b.seat_number));
+}
+
 // Watts formula: watts = 2.80 / (split_seconds / 500)^3
 export function splitToWatts(splitSeconds: number): number {
   return 2.80 / Math.pow(splitSeconds / 500, 3);
