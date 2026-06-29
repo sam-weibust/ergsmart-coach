@@ -61,7 +61,7 @@ serve(async (req) => {
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       console.log("generate-team-training-plan: cache hit");
-      await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -203,7 +203,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5",
         max_tokens: 4000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: prompt }],
@@ -242,8 +242,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 
     const usage = result?.usage ?? {};
     console.log("generate-team-training-plan: success, weeks in chunk:", chunk?.weeks?.length);
-    await setCached(supabase, cacheKey, chunk, TTL.DAY, "claude-sonnet-4-20250514", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, chunk, TTL.DAY, "claude-sonnet-4-5", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-4-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
     return new Response(JSON.stringify(chunk), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

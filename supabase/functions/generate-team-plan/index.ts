@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-5";
 const FN = "generate-team-plan";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert rowing coach. Generate a structured training plan following competitive rowing best practices.
