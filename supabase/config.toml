@@ -128,3 +128,12 @@ verify_jwt = false
 
 [functions.fetch-crewtimer]
 verify_jwt = false
+
+[functions.analyze-training-philosophy]
+verify_jwt = false
+
+[functions.generate-team-plan]
+verify_jwt = false
+
+[functions.import-team-plan]
+verify_jwt = false

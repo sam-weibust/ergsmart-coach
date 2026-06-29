@@ -230,7 +230,7 @@ serve(async (req) => {
       const cachedWeeks = Array.isArray((cached as any)?.plan) ? (cached as any).plan : (Array.isArray(cached) ? cached : []);
       if (cachedWeeks.length >= totalWeeksForCache - 1) {
         console.log("generate-workout: cache hit (complete plan)");
-        await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: 0, output_tokens: 0, cache_hit: true });
+        await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
         return new Response(JSON.stringify(cached), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
@@ -421,7 +421,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
+            model: "claude-sonnet-4-5",
             max_tokens: 16000,
             stream: false,
             system: chunkSystemPrompt,
@@ -460,7 +460,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
       }
 
       parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
-      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: chunkInputTokens, output_tokens: chunkOutputTokens, cache_hit: false });
+      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-5", input_tokens: chunkInputTokens, output_tokens: chunkOutputTokens, cache_hit: false });
       await recordUsage(supabase, user_id, chunkInputTokens + chunkOutputTokens);
     } else {
       // Single call for <= 12 weeks
@@ -475,7 +475,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5",
           max_tokens: 16000,
           stream: false,
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -535,7 +535,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
       }
 
       const usage = result?.usage ?? {};
-      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
       await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
     }
 
@@ -551,7 +551,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
       });
     }
 
-    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-20250514", 0, 0);
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-4-5", 0, 0);
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
