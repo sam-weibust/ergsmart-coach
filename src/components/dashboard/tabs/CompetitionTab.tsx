@@ -481,14 +481,14 @@ export default function CompetitionTab({ userId, profile }: AthleteTabProps) {
           </Card>
         )
       ) : (
-        // Head-to-Head racing + Regattas (upcoming w/ countdown + past results).
-        <div className="space-y-8">
-          <RaceSection />
-          <div className="pt-2 border-t border-border">
-            <RegattasSection profile={profile} isCoach={false} />
-          </div>
-        </div>
+        // Head-to-Head racing.
+        <RaceSection />
       )}
+
+      {/* Regattas — always visible regardless of selected segment. */}
+      <div className="pt-2 border-t border-border">
+        <RegattasSection profile={profile} isCoach={false} />
+      </div>
     </div>
   );
 }
