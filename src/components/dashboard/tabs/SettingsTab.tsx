@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,8 +44,6 @@ import { NotificationSettings } from "../NotificationSettings";
 import Concept2Section from "../Concept2Section";
 import WhoopConnectSection from "../WhoopConnectSection";
 import HealthKitConnect from "../HealthKitConnect";
-import { RegattasSection } from "../regattas/RegattasSection";
-import { RecruitingProfileSection } from "../RecruitingProfileSection";
 import AwardsSection from "../AwardsSection";
 import ChangeRoleSection from "../ChangeRoleSection";
 
@@ -56,8 +54,6 @@ type SubView =
   | "notifications"
   | "connected"
   | "account"
-  | "regattas"
-  | "recruiting"
   | "achievements";
 
 /**
@@ -125,6 +121,18 @@ export default function SettingsTab(props: AthleteTabProps) {
     },
   });
 
+  // Optimistic local mirror so toggles respond to taps instantly instead of
+  // waiting on a server round-trip (the cause of the "tabs not responding" bug).
+  const [privacyLocal, setPrivacyLocal] = useState<{
+    leaderboard_opt_in: boolean;
+    is_public: boolean;
+    directory_opt_in: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (privacy) setPrivacyLocal(privacy);
+  }, [privacy]);
+  const pv = privacyLocal ?? privacy;
+
   const setLeaderboardOptIn = useMutation({
     mutationFn: async (value: boolean) => {
       const { error } = await (supabase as any)
@@ -133,8 +141,8 @@ export default function SettingsTab(props: AthleteTabProps) {
         .eq("id", userId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings-privacy", userId] }),
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["settings-privacy", userId] }),
   });
 
   const setAthleteProfileFlag = useMutation({
@@ -144,12 +152,21 @@ export default function SettingsTab(props: AthleteTabProps) {
         .upsert({ user_id: userId, [key]: value }, { onConflict: "user_id" });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["settings-privacy", userId] });
       queryClient.invalidateQueries({ queryKey: ["settings-athlete-profile", userId] });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const toggleLeaderboard = (v: boolean) => {
+    setPrivacyLocal((s) => ({ ...(s ?? privacy!), leaderboard_opt_in: v }));
+    setLeaderboardOptIn.mutate(v);
+  };
+  const toggleAthleteFlag = (key: "is_public" | "directory_opt_in", v: boolean) => {
+    setPrivacyLocal((s) => ({ ...(s ?? privacy!), [key]: v }));
+    setAthleteProfileFlag.mutate({ key, value: v });
+  };
 
   // ── Danger zone: reuse the existing edge functions ───────────────────────
   const exportData = async () => {
@@ -245,16 +262,6 @@ export default function SettingsTab(props: AthleteTabProps) {
         {view === "account" && (
           <SubViewShell title="Account">
             <AccountSection />
-          </SubViewShell>
-        )}
-        {view === "regattas" && (
-          <SubViewShell title="Regattas">
-            <RegattasSection profile={profile} isCoach={false} />
-          </SubViewShell>
-        )}
-        {view === "recruiting" && (
-          <SubViewShell title="Recruiting Profile">
-            <RecruitingProfileSection />
           </SubViewShell>
         )}
         {view === "achievements" && (
@@ -381,9 +388,8 @@ export default function SettingsTab(props: AthleteTabProps) {
               <p className="text-xs text-muted-foreground">Show my erg scores on public leaderboards.</p>
             </div>
             <Switch
-              checked={!!privacy?.leaderboard_opt_in}
-              onCheckedChange={(v) => setLeaderboardOptIn.mutate(v)}
-              disabled={setLeaderboardOptIn.isPending}
+              checked={!!pv?.leaderboard_opt_in}
+              onCheckedChange={toggleLeaderboard}
             />
           </div>
           <div className="flex items-center justify-between gap-4">
@@ -392,9 +398,8 @@ export default function SettingsTab(props: AthleteTabProps) {
               <p className="text-xs text-muted-foreground">Let coaches and others view my athlete profile.</p>
             </div>
             <Switch
-              checked={!!privacy?.is_public}
-              onCheckedChange={(v) => setAthleteProfileFlag.mutate({ key: "is_public", value: v })}
-              disabled={setAthleteProfileFlag.isPending}
+              checked={!!pv?.is_public}
+              onCheckedChange={(v) => toggleAthleteFlag("is_public", v)}
             />
           </div>
           <div className="flex items-center justify-between gap-4">
@@ -403,9 +408,8 @@ export default function SettingsTab(props: AthleteTabProps) {
               <p className="text-xs text-muted-foreground">Appear in the searchable recruiting directory.</p>
             </div>
             <Switch
-              checked={!!privacy?.directory_opt_in}
-              onCheckedChange={(v) => setAthleteProfileFlag.mutate({ key: "directory_opt_in", value: v })}
-              disabled={setAthleteProfileFlag.isPending}
+              checked={!!pv?.directory_opt_in}
+              onCheckedChange={(v) => toggleAthleteFlag("directory_opt_in", v)}
             />
           </div>
         </CardContent>
@@ -416,8 +420,6 @@ export default function SettingsTab(props: AthleteTabProps) {
         <h2 className="text-sm font-semibold text-muted-foreground px-1">More</h2>
         <Card>
           <CardContent className="p-0 divide-y">
-            <NavRow icon={Sailboat} label="Regattas" description="Results and upcoming races" onClick={() => setView("regattas")} />
-            <NavRow icon={GraduationCap} label="Recruiting Profile" description="College recruiting details" onClick={() => setView("recruiting")} />
             <NavRow icon={Trophy} label="Achievements" description="Badges and milestones" onClick={() => setView("achievements")} />
             <NavRow icon={Lock} label="Account & Security" description="Email, password, devices" onClick={() => setView("account")} />
           </CardContent>

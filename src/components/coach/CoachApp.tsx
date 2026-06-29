@@ -199,7 +199,7 @@ const CoachApp = ({ profile }: Props) => {
       {/* Header */}
       <header
         className="border-b border-white/10 z-20 shadow-sm shrink-0"
-        style={{ background: primaryColor }}
+        style={{ background: primaryColor, paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">

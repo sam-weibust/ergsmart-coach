@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { AthleteTabProps } from "./types";
 import RaceSection from "@/components/dashboard/RaceSection";
+import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -435,7 +436,7 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
 // ── Tab container ─────────────────────────────────────────────────────────────
 type View = "leaderboard" | "race";
 
-export default function CompetitionTab({ userId }: AthleteTabProps) {
+export default function CompetitionTab({ userId, profile }: AthleteTabProps) {
   const [view, setView] = useState<View>("leaderboard");
 
   return (
@@ -480,8 +481,13 @@ export default function CompetitionTab({ userId }: AthleteTabProps) {
           </Card>
         )
       ) : (
-        // Head-to-Head racing — full create/join/matchmaking flow reused as-is.
-        <RaceSection />
+        // Head-to-Head racing + Regattas (upcoming w/ countdown + past results).
+        <div className="space-y-8">
+          <RaceSection />
+          <div className="pt-2 border-t border-border">
+            <RegattasSection profile={profile} isCoach={false} />
+          </div>
+        </div>
       )}
     </div>
   );

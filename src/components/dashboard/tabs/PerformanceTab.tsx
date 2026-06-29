@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   Bluetooth, ChevronLeft, ChevronRight, MessageSquare, CalendarClock,
   Zap, Video, GitCompareArrows, History, Dumbbell, Bot, Sparkles,
-  SplitSquareVertical, Target, Trophy, Radio, Gauge, Weight, type LucideIcon,
+  SplitSquareVertical, Target, Trophy, Radio, Gauge, Weight, GraduationCap, type LucideIcon,
 } from "lucide-react";
 import type { AthleteTabProps } from "./types";
 
@@ -25,6 +25,7 @@ import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import ComparisonSection from "@/components/dashboard/ComparisonSection";
 import HistorySection from "@/components/dashboard/HistorySection";
 import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
+import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ import { CalculatorsSection } from "@/components/dashboard/calculators/Calculato
  * ──────────────────────────────────────────────────────────────────────── */
 type ToolId =
   | "live-erg" | "plan" | "ask"
-  | "predictor" | "critique" | "comparison" | "history" | "strength"
+  | "predictor" | "critique" | "comparison" | "history" | "strength" | "recruiting"
   | "calc-split" | "calc-zones" | "calc-race" | "calc-stroke" | "calc-watts" | "calc-weight";
 
 const TRAINING_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
@@ -43,6 +44,7 @@ const TRAINING_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIco
   { id: "comparison", label: "Workout Comparison",  desc: "Compare your sessions & trends",  icon: GitCompareArrows },
   { id: "history",    label: "Erg History",         desc: "Browse & export past workouts",   icon: History },
   { id: "strength",   label: "Strength Logging",    desc: "Log lifts & strength programs",    icon: Dumbbell },
+  { id: "recruiting", label: "Recruiting Profile",   desc: "College recruiting details",       icon: GraduationCap },
 ];
 
 const CALCULATORS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
@@ -73,6 +75,7 @@ const TOOL_TITLES: Record<ToolId, string> = {
   comparison: "Workout Comparison",
   history: "Erg History",
   strength: "Strength Logging",
+  recruiting: "Recruiting Profile",
   "calc-split": "Split Calculator",
   "calc-zones": "Training Zones",
   "calc-race": "Race Splits Planner",
@@ -205,6 +208,7 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
       case "comparison": return <ComparisonSection profile={profile} />;
       case "history":    return <HistorySection profile={profile} />;
       case "strength":   return <StrengthProgramSection profile={profile} />;
+      case "recruiting": return <RecruitingProfileSection />;
       default:
         if (CALC_TAB[id]) {
           return <CalculatorsSection initialTab={CALC_TAB[id]} profile={profile} />;

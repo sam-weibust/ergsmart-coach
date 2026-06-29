@@ -20,6 +20,27 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Keyboard handling: when an input/textarea is focused on mobile, scroll it
+// into view so it stays visible above the on-screen keyboard.
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "focusin",
+    (e) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || t.isContentEditable) {
+        setTimeout(() => {
+          try {
+            t.scrollIntoView({ block: "center", behavior: "smooth" });
+          } catch {}
+        }, 300);
+      }
+    },
+    true,
+  );
+}
+
 createRoot(document.getElementById("root")!).render(<App />);
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
