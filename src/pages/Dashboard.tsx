@@ -132,6 +132,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import crewsyncLogoFull from "@/assets/crewsync-logo-full.jpg";
+import TeamTab from "@/components/dashboard/tabs/TeamTab";
+import MeTab from "@/components/dashboard/tabs/MeTab";
+import PerformanceTab from "@/components/dashboard/tabs/PerformanceTab";
+import CompetitionTab from "@/components/dashboard/tabs/CompetitionTab";
+import SettingsTab from "@/components/dashboard/tabs/SettingsTab";
+import type { AthleteTabProps } from "@/components/dashboard/tabs/types";
+
+// ─── ATHLETE 5-TAB SHELL CONSTANTS ───────────────────────────────────────────
+
+type AthleteTabId = "team" | "me" | "performance" | "competition" | "settings";
+
+const ONBOARDING_COMPLETE_KEY = "onboarding_complete";
+
+/** Team abbreviation: first letter of each word, up to 4 chars, uppercase. */
+const teamAbbrev = (name: string | null): string => {
+  if (!name) return "Team";
+  const letters = name
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+  return letters || "Team";
+};
 
 // ─── NAV CONFIG ──────────────────────────────────────────────────────────────
 
@@ -534,11 +562,18 @@ function SectionLanding({
 const Dashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { logoUrl: teamLogo, primaryColor: teamColor, teamName } = useTeamBranding();
+  const { logoUrl: teamLogo, primaryColor: teamColor, teamName, teamId: branding_teamId } = useTeamBranding();
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSub, setActiveSub] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  // ── New athlete/coxswain 5-tab shell state ────────────────────────────────
+  const [activeTab, setActiveTab] = useState<AthleteTabId>("team");
+  const [tabInitialized, setTabInitialized] = useState(false);
+  const [showJoinOnboarding, setShowJoinOnboarding] = useState(false);
+  const [onboardingJoinCode, setOnboardingJoinCode] = useState("");
+  const [onboardingJoinError, setOnboardingJoinError] = useState<string | null>(null);
+  const [onboardingJoining, setOnboardingJoining] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [onboardingProfile, setOnboardingProfile] = useState<{
@@ -811,6 +846,96 @@ const Dashboard = () => {
   // kept for reference, teams now always visible
   const _isOnTeam = isCoach || (userTeams && userTeams.length > 0);
 
+  // ── Athlete 5-tab shell: team membership + onboarding ─────────────────────
+  // userTeams is undefined while loading; treat membership as "unknown" then.
+  const teamsLoaded = userTeams !== undefined;
+  const hasTeam = teamsLoaded && Array.isArray(userTeams) && userTeams.length > 0;
+  const onboardingComplete =
+    (() => {
+      try { return localStorage.getItem(ONBOARDING_COMPLETE_KEY) === "true"; }
+      catch { return false; }
+    })();
+
+  // teamId / teamName / teamColor come from TeamBrandingContext (single source
+  // of truth, populated for both coach-owned and member teams).
+  const shellTeamId = branding_teamId;
+  const shellTeamName = teamName ?? null;
+  const shellTeamColor = teamColor;
+
+  // Pick the default tab once team membership is known.
+  useEffect(() => {
+    if (tabInitialized || !teamsLoaded || !profile) return;
+    if (hasTeam) {
+      setActiveTab("team");
+    } else if (!onboardingComplete) {
+      setShowJoinOnboarding(true);
+      // active tab is irrelevant while the onboarding card is shown
+    } else {
+      setActiveTab("performance");
+    }
+    setTabInitialized(true);
+  }, [tabInitialized, teamsLoaded, profile, hasTeam, onboardingComplete]);
+
+  const completeOnboarding = useCallback(() => {
+    try { localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true"); } catch {}
+    setShowJoinOnboarding(false);
+  }, []);
+
+  // Join a team from the onboarding card (mirrors TeamsSection JoinTeamCard).
+  const handleOnboardingJoin = useCallback(async () => {
+    const trimmed = onboardingJoinCode.trim();
+    if (!trimmed) { setOnboardingJoinError("Enter a join code"); return; }
+    const uid = (profile as any)?.id;
+    if (!uid) return;
+    setOnboardingJoining(true);
+    setOnboardingJoinError(null);
+    try {
+      const { data: team } = await supabase
+        .from("teams")
+        .select("id, name")
+        .ilike("join_code", trimmed)
+        .maybeSingle();
+      if (!team) throw new Error("No team found with that code. Check the code and try again.");
+      const { error: insertError } = await supabase.from("team_members").insert({
+        team_id: team.id,
+        user_id: uid,
+      });
+      if (insertError) {
+        if (insertError.code === "23505") throw new Error("You are already on this team.");
+        throw insertError;
+      }
+      // Success: mark onboarding complete, reload team data, switch to Team tab.
+      try { localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true"); } catch {}
+      queryClient.invalidateQueries({ queryKey: ["teams", uid] });
+      queryClient.invalidateQueries({ queryKey: ["user-team-memberships"] });
+      queryClient.invalidateQueries({ queryKey: ["teams-member-only", uid] });
+      queryClient.invalidateQueries({ queryKey: ["global-team-branding"] });
+      setShowJoinOnboarding(false);
+      setOnboardingJoinCode("");
+      setActiveTab("team");
+      toast({ title: `Joined ${team.name}!` });
+    } catch (e: any) {
+      setOnboardingJoinError(e?.message || "Could not join team");
+    } finally {
+      setOnboardingJoining(false);
+    }
+  }, [onboardingJoinCode, profile, queryClient]);
+
+  // Whole-shell refresh handed to tab components (mirrors pull-to-refresh).
+  const handleTabRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  const athleteTabProps: AthleteTabProps = {
+    userId: (profile as any)?.id ?? "",
+    profile,
+    teamId: shellTeamId,
+    teamName: shellTeamName,
+    teamColor: shellTeamColor,
+    isCoxswain: !!isCox,
+    onRefresh: handleTabRefresh,
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1045,23 +1170,90 @@ const Dashboard = () => {
     return null;
   };
 
-  // Mobile bottom nav sections (filter hidden-for-role entries)
-  const mobileBottomNav = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "training", label: "Training", icon: Dumbbell },
-    { id: "teams", label: "Teams", icon: Users },
-    { id: "performance", label: "Performance", icon: BarChart3 },
-  ].filter((item) => !hiddenForRole(item.id, null, userRole));
-
   const isAdmin = !!(profile as any)?.is_admin;
   const navVisible = (s: NavSection) =>
     (!s.coachOnly || isCoach || isOrganizer) &&
     !hiddenForRole(s.id, null, userRole) &&
     (s.id !== "admin-costs" || isAdmin);
 
-  const moreNavSections = NAV_CONFIG.filter(
-    (s) => !["dashboard", "training", "teams", "performance"].includes(s.id) && navVisible(s)
-  );
+  // ── New athlete/coxswain 5-tab bar ────────────────────────────────────────
+  const athleteTabs: { id: AthleteTabId; label: string; icon: React.ElementType }[] = [
+    { id: "team", label: hasTeam ? teamAbbrev(shellTeamName) : "Team", icon: Users },
+    { id: "me", label: "Me", icon: User },
+    { id: "performance", label: "Performance", icon: Zap },
+    { id: "competition", label: "Competition", icon: Trophy },
+    { id: "settings", label: "Settings", icon: Settings },
+  ];
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case "team":
+        return <TeamTab {...athleteTabProps} />;
+      case "me":
+        return <MeTab {...athleteTabProps} />;
+      case "performance":
+        return <PerformanceTab {...athleteTabProps} />;
+      case "competition":
+        return <CompetitionTab {...athleteTabProps} />;
+      case "settings":
+        return <SettingsTab {...athleteTabProps} />;
+      default:
+        return null;
+    }
+  };
+
+  // ── Full-screen no-team onboarding card ───────────────────────────────────
+  if (showJoinOnboarding) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="w-full max-w-sm shadow-lg">
+          <CardContent className="pt-8 pb-8 flex flex-col items-center gap-5">
+            <img src={crewsyncLogoFull} alt="CrewSync" className="h-20 w-20 rounded-2xl shadow-sm object-cover" />
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-bold text-foreground">Welcome to CrewSync</h2>
+              <p className="text-sm text-muted-foreground">
+                Join your team to get started or explore the app on your own.
+              </p>
+            </div>
+            <div className="w-full space-y-3">
+              <Input
+                placeholder="Enter join code"
+                value={onboardingJoinCode}
+                onChange={(e) => {
+                  setOnboardingJoinCode(e.target.value);
+                  if (onboardingJoinError) setOnboardingJoinError(null);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleOnboardingJoin()}
+                className="text-center text-lg font-mono tracking-widest uppercase"
+                autoCapitalize="characters"
+              />
+              {onboardingJoinError && (
+                <p className="text-xs text-destructive text-center">{onboardingJoinError}</p>
+              )}
+              <Button
+                className="w-full"
+                onClick={handleOnboardingJoin}
+                disabled={onboardingJoining || !onboardingJoinCode.trim()}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                {onboardingJoining ? "Joining…" : "Enter Join Code"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  completeOnboarding();
+                  setActiveTab("performance");
+                }}
+              >
+                Explore the App
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <TourProvider profile={profile} onNavTo={navTo}>
@@ -1293,34 +1485,38 @@ const Dashboard = () => {
               transition: refreshing ? "transform 0.2s" : undefined,
             }}
           >
-            {renderContent()}
+            {/* Mobile: new 5-tab content. Desktop: existing sidebar sections. */}
+            <div className="md:hidden">{renderActiveTab()}</div>
+            <div className="hidden md:block">{renderContent()}</div>
           </main>
         </div>
       </div>
 
-      {/* ── Mobile Bottom Nav ───────────────────────────────────────────────── */}
+      {/* ── Mobile Bottom Nav — athlete/coxswain 5-tab bar ──────────────────── */}
       <div
         className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-lg"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex justify-around items-center h-16 px-1">
-          {mobileBottomNav.map((item) => {
-            const isActive = activeSection === item.id;
+          {athleteTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
             return (
               <button
-                key={item.id}
-                onClick={() => navTo(item.id)}
-                data-tour-id={`tour-nav-${item.id}`}
-                className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                data-tour-id={`tour-tab-${tab.id}`}
+                className="relative flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
                 style={{ color: isActive ? teamColor : undefined }}
               >
-                {!isActive && <item.icon className="h-5 w-5 text-muted-foreground" />}
-                {isActive && <item.icon className="h-5 w-5" style={{ color: teamColor }} />}
+                <tab.icon
+                  className={`h-5 w-5 ${isActive ? "" : "text-muted-foreground"}`}
+                  style={isActive ? { color: teamColor } : undefined}
+                />
                 <span
                   className={`text-[11px] font-medium ${isActive ? "font-semibold" : "text-muted-foreground"}`}
                   style={isActive ? { color: teamColor } : undefined}
                 >
-                  {item.label}
+                  {tab.label}
                 </span>
                 {isActive && (
                   <div className="absolute bottom-0 w-8 h-[2px] rounded-t-full" style={{ background: teamColor }} />
@@ -1328,68 +1524,6 @@ const Dashboard = () => {
               </button>
             );
           })}
-
-          {/* More sheet */}
-          <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-            <SheetTrigger asChild>
-              <button
-                className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
-                style={{
-                  color: moreNavSections.some((s) => s.id === activeSection) ? teamColor : undefined,
-                }}
-              >
-                <MoreHorizontal
-                  className="h-5 w-5"
-                  style={{ color: moreNavSections.some((s) => s.id === activeSection) ? teamColor : undefined }}
-                />
-                <span className="text-[11px] font-medium text-muted-foreground">More</span>
-              </button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[85vh] flex flex-col">
-              <SheetHeader className="shrink-0 pb-2">
-                <SheetTitle>Menu</SheetTitle>
-              </SheetHeader>
-              <div className="overflow-y-auto flex-1 pb-4 space-y-4">
-                {moreNavSections.map((section) => {
-                  const sectionActive = activeSection === section.id;
-                  return (
-                  <div key={section.id}>
-                    <button
-                      onClick={() => navTo(section.id)}
-                      data-tour-id={`tour-nav-${section.id}`}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors font-semibold text-sm min-h-[44px] hover:bg-muted"
-                      style={sectionActive ? { background: `rgba(var(--team-color-rgb, 10,22,40),0.1)`, color: teamColor } : undefined}
-                    >
-                      <section.icon className="h-4 w-4 shrink-0" style={sectionActive ? { color: teamColor } : undefined} />
-                      <span className="flex-1">{section.label}</span>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    {sectionActive && section.subs.length > 0 && (
-                      <div className="ml-4 mt-1 space-y-0.5">
-                        {section.subs
-                          .filter((s) => (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(section.id, s.id, userRole))
-                          .map((sub) => {
-                          const subActive = activeSub === sub.id;
-                          return (
-                          <button
-                            key={sub.id}
-                            onClick={() => navTo(section.id, sub.id)}
-                            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm transition-colors min-h-[44px] hover:bg-muted hover:text-foreground"
-                            style={subActive ? { color: teamColor, fontWeight: 600 } : { color: "var(--muted-foreground)" }}
-                          >
-                            <sub.icon className="h-4 w-4 shrink-0" style={subActive ? { color: teamColor } : undefined} />
-                            {sub.label}
-                          </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            </SheetContent>
-          </Sheet>
         </div>
       </div>
     </div>
