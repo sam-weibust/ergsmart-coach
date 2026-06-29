@@ -1388,7 +1388,7 @@ const Dashboard = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
         <aside
-          className="hidden md:flex flex-col w-60 shrink-0 border-r border-white/10 overflow-y-auto"
+          className="hidden flex-col w-60 shrink-0 border-r border-white/10 overflow-y-auto"
           style={{ background: teamColor }}
         >
           <nav className="flex-1 px-3 py-4 space-y-0.5">
@@ -1485,19 +1485,18 @@ const Dashboard = () => {
               transition: refreshing ? "transform 0.2s" : undefined,
             }}
           >
-            {/* Mobile: new 5-tab content. Desktop: existing sidebar sections. */}
-            <div className="md:hidden">{renderActiveTab()}</div>
-            <div className="hidden md:block">{renderContent()}</div>
+            {/* New 5-tab athlete/coxswain layout — renders on all breakpoints. */}
+            <div className="max-w-2xl mx-auto w-full">{renderActiveTab()}</div>
           </main>
         </div>
       </div>
 
-      {/* ── Mobile Bottom Nav — athlete/coxswain 5-tab bar ──────────────────── */}
+      {/* ── Bottom Nav — athlete/coxswain 5-tab bar (all breakpoints) ───────── */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border shadow-lg"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex justify-around items-center h-16 px-1">
+        <div className="flex justify-around items-center h-16 px-1 max-w-2xl mx-auto">
           {athleteTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
