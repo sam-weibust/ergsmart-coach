@@ -47,6 +47,7 @@ import HealthKitConnect from "../HealthKitConnect";
 import { RegattasSection } from "../regattas/RegattasSection";
 import { RecruitingProfileSection } from "../RecruitingProfileSection";
 import AwardsSection from "../AwardsSection";
+import ChangeRoleSection from "../ChangeRoleSection";
 
 import type { AthleteTabProps } from "./types";
 
@@ -328,6 +329,20 @@ export default function SettingsTab(props: AthleteTabProps) {
           queryClient.invalidateQueries({ queryKey: ["settings-athlete-profile", userId] });
         }}
       />
+
+      {/* ── Role ────────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <User className="h-4 w-4" />
+            Role
+          </CardTitle>
+          <CardDescription className="text-xs">Switch between athlete, coxswain, and coach.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangeRoleSection profile={profile} accentColor={teamColor} />
+        </CardContent>
+      </Card>
 
       {/* ── 2. Connected Apps (summary, full status inside) ─────────────── */}
       <div className="space-y-2">

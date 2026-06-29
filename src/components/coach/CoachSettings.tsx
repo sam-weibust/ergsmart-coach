@@ -25,6 +25,7 @@ import {
   Trash2, Copy, Check, RefreshCw, UserMinus, LogOut, ChevronDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import ChangeRoleSection from "@/components/dashboard/ChangeRoleSection";
 
 interface Props {
   profile: any;
@@ -483,6 +484,11 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
               <Button size="sm" onClick={saveProfile} disabled={savingProfile}>
                 {savingProfile ? "Saving…" : "Save Profile"}
               </Button>
+
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Role</p>
+                <ChangeRoleSection profile={profile} accentColor={primaryColor || "#0a1628"} />
+              </div>
             </CardContent>
           </Card>
         )}
