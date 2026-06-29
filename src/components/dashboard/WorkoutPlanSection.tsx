@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1029,7 +1030,7 @@ export const WorkoutPlanSection = () => {
 
       const { data: freshGoals } = await supabase.from("user_goals").select("*").eq("user_id", user.id).maybeSingle();
 
-      const { data, error } = await supabase.functions.invoke("generate-workout", {
+      const { data, error } = await invokeAI("generate-workout", {
         body: {
           user_id: user.id,
           workout_type: "plan",

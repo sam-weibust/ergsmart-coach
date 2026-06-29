@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { getLocalDate } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { toast } from "sonner";
 
@@ -243,7 +244,7 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
       setSaving(false);
       setAnalyzingFeedback(true);
 
-      const { data: fbData, error: fnError } = await supabase.functions.invoke("analyze-workout", {
+      const { data: fbData, error: fnError } = await invokeAI("analyze-workout", {
         body: {
           workoutType: "erg",
           workout: { ...workout },

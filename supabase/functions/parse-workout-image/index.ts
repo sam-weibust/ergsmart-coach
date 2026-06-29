@@ -1,10 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const FN = "parse-workout-image";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -16,6 +22,11 @@ serve(async (req) => {
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
     const { user_id, image_base64 } = await req.json();
 
@@ -43,6 +54,20 @@ serve(async (req) => {
       mediaType = dataUrlMatch[1];
       base64Data = dataUrlMatch[2];
     }
+
+    // Failsafe 2: cache before the API call (image input is deterministic).
+    const cacheKey = `${FN}_${hashKey({ image: image_base64 })}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
 
     const systemPrompt = `You are CrewSync AI, an expert at reading rowing and athletic training plan images.
 
@@ -102,7 +127,7 @@ Rules:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: MODEL,
           max_tokens: 4096,
           system: systemPrompt,
           messages: [
@@ -131,14 +156,14 @@ Rules:
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
       console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, FN);
 
     const result = await anthropicResponse.json();
     const textContent: string = result.content?.[0]?.text ?? "";
+    const usage = result?.usage ?? {};
 
     // Parse the JSON array from the response (handle any stray markdown)
     let plan: any[] = [];
@@ -153,8 +178,13 @@ Rules:
       console.error("Failed to parse plan JSON:", e, textContent);
     }
 
-    return new Response(JSON.stringify({ plan }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const response = { plan };
+    await setCached(supabase, cacheKey, response, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+
+    return new Response(JSON.stringify(response), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("parse-workout-image error:", e);

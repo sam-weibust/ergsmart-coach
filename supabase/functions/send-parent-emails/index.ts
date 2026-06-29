@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { recordApiError, recordApiSuccess } from "../_shared/aiGuard.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = Deno.env.get("RESEND_FROM_EMAIL") ?? "CrewSync <noreply@crewsync.app>";
@@ -55,9 +56,16 @@ async function generateAISummary(
         messages: [{ role: "user", content: prompt }],
       }),
     });
+    if (!resp.ok) {
+      console.error("Anthropic error:", resp.status, await resp.text());
+      await recordApiError(supabase, "send-parent-emails");
+      return "";
+    }
+    await recordApiSuccess(supabase, "send-parent-emails");
     const data = await resp.json();
     return data.content?.[0]?.text || "";
   } catch {
+    await recordApiError(supabase, "send-parent-emails");
     return "";
   }
 }

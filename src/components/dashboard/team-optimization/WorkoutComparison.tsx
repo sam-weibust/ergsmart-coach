@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -359,7 +360,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
         waterConditions: s.waterConditions,
       }));
 
-      const { data, error } = await supabase.functions.invoke("analyze-workouts", {
+      const { data, error } = await invokeAI("analyze-workouts", {
         body: { sessions: payload },
       });
 

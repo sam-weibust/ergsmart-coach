@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,6 +51,10 @@ Deno.serve(async (req) => {
     await logUsage(supabase, { user_id, function_name: "analyze-technique", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
     return jsonOk(cached);
   }
+
+  // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+  const blocked = await preflight(supabase, { userId: user_id, functionName: "analyze-technique", corsHeaders });
+  if (blocked) return blocked;
 
   const imageBlocks: any[] = [];
   for (let i = 0; i < Math.min(frames.length, 8); i++) {
@@ -124,7 +129,11 @@ Return ONLY valid JSON:
 
     clearTimeout(timeout);
     const claudeRawText = await claudeRes.text();
-    if (!claudeRes.ok) return jsonErr(`Anthropic API error: ${claudeRes.status}`, 502, claudeRawText.slice(0, 1000));
+    if (!claudeRes.ok) {
+      await recordApiError(supabase, "analyze-technique");
+      return jsonErr(`Anthropic API error: ${claudeRes.status}`, 502, claudeRawText.slice(0, 1000));
+    }
+    await recordApiSuccess(supabase, "analyze-technique");
     try { claudeData = JSON.parse(claudeRawText); } catch (e: any) {
       return jsonErr("Failed to parse Anthropic API response as JSON", 502, claudeRawText.slice(0, 500));
     }
@@ -160,6 +169,7 @@ Return ONLY valid JSON:
   // Cache permanently — same video always gets same analysis
   await setCached(supabase, cacheKey, result, TTL.PERMANENT, MODEL, usage.input_tokens, usage.output_tokens);
   await logUsage(supabase, { user_id, function_name: "analyze-technique", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+  await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
   return jsonOk(result);
 });

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Loader2, Wand2, Download, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -93,7 +94,7 @@ const TeamTrainingPlanSection = ({ teamId, teamName, isCoach }: Props) => {
         const [startWeek, endWeek] = chunks[i];
         setProgressLabel(PHASE_LABELS[i] || `Generating weeks ${startWeek}–${endWeek}…`);
 
-        const { data, error } = await supabase.functions.invoke("generate-team-training-plan", {
+        const { data, error } = await invokeAI("generate-team-training-plan", {
           body: {
             team_id: teamId,
             weeks: totalWeeks,

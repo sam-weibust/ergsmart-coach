@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +21,7 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
     try {
       const dietGoal = profile?.diet_goal || "maintain";
 
-      const { data, error } = await supabase.functions.invoke("generate-meals", {
+      const { data, error } = await invokeAI("generate-meals", {
         body: {
           user_id: profile.id, // REQUIRED for your rewritten function
           dietary_preferences: profile.dietary_preferences || [],

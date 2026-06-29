@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,7 +105,7 @@ const SeatRacingAnalysis = ({ teamId, teamMembers, isCoach, profile }: Props) =>
     setSelectedSession(session);
     setAiResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-seat-race", {
+      const { data, error } = await invokeAI("analyze-seat-race", {
         body: {
           pieces: session.pieces,
           boat_class: session.boat_class,

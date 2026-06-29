@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,7 +47,7 @@ const ImportTeamPlan = ({ teamId, coachId }: Props) => {
 
       setStep("personalizing");
 
-      const { data, error } = await supabase.functions.invoke("import-team-plan", {
+      const { data, error } = await invokeAI("import-team-plan", {
         body: {
           team_id: teamId,
           coach_id: coachId,

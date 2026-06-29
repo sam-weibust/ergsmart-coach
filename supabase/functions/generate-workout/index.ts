@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -240,6 +241,10 @@ serve(async (req) => {
       }
     }
 
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check, before generation).
+    const blocked = await preflight(supabase, { userId: user_id, functionName: "generate-workout", corsHeaders });
+    if (blocked) return blocked;
+
     const [profileRes, goalsRes, ergRes, strengthRes, teamMemberRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user_id).maybeSingle(),
       supabase.from("user_goals").select("*").eq("user_id", user_id).maybeSingle(),
@@ -395,6 +400,8 @@ Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
       console.log(`generate-workout: chunked generation for ${totalWeeks} weeks`);
       const allWeeks: any[] = [];
       const chunkSize = 4;
+      let chunkInputTokens = 0;
+      let chunkOutputTokens = 0;
 
       for (let chunkStart = 1; chunkStart <= totalWeeks; chunkStart += chunkSize) {
         const chunkEnd = Math.min(chunkStart + chunkSize - 1, totalWeeks);
@@ -425,13 +432,18 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
         if (!chunkResponse.ok) {
           const t = await chunkResponse.text();
           console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} error:`, t);
+          await recordApiError(supabase, "generate-workout");
           return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
             status: 502,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        await recordApiSuccess(supabase, "generate-workout");
 
         const chunkResult = await chunkResponse.json();
+        const chunkUsage = chunkResult?.usage ?? {};
+        chunkInputTokens += chunkUsage.input_tokens ?? 0;
+        chunkOutputTokens += chunkUsage.output_tokens ?? 0;
         const chunkText = chunkResult?.content?.[0]?.text ?? "";
         const chunkWeeks = tryParseJsonArray(chunkText);
 
@@ -448,6 +460,8 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
       }
 
       parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
+      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: chunkInputTokens, output_tokens: chunkOutputTokens, cache_hit: false });
+      await recordUsage(supabase, user_id, chunkInputTokens + chunkOutputTokens);
     } else {
       // Single call for <= 12 weeks
       console.log("generate-workout: calling Anthropic API (single call)");
@@ -474,11 +488,13 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
       if (!anthropicResponse.ok) {
         const t = await anthropicResponse.text();
         console.error("generate-workout: Anthropic error:", t);
+        await recordApiError(supabase, "generate-workout");
         return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      await recordApiSuccess(supabase, "generate-workout");
 
       const result = await anthropicResponse.json();
       const text = result?.content?.[0]?.text;
@@ -520,6 +536,7 @@ Week number values must be ${chunkStart} through ${chunkEnd}.`;
 
       const usage = result?.usage ?? {};
       await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-4-20250514", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+      await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
     }
 
     // Validate week count

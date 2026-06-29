@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ const TeamOverview = ({ teamId, teamName, teamMembers, isCoach, profile, seasonI
     if (!force && teamAnalysis) return;
     setTeamAnalysisLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-performance", {
+      const { data, error } = await invokeAI("analyze-performance", {
         body: { team_id: teamId, is_team_analysis: true },
       });
       if (error) throw new Error(error.message);
@@ -103,7 +104,7 @@ const TeamOverview = ({ teamId, teamName, teamMembers, isCoach, profile, seasonI
     }
     setReportLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-season-report", {
+      const { data, error } = await invokeAI("generate-season-report", {
         body: { team_id: teamId, season_id: seasonId },
       });
       if (error) throw new Error(error.message);

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -236,7 +237,7 @@ export const SpreadsheetUpload = ({ teamId, onSuccess }: SpreadsheetUploadProps 
       const image_base64 = `data:${mimeType};base64,${base64}`;
 
       // Call edge function to parse with AI
-      const { data: parseResult, error: parseError } = await supabase.functions.invoke("parse-workout-image", {
+      const { data: parseResult, error: parseError } = await invokeAI("parse-workout-image", {
         body: { user_id: user.id, image_base64 },
       });
 

@@ -1,10 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -18,6 +22,20 @@ serve(async (req) => {
     );
 
     const { team_id, weeks_until_race, season_phase } = await req.json();
+
+    if (!team_id) return jsonError(corsHeaders, 400, "Missing team_id");
+
+    // Failsafe 2: cache before the API call.
+    const cacheKey = `analyze-load-management_${hashKey({ team_id, weeks_until_race, season_phase })}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id: null, function_name: "analyze-load-management", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" } });
+    }
+
+    // Failsafe 9: circuit breaker (after cache check).
+    const blocked = await preflight(supabase, { userId: null, functionName: "analyze-load-management", corsHeaders });
+    if (blocked) return blocked;
 
     const { data: loadData } = await supabase
       .from("weekly_load_logs")
@@ -57,20 +75,30 @@ Respond with ONLY valid JSON:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: MODEL,
         max_tokens: 1024,
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
-    if (!resp.ok) throw new Error(`Anthropic error: ${await resp.text()}`);
+    if (!resp.ok) {
+      console.error("Anthropic error:", await resp.text());
+      await recordApiError(supabase, "analyze-load-management");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, "analyze-load-management");
+
     const result = await resp.json();
+    const usage = result?.usage ?? {};
     const text = result?.content?.[0]?.text ?? "{}";
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const analysis = JSON.parse(text.slice(start, end + 1));
 
-    return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    await setCached(supabase, cacheKey, analysis, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: null, function_name: "analyze-load-management", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+
+    return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

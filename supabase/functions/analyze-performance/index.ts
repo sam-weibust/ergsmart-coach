@@ -1,10 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 1500;
+const FN = "analyze-performance";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -20,15 +26,21 @@ serve(async (req) => {
     const body = await req.json();
     const { user_id, team_id, is_team_analysis } = body;
 
+    // Failsafe 4: require enough input to attribute the call.
+    if (!user_id && !team_id) {
+      return jsonError(corsHeaders, 400, "user_id or team_id required");
+    }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits.
+    const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
+
     if (is_team_analysis && team_id) {
       return await analyzeTeam(supabase, team_id, ANTHROPIC_API_KEY, corsHeaders);
     } else if (user_id) {
       return await analyzeIndividual(supabase, user_id, ANTHROPIC_API_KEY, corsHeaders);
     } else {
-      return new Response(JSON.stringify({ error: "user_id or team_id required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(corsHeaders, 400, "user_id or team_id required");
     }
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
@@ -39,6 +51,16 @@ serve(async (req) => {
 });
 
 async function analyzeIndividual(supabase: any, userId: string, apiKey: string, corsHeaders: any) {
+  // Failsafe 2: cache before the API call.
+  const cacheKey = `${FN}_individual_${userId}`;
+  const cached = await getCached(supabase, cacheKey);
+  if (cached) {
+    await logUsage(supabase, { user_id: userId, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+    return new Response(JSON.stringify(cached), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
   const cutoff90 = new Date();
   cutoff90.setDate(cutoff90.getDate() - 90);
   const cutoff90Str = cutoff90.toISOString().split("T")[0];
@@ -170,14 +192,22 @@ Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1500,
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
       messages: [{ role: "user", content: prompt }],
     }),
   });
 
+  if (!response.ok) {
+    console.error("Anthropic error:", await response.text());
+    await recordApiError(supabase, FN);
+    return jsonError(corsHeaders, 503, "AI service unavailable");
+  }
+  await recordApiSuccess(supabase, FN);
+
   const data = await response.json();
   const text = data.content?.[0]?.text || "";
+  const usage = data?.usage ?? {};
 
   const sections = parseSections(text, [
     "OVERALL TRAJECTORY",
@@ -187,12 +217,27 @@ Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
     "NEXT 4 WEEKS RECOMMENDATIONS",
   ]);
 
-  return new Response(JSON.stringify({ sections, raw: text, type: "individual" }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  const result = { sections, raw: text, type: "individual" };
+  await setCached(supabase, cacheKey, result, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
+  await logUsage(supabase, { user_id: userId, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+  await recordUsage(supabase, userId, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
   });
 }
 
 async function analyzeTeam(supabase: any, teamId: string, apiKey: string, corsHeaders: any) {
+  // Failsafe 2: cache before the API call.
+  const cacheKey = `${FN}_team_${teamId}`;
+  const cached = await getCached(supabase, cacheKey);
+  if (cached) {
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+    return new Response(JSON.stringify(cached), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 90);
   const cutoffStr = cutoff.toISOString().split("T")[0];
@@ -324,14 +369,22 @@ Be direct, cite specific athletes and numbers where available, keep each section
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1500,
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
       messages: [{ role: "user", content: prompt }],
     }),
   });
 
+  if (!response.ok) {
+    console.error("Anthropic error:", await response.text());
+    await recordApiError(supabase, FN);
+    return jsonError(corsHeaders, 503, "AI service unavailable");
+  }
+  await recordApiSuccess(supabase, FN);
+
   const data = await response.json();
   const text = data.content?.[0]?.text || "";
+  const usage = data?.usage ?? {};
 
   const sections = parseSections(text, [
     "TEAM TRAJECTORY",
@@ -342,8 +395,12 @@ Be direct, cite specific athletes and numbers where available, keep each section
     "RED FLAGS",
   ]);
 
-  return new Response(JSON.stringify({ sections, raw: text, type: "team" }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  const result = { sections, raw: text, type: "team" };
+  await setCached(supabase, cacheKey, result, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
+  await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
   });
 }
 

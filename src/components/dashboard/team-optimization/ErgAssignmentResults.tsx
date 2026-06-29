@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -175,7 +176,7 @@ const ErgAssignmentResults = ({ assignment, teamId, teamMembers, isCoach, profil
         notes: r.completion_notes,
       }));
 
-      const { data, error } = await supabase.functions.invoke("analyze-workouts", {
+      const { data, error } = await invokeAI("analyze-workouts", {
         body: {
           sessions: sessions.length ? sessions : [{ date: assignment.scheduled_date, boatName: "Team", attendance: results.length, totalRoster: teamMembers.length }],
           assignmentTitle: assignment.title,

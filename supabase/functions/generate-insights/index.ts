@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,6 +40,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" }
       });
     }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: user_id, functionName: "generate-insights", corsHeaders });
+    if (blocked) return blocked;
 
     const todayMs = new Date(today + "T00:00:00Z").getTime();
     const thirtyDaysAgo = new Date(todayMs - 30 * 86400000).toISOString().split("T")[0];
@@ -107,10 +112,10 @@ serve(async (req) => {
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
       console.error("Anthropic error:", t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      await recordApiError(supabase, "generate-insights");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, "generate-insights");
 
     const aiResult = await anthropicResponse.json();
     const insight = aiResult?.content?.[0]?.text ?? "";
@@ -119,6 +124,7 @@ serve(async (req) => {
     const result = { insight, last_updated: new Date().toISOString() };
     await setCached(supabase, cacheKey, result, TTL.HALF_DAY, MODEL, usage.input_tokens, usage.output_tokens);
     await logUsage(supabase, { user_id, function_name: "generate-insights", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
     // Also store in ai_insights table
     await supabase.from("ai_insights").upsert({

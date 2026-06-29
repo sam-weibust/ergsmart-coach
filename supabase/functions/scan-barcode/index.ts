@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const FN = "scan-barcode";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -23,6 +29,25 @@ serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Failsafe 2: cache before the API call (image input is deterministic).
+    const cacheKey = `${FN}_${hashKey({ image: imageBase64 })}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    // Failsafe 9: circuit breaker (after cache check).
+    const blocked = await preflight(supabase, { userId: null, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
+
     // Step 1: Ask Claude to extract barcode number or nutrition data from the image
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -32,7 +57,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: MODEL,
         max_tokens: 1024,
         system: `You are a food barcode and nutrition label scanner.
 
@@ -68,10 +93,15 @@ Return only JSON, no commentary.`,
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`Claude API error: ${response.status} ${err}`);
+      console.error("Anthropic error:", response.status, err);
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, FN);
 
     const claudeData = await response.json();
+    const usage = claudeData?.usage ?? {};
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     const text = claudeData.content?.[0]?.text?.trim();
     if (!text) throw new Error("No response from Claude");
 
@@ -89,7 +119,7 @@ Return only JSON, no commentary.`,
       if (offData.status === 1 && offData.product) {
         const p = offData.product;
         const n = p.nutriments ?? {};
-        return new Response(JSON.stringify({
+        const food = {
           type: "food",
           name: p.product_name || `Product ${barcode}`,
           brand: p.brands || null,
@@ -100,7 +130,9 @@ Return only JSON, no commentary.`,
           carbs: Math.round((n.carbohydrates_serving ?? n.carbohydrates_100g ?? 0) * 10) / 10,
           fat: Math.round((n.fat_serving ?? n.fat_100g ?? 0) * 10) / 10,
           barcode,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        };
+        await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+        return new Response(JSON.stringify(food), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
       }
 
       // Barcode not in Open Food Facts — return what we have
@@ -112,7 +144,7 @@ Return only JSON, no commentary.`,
 
     // Step 3: Nutrition label was extracted directly
     if (result.type === "nutrition") {
-      return new Response(JSON.stringify({
+      const food = {
         type: "food",
         name: result.name || "Scanned Food",
         brand: null,
@@ -123,7 +155,9 @@ Return only JSON, no commentary.`,
         carbs: result.carbs || 0,
         fat: result.fat || 0,
         barcode: null,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      };
+      await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+      return new Response(JSON.stringify(food), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
     }
 
     // Error case

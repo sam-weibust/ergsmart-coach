@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logUsage } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-20250514";
+const FN = "import-team-plan";
 
 function formatPace(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -135,6 +140,10 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits.
+    const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
+
     // Call Anthropic to parse the spreadsheet
     const userMessage = `Parse this rowing training plan spreadsheet and extract a structured weekly plan. Return valid JSON matching this schema exactly:
 {
@@ -184,7 +193,7 @@ ${file_content}`;
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: MODEL,
         max_tokens: 8000,
         system:
           "You are a rowing training plan parser. Parse the provided training plan spreadsheet content and return ONLY valid JSON with no explanation or markdown.",
@@ -193,12 +202,17 @@ ${file_content}`;
     });
 
     if (!claudeResponse.ok) {
-      const err = await claudeResponse.text();
-      throw new Error(`Anthropic API error: ${err}`);
+      console.error("Anthropic error:", await claudeResponse.text());
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, FN);
 
     const claudeData = await claudeResponse.json();
     const rawText = claudeData.content?.[0]?.text || "";
+    const usage = claudeData?.usage ?? {};
+    await logUsage(supabase, { user_id: coach_id ?? null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
     let planData: any;
     try {

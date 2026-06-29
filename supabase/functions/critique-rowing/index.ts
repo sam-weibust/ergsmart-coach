@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const FN = "critique-rowing";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -65,6 +70,20 @@ Score generously — a rower clearly trying deserves 7 or above. Reserve below 6
 Provide at least 3 strengths.
 Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experiment with — never negative language.`;
 
+  // Failsafe 2: cache before the API call (image input is deterministic).
+  const cacheKey = `${FN}_${hashKey({ frames, notes, video_path })}`;
+  const cached = await getCached(supabase, cacheKey);
+  if (cached) {
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+    return new Response(JSON.stringify(cached), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
+  // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+  const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
+  if (blocked) return blocked;
+
   // If frames are provided, use vision
   let messageContent: any[];
   if (Array.isArray(frames) && frames.length > 0) {
@@ -94,8 +113,8 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      model: MODEL,
+      max_tokens: 800,
       system: systemPrompt,
       messages: [{ role: "user", content: messageContent }],
     }),
@@ -104,13 +123,14 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
   if (!claudeRes.ok) {
     const t = await claudeRes.text();
     console.error("Claude error:", claudeRes.status, t);
-    return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    await recordApiError(supabase, FN);
+    return jsonError(corsHeaders, 503, "AI service unavailable");
   }
+  await recordApiSuccess(supabase, FN);
 
   const claudeData = await claudeRes.json();
   const rawText = claudeData?.content?.[0]?.text ?? "";
+  const usage = claudeData?.usage ?? {};
 
   let critique: any;
   try {
@@ -129,7 +149,12 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
     critique,
   } as any);
 
-  return new Response(JSON.stringify({ critique }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  const result = { critique };
+  await setCached(supabase, cacheKey, result, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+  await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+  await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
   });
 });

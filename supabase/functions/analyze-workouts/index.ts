@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +64,10 @@ serve(async (req) => {
       }
     }
 
+    // Failsafe 9: circuit breaker (after cache check).
+    const blocked = await preflight(supabase, { userId: null, functionName: "analyze-workouts", corsHeaders });
+    if (blocked) return blocked;
+
     const truncatedSessions = sessions.slice(0, 20);
 
     let prompt: string;
@@ -111,9 +116,11 @@ Provide:\n**TEAM SUMMARY**\n**STANDOUT PERFORMANCES**\n**AREAS OF CONCERN**\n**P
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      return jsonResponse({ error: `Anthropic API error ${response.status}: ${errText}` }, 502);
+      console.error("Anthropic error:", await response.text());
+      await recordApiError(supabase, "analyze-workouts");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, "analyze-workouts");
 
     const data = await response.json();
     const usage = data?.usage ?? {};

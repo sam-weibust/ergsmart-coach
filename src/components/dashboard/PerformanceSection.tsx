@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -294,7 +295,7 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
 
     setAnalysisLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("analyze-performance", {
+      const { data, error } = await invokeAI("analyze-performance", {
         body: { user_id: profile.id },
       });
       if (error) throw new Error(error.message);

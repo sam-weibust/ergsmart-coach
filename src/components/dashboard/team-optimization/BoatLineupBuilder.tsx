@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -270,7 +271,7 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
   async function suggestLineup() {
     setAiLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("suggest-boat-lineup", {
+      const { data, error } = await invokeAI("suggest-boat-lineup", {
         body: { team_id: teamId, boat_class: newBoatClass, athlete_pool: allAthletes, locked_seats: [] },
       });
       if (error) throw new Error(error.message);

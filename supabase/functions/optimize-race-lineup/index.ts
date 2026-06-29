@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +31,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
+
+    // Failsafe 9: circuit breaker (team — no per-user limit).
+    const blocked = await preflight(supabase, { userId: null, functionName: "optimize-race-lineup", corsHeaders });
+    if (blocked) return blocked;
 
     // Fetch all relevant data
     const [ergRes, seatRaceRes, loadRes] = await Promise.all([
@@ -74,7 +79,12 @@ Respond with ONLY valid JSON:
       }),
     });
 
-    if (!resp.ok) throw new Error(`Anthropic error: ${await resp.text()}`);
+    if (!resp.ok) {
+      console.error("Anthropic error:", await resp.text());
+      await recordApiError(supabase, "optimize-race-lineup");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, "optimize-race-lineup");
     const result = await resp.json();
     const text = result?.content?.[0]?.text ?? "{}";
     const start = text.indexOf("{");

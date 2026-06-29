@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,11 +42,16 @@ serve(async (req) => {
     const cacheKey = `workout_feedback:${workoutId}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
+      await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-4-6", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: user_id ?? null, functionName: "analyze-workout", corsHeaders });
+    if (blocked) return blocked;
 
     let profile = bodyProfile;
     let goals: any = null;
@@ -99,7 +105,7 @@ ${userContext}
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 1024,
+          max_tokens: 600,
           stream: false,
           system: systemPrompt,
           messages: [
@@ -113,15 +119,14 @@ ${userContext}
     );
 
     if (!anthropicResponse.ok) {
-      const t = await anthropicResponse.text();
-      console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("Anthropic error:", anthropicResponse.status, await anthropicResponse.text());
+      await recordApiError(supabase, "analyze-workout");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, "analyze-workout");
 
     const result = await anthropicResponse.json();
+    const usage = result?.usage ?? {};
     const text = result?.content?.[0]?.text ?? "{}";
 
     let feedback: any;
@@ -142,7 +147,9 @@ ${userContext}
       };
     }
 
-    await setCached(supabase, cacheKey, { feedback }, TTL.PERMANENT);
+    await setCached(supabase, cacheKey, { feedback }, TTL.PERMANENT, "claude-sonnet-4-6", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-4-6", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, user_id ?? null, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
     return new Response(JSON.stringify({ feedback }), {
       status: 200,

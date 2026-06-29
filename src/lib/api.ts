@@ -13,7 +13,32 @@ export function getApiUrl(path: string): string {
   return path;
 }
 
-async function callFunction(name: string, body: object) {
+// Failsafe 3: de-dupe identical in-flight AI requests so a double-tap or a
+// re-render can never fire (and pay for) the same call twice.
+const inFlightCalls = new Map<string, Promise<Response>>();
+
+async function callFunction(name: string, body: object): Promise<Response> {
+  let dedupeKey: string;
+  try {
+    dedupeKey = `${name}::${JSON.stringify(body)}`;
+  } catch {
+    dedupeKey = name;
+  }
+  const existing = inFlightCalls.get(dedupeKey);
+  if (existing) {
+    console.log(`[api] callFunction DEDUPED: ${name}`);
+    // Return a fresh clone so each caller can read the body independently.
+    return existing.then((res) => res.clone());
+  }
+
+  const promise = callFunctionInner(name, body).finally(() => {
+    inFlightCalls.delete(dedupeKey);
+  });
+  inFlightCalls.set(dedupeKey, promise);
+  return promise.then((res) => res.clone());
+}
+
+async function callFunctionInner(name: string, body: object): Promise<Response> {
   console.log(`[api] callFunction START: ${name}, native: ${Capacitor.isNativePlatform()}`);
   const url = `${BASE_URL}/${name}?_t=${Date.now()}`;
   console.log(`[api] fetching URL: ${url}`);

@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const FN = "recommend-recruits";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -20,6 +25,20 @@ serve(async (req) => {
 
     const { coach_id } = await req.json();
     if (!coach_id) return new Response(JSON.stringify({ error: "Missing coach_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Failsafe 2: cache before the API call.
+    const cacheKey = `${FN}_${coach_id}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id: coach_id, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: coach_id, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
 
     // Fetch coach program profile
     const { data: coachProfile } = await supabase
@@ -152,14 +171,22 @@ Return at most 10 athletes.`;
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: MODEL,
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
+    if (!aiRes.ok) {
+      console.error("Anthropic error:", await aiRes.text());
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, FN);
+
     const aiData = await aiRes.json();
     const rawText = aiData.content?.[0]?.text ?? "[]";
+    const usage = aiData?.usage ?? {};
     const recommendations = JSON.parse(rawText);
 
     // Clear old recommendations and insert new ones
@@ -175,8 +202,13 @@ Return at most 10 athletes.`;
       });
     }
 
-    return new Response(JSON.stringify({ recommendations }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const payload = { recommendations };
+    await setCached(supabase, cacheKey, payload, TTL.SIX_HOURS, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: coach_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+
+    return new Response(JSON.stringify(payload), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (err) {
     console.error(err);

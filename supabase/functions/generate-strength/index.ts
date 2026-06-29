@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,6 +39,10 @@ serve(async (req) => {
       });
     }
 
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: user_id ?? null, functionName: "generate-strength", corsHeaders });
+    if (blocked) return blocked;
+
     let profile: any = null;
     let recentStrength: any[] = [];
 
@@ -68,12 +73,11 @@ Include 5-8 exercises for the requested muscle group and equipment. Weights in k
     });
 
     if (!anthropicResponse.ok) {
-      const t = await anthropicResponse.text();
-      console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("Anthropic error:", anthropicResponse.status, await anthropicResponse.text());
+      await recordApiError(supabase, "generate-strength");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, "generate-strength");
 
     const aiResult = await anthropicResponse.json();
     const usage = aiResult?.usage ?? {};
@@ -87,6 +91,7 @@ Include 5-8 exercises for the requested muscle group and equipment. Weights in k
 
     await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, usage.input_tokens, usage.output_tokens);
     await logUsage(supabase, { user_id, function_name: "generate-strength", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, user_id ?? null, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
     return new Response(JSON.stringify(parsed), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

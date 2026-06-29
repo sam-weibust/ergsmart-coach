@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,6 +66,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
+
+    // Failsafe 9: circuit breaker (after cache check).
+    const blocked = await preflight(supabase, { userId: null, functionName: "generate-team-training-plan", corsHeaders });
+    if (blocked) return blocked;
 
     const [loadRes, ergRes] = await Promise.all([
       supabase
@@ -208,10 +213,11 @@ Respond with ONLY valid JSON (no markdown, no explanation):
     console.log("generate-team-training-plan: Anthropic response status:", resp.status);
 
     if (!resp.ok) {
-      const errText = await resp.text();
-      console.error("generate-team-training-plan: Anthropic error body:", errText);
-      throw new Error(`Anthropic error ${resp.status}: ${errText}`);
+      console.error("generate-team-training-plan: Anthropic error body:", await resp.text());
+      await recordApiError(supabase, "generate-team-training-plan");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, "generate-team-training-plan");
 
     const result = await resp.json();
     const text = result?.content?.[0]?.text ?? "";

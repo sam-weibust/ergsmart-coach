@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,7 +62,7 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
   const getSuggestions = async () => {
     setLoadingSuggestions(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-strength", {
+      const { data, error } = await invokeAI("generate-strength", {
         body: {
           weight: profile.weight,
           height: profile.height,
@@ -108,7 +109,7 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
         .order("workout_date", { ascending: false })
         .limit(10);
 
-      const { data, error } = await supabase.functions.invoke("analyze-workout", {
+      const { data, error } = await invokeAI("analyze-workout", {
         body: {
           workoutType: "strength",
           workout: { exercises: savedWorkouts, meta: workoutMeta },

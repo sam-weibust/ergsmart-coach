@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -411,7 +412,7 @@ function TwokPredictor({ prefill }: { prefill: PrefillData }) {
     setError(null);
     setResult(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("predict-2k", {
+      const { data, error: fnErr } = await invokeAI("predict-2k", {
         body: {
           mode: "predict",
           current_2k: form.current_2k || undefined,
@@ -1965,7 +1966,7 @@ function ImprovementTimeline({ prefill }: { prefill: PrefillData }) {
     setError(null);
     setResult(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("predict-2k", {
+      const { data, error: fnErr } = await invokeAI("predict-2k", {
         body: {
           mode: "timeline",
           current_2k: form.current_2k || undefined,

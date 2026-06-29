@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,10 +30,15 @@ serve(async (req) => {
     const cacheKey = `suggest_lineup:${team_id}:${boat_class}:${hashKey({ athleteIds, locked_seats })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
+      await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-4-6", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
+
+    // Failsafe 9: circuit breaker (after cache check).
+    const blocked = await preflight(supabase, { userId: null, functionName: "suggest-boat-lineup", corsHeaders });
+    if (blocked) return blocked;
 
     // Fetch erg scores for athletes
     const { data: ergScores } = await supabase
@@ -101,14 +107,22 @@ Respond with ONLY valid JSON, no extra text:
       }),
     });
 
-    if (!resp.ok) throw new Error(`Anthropic error: ${await resp.text()}`);
+    if (!resp.ok) {
+      console.error("Anthropic error:", await resp.text());
+      await recordApiError(supabase, "suggest-boat-lineup");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, "suggest-boat-lineup");
+
     const result = await resp.json();
+    const usage = result?.usage ?? {};
     const text = result?.content?.[0]?.text ?? "{}";
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const suggestion = JSON.parse(text.slice(start, end + 1));
 
-    await setCached(supabase, cacheKey, suggestion, TTL.HOUR);
+    await setCached(supabase, cacheKey, suggestion, TTL.HOUR, "claude-sonnet-4-6", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-4-6", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     return new Response(JSON.stringify(suggestion), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);

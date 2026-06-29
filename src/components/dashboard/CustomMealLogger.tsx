@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -161,7 +162,7 @@ const CustomMealLogger = ({ profileId }: CustomMealLoggerProps) => {
         reader.readAsDataURL(file);
       });
 
-      const { data, error } = await supabase.functions.invoke("parse-nutrition-label", {
+      const { data, error } = await invokeAI("parse-nutrition-label", {
         body: { imageBase64: base64, mimeType: file.type },
       });
 

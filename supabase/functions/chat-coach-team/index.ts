@@ -1,11 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const FN = "chat-coach-team";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -25,6 +28,14 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return jsonError(corsHeaders, 400, "Missing messages");
+    }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits.
+    const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
 
     // Gather team context in parallel
     const [teamRes, membersRes, ergRes, onwaterRes, seatRaceRes, lineupRes, attendanceRes, wellnessRes] =
@@ -141,10 +152,12 @@ INSTRUCTIONS:
     if (!anthropicResponse.ok) {
       const t = await anthropicResponse.text();
       console.error("Anthropic error:", t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, FN);
+    // Streaming: count the call against the daily cap (token usage unavailable from the stream).
+    await recordUsage(supabase, coach_id ?? null, 0);
 
     return new Response(anthropicResponse.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },

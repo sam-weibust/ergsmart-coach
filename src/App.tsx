@@ -27,6 +27,7 @@ import PricingPage from "./pages/PricingPage";
 import Coaches from "./pages/Coaches";
 import TeamPortalPage from "./pages/TeamPortalPage";
 import RecruitingPortalPage from "./pages/RecruitingPortalPage";
+import AdminPage from "./pages/AdminPage";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
@@ -263,6 +264,7 @@ function AppRouter() {
       <Route path="/pricing" element={<PricingPage />} />
       <Route path="/coaches" element={<Coaches />} />
       <Route path="/team/:slug" element={<TeamPortalPage />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="/recruit/:slug" element={<RecruitingPortalPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -141,7 +142,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
   const generateMealPlan = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-meals", {
+      const { data, error } = await invokeAI("generate-meals", {
         body: {
           user_id: profile.id,
           weight: profile.weight,

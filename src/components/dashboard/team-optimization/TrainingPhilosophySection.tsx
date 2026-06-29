@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, RefreshCw, RotateCcw, CheckCircle2, FileSpreadsheet, Loader2, Brain } from "lucide-react";
@@ -76,7 +77,7 @@ export default function TrainingPhilosophySection({ teamId, isCoach }: Props) {
       console.log("[TrainingPhilosophy] file uploaded, calling edge function");
 
       // Call analyze-training-philosophy edge function
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke("analyze-training-philosophy", {
+      const { data: fnData, error: fnErr } = await invokeAI("analyze-training-philosophy", {
         body: { team_id: teamId, coach_id: user.id, file_path: filePath, file_name: file.name },
       });
 

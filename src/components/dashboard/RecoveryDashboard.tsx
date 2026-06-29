@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -705,7 +706,7 @@ function InsightsTab({ profile }: { profile: any }) {
     try {
       const user = await getSessionUser();
       if (!user) return;
-      const { error } = await supabase.functions.invoke("generate-insights", {
+      const { error } = await invokeAI("generate-insights", {
         body: { user_id: user.id, local_date: type === "weekly" ? weekMonday : localToday, insight_type: type },
       });
       if (error) throw error;

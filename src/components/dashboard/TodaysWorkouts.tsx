@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -292,7 +293,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
           .gte("log_date", new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
           .order("log_date", { ascending: false });
 
-        const { data: fbData } = await supabase.functions.invoke("analyze-workout", {
+        const { data: fbData } = await invokeAI("analyze-workout", {
           body: { workoutType: "erg", workout: { ...workoutData, id: data.id }, profile, recentWorkouts: recentWorkouts || [], recoveryLogs: recoveryLogs || [] },
         });
         if (fbData?.feedback) setErgFeedback(fbData.feedback);
@@ -347,7 +348,7 @@ const TodaysWorkouts = ({ profile }: TodaysWorkoutsProps) => {
           .order("workout_date", { ascending: false })
           .limit(10);
 
-        const { data: fbData } = await supabase.functions.invoke("analyze-workout", {
+        const { data: fbData } = await invokeAI("analyze-workout", {
           body: {
             workoutType: "strength",
             workout: {

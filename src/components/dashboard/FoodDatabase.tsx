@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeAI } from "@/lib/aiInvoke";
 import { Capacitor } from "@capacitor/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -648,7 +649,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
   const handleScanResult = useCallback(async (base64: string, mimeType = "image/jpeg") => {
     setScanning(true);
     try {
-      const { data, error } = await supabase.functions.invoke("scan-barcode", {
+      const { data, error } = await invokeAI("scan-barcode", {
         body: { imageBase64: base64, mimeType },
       });
       if (error) throw error;

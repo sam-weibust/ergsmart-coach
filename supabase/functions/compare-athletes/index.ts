@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,6 +41,10 @@ serve(async (req) => {
       });
     }
 
+    // Failsafe 9: circuit breaker (anonymous — no per-user limit).
+    const blocked = await preflight(supabase, { userId: null, functionName: "compare-athletes", corsHeaders });
+    if (blocked) return blocked;
+
     const prompt = `Expert rowing coach comparing two athletes for boat placement.
 
 A: ${athlete1.name} | 2k: ${athlete1.best2k||"N/A"} (${athlete1.best2k_watts||"N/A"}W) | 6k: ${athlete1.best6k||"N/A"} | W/kg: ${athlete1.wpk ? Math.round(athlete1.wpk*10)/10 : "N/A"} | Load 7d: ${athlete1.recent_meters||"N/A"}m | Fatigue: ${athlete1.fatigue||"N/A"}/10 | Seat races: ${athlete1.seat_wins||0}/${athlete1.seat_total||0} | Improvement: ${athlete1.improvement||"N/A"}s
@@ -53,6 +58,13 @@ Write one paragraph comparing erg performance, training consistency, and develop
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({ model: MODEL, max_tokens: 400, messages: [{ role: "user", content: prompt }] }),
     });
+
+    if (!response.ok) {
+      console.error("Anthropic error:", await response.text());
+      await recordApiError(supabase, "compare-athletes");
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, "compare-athletes");
 
     const data = await response.json();
     const usage = data?.usage ?? {};

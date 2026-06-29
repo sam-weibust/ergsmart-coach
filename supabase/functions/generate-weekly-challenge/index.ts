@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logUsage } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-haiku-4-5-20251001";
+const FN = "generate-weekly-challenge";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -40,6 +45,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Failsafe 9 + 1: circuit breaker (after the existing-challenge check, which is this function's cache).
+    const blocked = await preflight(supabase, { userId: null, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
 
     const month = new Date(week_start).getMonth(); // 0-11
     // Season phases: base = Aug-Oct (7-9), build = Nov-Jan (10-0), race_prep = Feb-Apr (1-3), peak = May-Jul (4-6)
@@ -85,14 +94,23 @@ Respond in this exact JSON format:
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: MODEL,
         max_tokens: 300,
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
+    if (!response.ok) {
+      console.error("Anthropic error:", await response.text());
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
+    }
+    await recordApiSuccess(supabase, FN);
+
     const aiData = await response.json();
     const text = aiData.content?.[0]?.text || "{}";
+    const usage = aiData?.usage ?? {};
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
 
     let parsed;
     try {

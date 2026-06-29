@@ -1,11 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const MODEL = "claude-sonnet-4-6";
+const FN = "predict-recruitment";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -33,6 +38,21 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Failsafe 2: cache before the API call.
+    const cacheKey = `${FN}_${user_id}`;
+    const cached = await getCached(supabase, cacheKey);
+    if (cached) {
+      await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      return new Response(JSON.stringify(cached), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
+    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+    const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
+    if (blocked) return blocked;
 
     // Fetch recent erg results for context
     const { data: ergResults } = await supabase
@@ -107,7 +127,7 @@ Rules:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: MODEL,
           max_tokens: 4096,
           stream: false,
           system: systemPrompt,
@@ -122,16 +142,15 @@ Rules:
     );
 
     if (!anthropicResponse.ok) {
-      const t = await anthropicResponse.text();
-      console.error("Anthropic error:", anthropicResponse.status, t);
-      return new Response(JSON.stringify({ error: "AI service unavailable" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("Anthropic error:", anthropicResponse.status, await anthropicResponse.text());
+      await recordApiError(supabase, FN);
+      return jsonError(corsHeaders, 503, "AI service unavailable");
     }
+    await recordApiSuccess(supabase, FN);
 
     const aiResult = await anthropicResponse.json();
     const rawText = aiResult?.content?.[0]?.text ?? "";
+    const usage = aiResult?.usage ?? {};
     const start = rawText.indexOf("{");
     const end = rawText.lastIndexOf("}");
     let parsed: any = { predicted_tier: "Unknown", school_predictions: [], missing_data_notes: [] };
@@ -139,9 +158,13 @@ Rules:
       try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
     }
 
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+
     return new Response(JSON.stringify(parsed), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("predict-recruitment error:", e);
