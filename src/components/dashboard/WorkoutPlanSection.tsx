@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   CalendarDays, ChevronDown, ChevronUp, Download, Dumbbell,
-  FileImage, Loader2, Printer, Share2, Utensils, Settings2, Check,
+  FileImage, Loader2, Printer, Share2, Utensils, Settings2, Check, AlertTriangle,
 } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
 import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
@@ -71,6 +71,29 @@ const extractWorkoutWeeks = (workout_data: any): any[] => {
   if (Array.isArray(workout_data?.plan)) return workout_data.plan;
   if (Array.isArray(workout_data?.weeks)) return workout_data.weeks;
   return [];
+};
+
+// True when a day carries something worth showing (a session, a rest marker, or
+// legacy-schema content). Used to detect old plans generated before the edge
+// function enforced complete days.
+const dayHasContent = (day: any): boolean => {
+  if (!day) return false;
+  if (day.is_rest === true) return true;
+  const req = day.required;
+  if (req && typeof req === "object" && (req.title || req.description)) return true;
+  if (typeof day.workout === "string" && day.workout.trim()) return true;
+  return Boolean(day.ergWorkout || day.strengthWorkout || day.yogaSession || day.mealPlan);
+};
+
+// A plan is "degraded" when it has week objects but not a single day with real
+// content across the whole plan — i.e. the "week header shows, no workout" case.
+// Uploaded (file) plans and empty plans are handled elsewhere, so exclude them.
+const isPlanDegraded = (weeks: any[]): boolean => {
+  if (!Array.isArray(weeks) || weeks.length === 0) return false;
+  if (weeks[0]?.fileUrl) return false;
+  return !weeks.some((w: any) =>
+    Array.isArray(w?.days) && w.days.some((d: any) => dayHasContent(d))
+  );
 };
 
 const getZoneColor = (zone?: string) => {
@@ -605,11 +628,15 @@ type PlanListProps = {
   userName?: string | null;
   onDeletePlan: (planId: string) => void;
   onSharePlan: (args: { planId: string; userId?: string; teamId?: string }) => void;
+  onRegenerate: (months?: number) => void;
+  isRegenerating: boolean;
+  canRegenerate: boolean;
 };
 
 const PlanList = ({
   plans, plansLoading, expandedWeeks, setExpandedWeeks,
   friends, teams, isCoach, userName, onDeletePlan, onSharePlan,
+  onRegenerate, isRegenerating, canRegenerate,
 }: PlanListProps) => {
   const [calendarPlanIds, setCalendarPlanIds] = useState<Set<string>>(new Set());
   const [activePlanId, setActivePlanId] = useState<string>(() => {
@@ -690,6 +717,23 @@ const PlanList = ({
                         </p>
                       </div>
                     )}
+                    {isPlanDegraded(workoutWeeks) && (
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                        <div className="space-y-2">
+                          <p className="text-sm text-amber-700 dark:text-amber-400">
+                            This plan was generated with an older version and is missing workout details. Regenerate it with the latest AI for full daily sessions.
+                          </p>
+                          {!plan.is_coach_assigned && (
+                            <Button size="sm" onClick={() => onRegenerate(Math.max(1, Math.round(workoutWeeks.length / 4)))} disabled={isRegenerating || !canRegenerate}>
+                              {isRegenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Regenerate with latest AI
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {workoutWeeks.length > 0 && workoutWeeks[0]?.fileUrl && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1222,6 +1266,23 @@ export const WorkoutPlanSection = () => {
         userName={profile?.full_name ?? null}
         onDeletePlan={(planId) => deletePlan.mutate(planId)}
         onSharePlan={(args) => sharePlan.mutate(args)}
+        onRegenerate={(months) => {
+          if (savedPrefs) {
+            savePrefsAndGenerate.mutate({
+              training_goal: savedPrefs.training_goal,
+              intensity: savedPrefs.intensity,
+              goal_date: savedPrefs.goal_date,
+              include_lifting: savedPrefs.include_lifting,
+              lifting_days_per_week: savedPrefs.lifting_days_per_week,
+              include_two_a_days: savedPrefs.include_two_a_days,
+              months: months ?? 3,
+            });
+          } else {
+            setShowWizard(true);
+          }
+        }}
+        isRegenerating={savePrefsAndGenerate.isPending}
+        canRegenerate={isProfileComplete}
       />
     </div>
   );
