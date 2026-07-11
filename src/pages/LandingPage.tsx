@@ -3,20 +3,18 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import logoIcon from "@/assets/crewsync-logo-icon.jpg";
 import { supabase } from "@/integrations/supabase/client";
 import { Capacitor } from "@capacitor/core";
+import {
+  HeroForceCurve,
+  FeaturesSphere,
+  StatsGlobe,
+  CtaParticles,
+  ProblemAccents,
+} from "@/components/landing/ThreeBackgrounds";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FALLBACK_METERS = 1_800_000;
 const FALLBACK_ATHLETES = 53;
-
-const PATH_1 =
-  "M0,56 C14,56 22,52 34,42 C48,26 56,8 76,5 C90,3 100,11 112,26 C122,40 128,52 138,57 C146,60 152,57 164,56 C178,56 186,52 198,42 C212,26 220,8 240,5 C254,3 264,11 276,26 C286,40 292,52 302,57 C310,60 316,57 328,56 C342,56 350,52 362,42 C376,26 384,8 404,5 C418,3 428,11 440,26 C450,40 456,52 466,57 C474,60 480,57 492,56 C506,56 514,52 526,42 C540,26 548,8 568,5 C582,3 592,11 604,26 C614,40 620,52 630,57 C638,60 644,57 680,56";
-
-const PATH_2 =
-  "M0,56 C12,56 20,54 30,44 C44,28 52,7 72,4 C88,2 100,10 114,24 C124,38 130,50 142,57 C150,60 158,57 170,56 C186,56 194,54 206,44 C220,28 228,7 248,4 C264,2 276,10 290,24 C300,38 306,50 318,57 C326,60 334,57 346,56 C362,56 370,54 382,44 C396,28 404,7 424,4 C440,2 452,10 466,24 C476,38 482,50 494,57 C502,60 510,57 522,56 C538,56 546,54 558,44 C572,28 580,7 600,4 C616,2 628,10 642,24 C652,38 658,50 670,57 C678,60 680,57 680,56";
-
-const PATH_3 =
-  "M0,56 C10,56 18,55 28,46 C40,30 48,5 68,2 C84,0 96,9 110,22 C122,36 128,49 140,57 C148,60 156,57 168,56 C182,56 190,55 200,46 C212,30 220,5 240,2 C256,0 268,9 282,22 C294,36 300,49 312,57 C320,60 328,57 340,56 C354,56 362,55 372,46 C384,30 392,5 412,2 C428,0 440,9 454,22 C466,36 472,49 484,57 C492,60 500,57 512,56 C526,56 534,55 544,46 C556,30 564,5 584,2 C600,0 612,9 626,22 C638,36 644,49 656,57 C664,60 672,57 680,56";
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -135,37 +133,6 @@ function Reveal({ children, delay = 0, style, className }: RevealProps) {
     >
       {children}
     </div>
-  );
-}
-
-function ForceCurveTile({ path, tileId }: { path: string; tileId: number }) {
-  const closedPath = `${path} L680,60 L0,60 Z`;
-  return (
-    <svg
-      width="680"
-      height="72"
-      viewBox="0 0 680 72"
-      fill="none"
-      style={{ flexShrink: 0, display: "block" }}
-    >
-      <defs>
-        <linearGradient
-          id={`fc-grad-${tileId}`}
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="60"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#2272FF" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="#2272FF" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <line x1="0" y1="60" x2="680" y2="60" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
-      <path d={closedPath} fill={`url(#fc-grad-${tileId})`} />
-      <path d={path} fill="none" stroke="#2272FF" strokeWidth="7" opacity="0.1" />
-      <path d={path} fill="none" stroke="#2272FF" strokeWidth="1.5" opacity="0.9" />
-    </svg>
   );
 }
 
@@ -422,7 +389,10 @@ const LandingPage = () => {
           }}
         />
 
-        <div style={{ position: "relative", maxWidth: "680px" }}>
+        {/* 3D force-curve ribbon (right half, behind text) */}
+        <HeroForceCurve />
+
+        <div style={{ position: "relative", zIndex: 1, maxWidth: "680px" }}>
           {/* Eyebrow */}
           <div
             style={{
@@ -514,15 +484,13 @@ const LandingPage = () => {
             </button>
           </div>
 
-          {/* Force curve */}
+          {/* Force-curve label (the 3D ribbon renders behind the hero on the right) */}
           <div style={{ animation: "fadeInUp 0.5s ease 0.32s both" }}>
-            {/* Label */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                marginBottom: "10px",
               }}
             >
               <span
@@ -548,31 +516,6 @@ const LandingPage = () => {
                 Live Force Curve — PM5 Bluetooth
               </span>
             </div>
-            {/* Viewport */}
-            <div
-              style={{
-                height: "72px",
-                overflow: "hidden",
-                position: "relative",
-                WebkitMaskImage:
-                  "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
-                maskImage:
-                  "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  width: "2720px",
-                  animation: "scrollCurve 8s linear infinite",
-                }}
-              >
-                <ForceCurveTile path={PATH_1} tileId={1} />
-                <ForceCurveTile path={PATH_2} tileId={2} />
-                <ForceCurveTile path={PATH_3} tileId={3} />
-                <ForceCurveTile path={PATH_1} tileId={4} />
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -583,11 +526,14 @@ const LandingPage = () => {
           borderTop: "1px solid rgba(255,255,255,0.06)",
           padding: "28px 52px",
           backgroundColor: "var(--navy)",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
+        <StatsGlobe />
         <div
           className="lp-stats-row"
-          style={{ display: "flex", maxWidth: "680px" }}
+          style={{ display: "flex", maxWidth: "680px", position: "relative", zIndex: 1 }}
         >
           {/* Meters */}
           <div
@@ -696,9 +642,12 @@ const LandingPage = () => {
         style={{
           padding: "96px 52px",
           backgroundColor: "var(--navy)",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+        <ProblemAccents />
+        <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
           <Reveal>
             <p
               style={{
@@ -802,9 +751,12 @@ const LandingPage = () => {
           borderTop: "1px solid rgba(34,114,255,0.15)",
           borderBottom: "1px solid rgba(34,114,255,0.15)",
           padding: "96px 52px",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+        <FeaturesSphere />
+        <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
           <Reveal style={{ marginBottom: "56px" }}>
             <span
               style={{
@@ -1318,9 +1270,12 @@ const LandingPage = () => {
           backgroundColor: "var(--navy-mid)",
           textAlign: "center",
           borderTop: "1px solid rgba(255,255,255,0.04)",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <div style={{ maxWidth: "640px", margin: "0 auto" }}>
+        <CtaParticles />
+        <div style={{ maxWidth: "640px", margin: "0 auto", position: "relative", zIndex: 1 }}>
           <Reveal>
             <h2
               style={{
