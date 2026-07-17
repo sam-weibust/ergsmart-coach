@@ -42,7 +42,7 @@ serve(async (req) => {
     const cacheKey = `workout_feedback:${workoutId}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-4-6", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
@@ -104,7 +104,7 @@ ${userContext}
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-5",
           max_tokens: 600,
           stream: false,
           system: systemPrompt,
@@ -147,8 +147,8 @@ ${userContext}
       };
     }
 
-    await setCached(supabase, cacheKey, { feedback }, TTL.PERMANENT, "claude-sonnet-4-6", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-4-6", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, { feedback }, TTL.PERMANENT, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: user_id ?? null, function_name: "analyze-workout", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     await recordUsage(supabase, user_id ?? null, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
 
     return new Response(JSON.stringify({ feedback }), {

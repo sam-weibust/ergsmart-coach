@@ -30,7 +30,7 @@ serve(async (req) => {
     const cacheKey = `suggest_lineup:${team_id}:${boat_class}:${hashKey({ athleteIds, locked_seats })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-4-6", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -101,7 +101,7 @@ Respond with ONLY valid JSON, no extra text:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 2048,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -121,8 +121,8 @@ Respond with ONLY valid JSON, no extra text:
     const end = text.lastIndexOf("}");
     const suggestion = JSON.parse(text.slice(start, end + 1));
 
-    await setCached(supabase, cacheKey, suggestion, TTL.HOUR, "claude-sonnet-4-6", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-4-6", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, suggestion, TTL.HOUR, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     return new Response(JSON.stringify(suggestion), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);

@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-haiku-4-5";
 const FN = "generate-weekly-challenge";
 
 serve(async (req) => {

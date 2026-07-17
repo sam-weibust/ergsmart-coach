@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 1500;
 const FN = "analyze-performance";
 

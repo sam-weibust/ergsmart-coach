@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 const FN = "scan-barcode";
 
 serve(async (req) => {

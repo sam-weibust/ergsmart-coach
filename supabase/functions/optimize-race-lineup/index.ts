@@ -26,7 +26,7 @@ serve(async (req) => {
     const cacheKey = `lineup:${team_id}:${boat_class}:${hashKey({ athlete_ids, locked_seats, factor_weights })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-4-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -73,7 +73,7 @@ Respond with ONLY valid JSON:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-5",
         max_tokens: 800,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -92,8 +92,8 @@ Respond with ONLY valid JSON:
     const lineup = JSON.parse(text.slice(start, end + 1));
 
     const usage = result?.usage ?? {};
-    await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, "claude-sonnet-4-5", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-4-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
+    await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
     return new Response(JSON.stringify(lineup), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);
