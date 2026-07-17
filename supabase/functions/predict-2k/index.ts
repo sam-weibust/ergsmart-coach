@@ -84,7 +84,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 200,
+        max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),

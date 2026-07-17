@@ -46,6 +46,15 @@ serve(async (req) => {
       });
     }
 
+    // image_base64 may be a data URL ("data:image/png;base64,...") or raw base64
+    let mediaType = "image/jpeg";
+    let base64Data = image_base64;
+    const dataUrlMatch = image_base64.match(/^data:([^;]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      mediaType = dataUrlMatch[1];
+      base64Data = dataUrlMatch[2];
+    }
+
     // Failsafe 2: cache before the API call (image input is deterministic).
     const cacheKey = `${FN}_${hashKey({ image: image_base64 })}`;
     const cached = await getCached(supabase, cacheKey);
@@ -91,8 +100,12 @@ Your job:
               role: "user",
               content: [
                 {
-                  type: "input_image",
-                  image: image_base64,
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: mediaType,
+                    data: base64Data,
+                  },
                 },
                 {
                   type: "text",
