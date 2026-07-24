@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { invokeAI } from "@/lib/aiInvoke";
+import { generateWorkoutStream } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1074,8 +1074,8 @@ export const WorkoutPlanSection = () => {
 
       const { data: freshGoals } = await supabase.from("user_goals").select("*").eq("user_id", user.id).maybeSingle();
 
-      const { data, error } = await invokeAI("generate-workout", {
-        body: {
+      const data = await generateWorkoutStream(
+        {
           user_id: user.id,
           workout_type: "plan",
           preferences: {
@@ -1097,10 +1097,15 @@ export const WorkoutPlanSection = () => {
             include_two_a_days: prefs.include_two_a_days,
           },
         },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+        {
+          // Advance the batch counter as each 4-week chunk streams in.
+          onChunk: (c) =>
+            setGenerationProgress({
+              currentBatch: Math.min(batches, Math.max(1, Math.ceil(c.weeksSoFar / 4))),
+              totalBatches: batches,
+            }),
+        },
+      );
 
       // Validate completeness before saving
       const returnedWeeks = Array.isArray(data?.plan) ? data.plan : (Array.isArray(data) ? data : []);

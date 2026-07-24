@@ -184,6 +184,65 @@ function buildPersonalizationPrompt(
   return lines.join("\n");
 }
 
+// Stream an Anthropic Messages request, accumulating the text server-side while
+// invoking onProgress as tokens arrive. Streaming keeps bytes flowing so the
+// edge function never hits the 150s idle timeout on long generations.
+async function streamAnthropicText(
+  apiKey: string,
+  requestBody: Record<string, unknown>,
+  onProgress?: (charsSoFar: number) => void,
+): Promise<{ ok: boolean; status: number; text: string; usage: any; errorText?: string }> {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...requestBody, stream: true }),
+  });
+  if (!resp.ok || !resp.body) {
+    const errorText = await resp.text().catch(() => "");
+    return { ok: false, status: resp.status, text: "", usage: {}, errorText };
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let usage: any = {};
+  let lastTick = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const evt = JSON.parse(data);
+        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+          text += evt.delta.text;
+          if (onProgress && text.length - lastTick >= 800) {
+            lastTick = text.length;
+            onProgress(text.length);
+          }
+        } else if (evt.type === "message_start" && evt.message?.usage) {
+          usage = { ...usage, ...evt.message.usage };
+        } else if (evt.type === "message_delta" && evt.usage) {
+          usage = { ...usage, ...evt.usage };
+        }
+      } catch {
+        // ignore keepalive / partial lines
+      }
+    }
+  }
+  return { ok: true, status: resp.status, text, usage };
+}
+
 serve(async (req) => {
   console.log("generate-workout: function started");
 
@@ -430,197 +489,207 @@ Plan array MUST contain exactly ${totalWeeks} week objects.`.trim();
       return null;
     };
 
-    let parsed: any;
+    // Server-Sent Events: stream generation to the client so the connection
+    // never idles past the 150s edge-function timeout. Each 4-week chunk streams
+    // from Anthropic (bytes flow the whole time) and is pushed to the client the
+    // moment it validates; the final `done` event carries the complete plan.
+    const encoder = new TextEncoder();
 
-    if (totalWeeks > 12) {
-      // Chunked generation: 4 weeks per chunk
-      console.log(`generate-workout: chunked generation for ${totalWeeks} weeks`);
-      const allWeeks: any[] = [];
-      const chunkSize = 4;
-      let chunkInputTokens = 0;
-      let chunkOutputTokens = 0;
+    const stream = new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        const send = (event: string, data: unknown) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          } catch { /* client disconnected */ }
+        };
+        const close = () => { if (!closed) { closed = true; try { controller.close(); } catch { /* already closed */ } } };
 
-      for (let chunkStart = 1; chunkStart <= totalWeeks; chunkStart += chunkSize) {
-        const chunkEnd = Math.min(chunkStart + chunkSize - 1, totalWeeks);
-        console.log(`generate-workout: generating chunk weeks ${chunkStart}-${chunkEnd}`);
+        try {
+          let parsed: any;
+          let inTok = 0;
+          let outTok = 0;
 
-        const chunkSystemPrompt = `${systemPrompt}
+          if (totalWeeks > 12) {
+            // Chunked generation: 4 weeks per chunk, streamed independently.
+            console.log(`generate-workout: chunked generation for ${totalWeeks} weeks`);
+            const allWeeks: any[] = [];
+            const chunkSize = 4;
+
+            for (let chunkStart = 1; chunkStart <= totalWeeks; chunkStart += chunkSize) {
+              const chunkEnd = Math.min(chunkStart + chunkSize - 1, totalWeeks);
+              const expectedChunkWeeks = chunkEnd - chunkStart + 1;
+              console.log(`generate-workout: generating chunk weeks ${chunkStart}-${chunkEnd}`);
+              send("progress", { phase: "chunk_start", chunkStart, chunkEnd, weeksSoFar: allWeeks.length, totalWeeks });
+
+              const chunkSystemPrompt = `${systemPrompt}
 
 CHUNK INSTRUCTION: Generate ONLY weeks ${chunkStart} through ${chunkEnd} (of the total ${totalWeeks} weeks).
-Output ONLY a valid JSON array containing exactly ${chunkEnd - chunkStart + 1} week objects. No wrapping object. No text before or after.
+Output ONLY a valid JSON array containing exactly ${expectedChunkWeeks} week objects. No wrapping object. No text before or after.
 Week number values must be ${chunkStart} through ${chunkEnd}.`;
 
-        const expectedChunkWeeks = chunkEnd - chunkStart + 1;
-        let chunkWeeks: any[] | null = null;
+              let chunkWeeks: any[] | null = null;
 
-        // Up to 2 attempts per chunk: reject and retry once if the AI truncates or
-        // returns weeks with empty days, so an incomplete chunk never reaches the plan.
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          const chunkResponse = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-              "x-api-key": ANTHROPIC_API_KEY,
-              "anthropic-version": "2023-06-01",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "claude-sonnet-5",
-              max_tokens: 16000,
-              stream: false,
-              thinking: { type: "disabled" },
-              system: chunkSystemPrompt,
-              messages: [{ role: "user", content: `Generate weeks ${chunkStart} through ${chunkEnd} of the training plan as a JSON array. Each week MUST contain all 7 days (Monday–Sunday) with fully populated required sessions. Week objects must have week numbers ${chunkStart}-${chunkEnd}.` }],
-            }),
-          });
+              // Up to 2 attempts per chunk: reject and retry once if the AI truncates
+              // or returns weeks with empty days, so an incomplete chunk never ships.
+              for (let attempt = 1; attempt <= 2; attempt++) {
+                const r = await streamAnthropicText(
+                  ANTHROPIC_API_KEY,
+                  {
+                    model: "claude-sonnet-5",
+                    max_tokens: 16000,
+                    thinking: { type: "disabled" },
+                    // cache_control lets the large shared prompt be reused across chunks.
+                    system: [{ type: "text", text: chunkSystemPrompt, cache_control: { type: "ephemeral" } }],
+                    messages: [{ role: "user", content: `Generate weeks ${chunkStart} through ${chunkEnd} of the training plan as a JSON array. Each week MUST contain all 7 days (Monday–Sunday) with fully populated required sessions. Week objects must have week numbers ${chunkStart}-${chunkEnd}.` }],
+                  },
+                  (chars) => send("progress", { phase: "streaming", chunkStart, chunkEnd, chars, weeksSoFar: allWeeks.length, totalWeeks }),
+                );
 
-          if (!chunkResponse.ok) {
-            const t = await chunkResponse.text();
-            console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} error:`, t);
-            await recordApiError(supabase, "generate-workout");
-            if (attempt === 2) {
-              return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
-                status: 502,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+                if (!r.ok) {
+                  console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} error:`, r.errorText);
+                  await recordApiError(supabase, "generate-workout");
+                  if (attempt === 2) {
+                    await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: inTok, output_tokens: outTok, cache_hit: false });
+                    send("error", { error: "AI service unavailable", detail: r.errorText });
+                    close();
+                    return;
+                  }
+                  continue;
+                }
+                await recordApiSuccess(supabase, "generate-workout");
+                inTok += r.usage?.input_tokens ?? 0;
+                outTok += r.usage?.output_tokens ?? 0;
+
+                const candidate = tryParseJsonArray(r.text);
+                const issue = !candidate
+                  ? "invalid JSON"
+                  : candidate.length !== expectedChunkWeeks
+                    ? `expected ${expectedChunkWeeks} weeks, got ${candidate.length}`
+                    : candidate.some((w: any) => !weekIsComplete(w))
+                      ? "incomplete week(s)"
+                      : null;
+
+                if (!issue) { chunkWeeks = candidate; break; }
+                console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} rejected: ${issue}`);
+              }
+
+              if (!chunkWeeks) {
+                console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} failed after retry`);
+                await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: inTok, output_tokens: outTok, cache_hit: false });
+                send("error", { error: `Plan generation failed for weeks ${chunkStart}-${chunkEnd}. Please try again.` });
+                close();
+                return;
+              }
+
+              allWeeks.push(...chunkWeeks);
+              console.log(`generate-workout: chunk ${chunkStart}-${chunkEnd} added ${chunkWeeks.length} weeks (total so far: ${allWeeks.length})`);
+              // Push the completed chunk to the client so it can render as it arrives.
+              send("chunk", { weeks: chunkWeeks, chunkStart, chunkEnd, weeksSoFar: allWeeks.length, totalWeeks });
             }
-            continue;
+
+            parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
+            await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: inTok, output_tokens: outTok, cache_hit: false });
+            await recordUsage(supabase, user_id, inTok + outTok);
+          } else {
+            // Single streamed call for <= 12 weeks, with one retry if incomplete.
+            console.log("generate-workout: streaming Anthropic API (single call)");
+
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              send("progress", { phase: "streaming", attempt, totalWeeks });
+              const r = await streamAnthropicText(
+                ANTHROPIC_API_KEY,
+                {
+                  model: "claude-sonnet-5",
+                  max_tokens: 16000,
+                  thinking: { type: "disabled" },
+                  system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+                  messages: [{ role: "user", content: `Generate the complete ${durationLabel} training plan. Every week must include all 7 days (Monday–Sunday) with fully populated required sessions. Output only the JSON object.` }],
+                },
+                (chars) => send("progress", { phase: "streaming", chars, totalWeeks }),
+              );
+
+              console.log(`generate-workout: single-call attempt ${attempt} ok=${r.ok} status=${r.status}`);
+
+              if (!r.ok) {
+                console.error("generate-workout: Anthropic error:", r.errorText);
+                await recordApiError(supabase, "generate-workout");
+                if (attempt === 2) {
+                  await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: inTok, output_tokens: outTok, cache_hit: false });
+                  send("error", { error: "AI service unavailable", detail: r.errorText });
+                  close();
+                  return;
+                }
+                continue;
+              }
+              await recordApiSuccess(supabase, "generate-workout");
+              inTok += r.usage?.input_tokens ?? 0;
+              outTok += r.usage?.output_tokens ?? 0;
+
+              let candidate: any = r.text ? tryParseJson(r.text) : null;
+
+              // JSON repair pass (cheap Haiku call) before giving up on this attempt.
+              if (!candidate && r.text) {
+                console.warn("generate-workout: parse failed, attempting repair pass");
+                const rep = await streamAnthropicText(ANTHROPIC_API_KEY, {
+                  model: "claude-haiku-4-5",
+                  max_tokens: 16000,
+                  thinking: { type: "disabled" },
+                  system: "You are a JSON repair tool. Output only valid JSON. No text before or after. Fix any syntax errors in the training plan JSON provided.",
+                  messages: [{ role: "user", content: r.text }],
+                });
+                if (rep.ok) candidate = tryParseJson(rep.text);
+              }
+
+              const issue = !candidate
+                ? "invalid JSON"
+                : planIssue(Array.isArray(candidate?.plan) ? candidate.plan : [], totalWeeks);
+
+              if (!issue) { parsed = candidate; break; }
+              console.warn(`generate-workout: single-call attempt ${attempt} rejected: ${issue}`);
+            }
+
+            await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: inTok, output_tokens: outTok, cache_hit: false });
+            await recordUsage(supabase, user_id, inTok + outTok);
+
+            // Emit a single chunk so the client's combine logic is uniform.
+            if (parsed) {
+              const weeks = Array.isArray(parsed.plan) ? parsed.plan : [];
+              send("chunk", { weeks, chunkStart: 1, chunkEnd: totalWeeks, weeksSoFar: weeks.length, totalWeeks });
+            }
           }
-          await recordApiSuccess(supabase, "generate-workout");
 
-          const chunkResult = await chunkResponse.json();
-          const chunkUsage = chunkResult?.usage ?? {};
-          chunkInputTokens += chunkUsage.input_tokens ?? 0;
-          chunkOutputTokens += chunkUsage.output_tokens ?? 0;
-          const chunkText = chunkResult?.content?.[0]?.text ?? "";
-          const candidate = tryParseJsonArray(chunkText);
-
-          const issue = !candidate
-            ? "invalid JSON"
-            : candidate.length !== expectedChunkWeeks
-              ? `expected ${expectedChunkWeeks} weeks, got ${candidate.length}`
-              : candidate.some((w: any) => !weekIsComplete(w))
-                ? "incomplete week(s)"
-                : null;
-
-          if (!issue) { chunkWeeks = candidate; break; }
-          console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} rejected: ${issue}`);
-        }
-
-        if (!chunkWeeks) {
-          console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} failed after retry`);
-          return new Response(JSON.stringify({ error: `Plan generation failed for weeks ${chunkStart}-${chunkEnd}. Please try again.` }), {
-            status: 422,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        allWeeks.push(...chunkWeeks);
-        console.log(`generate-workout: chunk ${chunkStart}-${chunkEnd} added ${chunkWeeks.length} weeks (total so far: ${allWeeks.length})`);
-      }
-
-      parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
-      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: chunkInputTokens, output_tokens: chunkOutputTokens, cache_hit: false });
-      await recordUsage(supabase, user_id, chunkInputTokens + chunkOutputTokens);
-    } else {
-      // Single call for <= 12 weeks, with one retry if the plan comes back incomplete.
-      console.log("generate-workout: calling Anthropic API (single call)");
-      let usageInput = 0;
-      let usageOutput = 0;
-
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "anthropic-beta": "prompt-caching-2024-07-31",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-5",
-            max_tokens: 16000,
-            stream: false,
-            thinking: { type: "disabled" },
-            system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-            messages: [{ role: "user", content: `Generate the complete ${durationLabel} training plan. Every week must include all 7 days (Monday–Sunday) with fully populated required sessions. Output only the JSON object.` }],
-          }),
-        });
-
-        console.log(`generate-workout: single-call attempt ${attempt} status:`, anthropicResponse.status);
-
-        if (!anthropicResponse.ok) {
-          const t = await anthropicResponse.text();
-          console.error("generate-workout: Anthropic error:", t);
-          await recordApiError(supabase, "generate-workout");
-          if (attempt === 2) {
-            return new Response(JSON.stringify({ error: "AI service unavailable", detail: t }), {
-              status: 502,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+          // Final completeness gate — never cache or return an incomplete plan.
+          const planWeeks = Array.isArray(parsed?.plan) ? parsed.plan : [];
+          const finalIssue = planIssue(planWeeks, totalWeeks);
+          if (finalIssue) {
+            console.warn(`generate-workout: rejecting incomplete plan: ${finalIssue}`);
+            send("error", { error: `Plan generation incomplete (${finalIssue}). Please try again.` });
+            close();
+            return;
           }
-          continue;
+
+          await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-5", 0, 0);
+          send("done", parsed);
+          close();
+        } catch (streamErr) {
+          console.error("generate-workout: stream error:", streamErr);
+          send("error", { error: streamErr instanceof Error ? streamErr.message : "Unknown error" });
+          close();
         }
-        await recordApiSuccess(supabase, "generate-workout");
+      },
+    });
 
-        const result = await anthropicResponse.json();
-        const usage = result?.usage ?? {};
-        usageInput += usage.input_tokens ?? 0;
-        usageOutput += usage.output_tokens ?? 0;
-        const text = result?.content?.[0]?.text;
-
-        let candidate: any = text ? tryParseJson(text) : null;
-
-        // JSON repair pass (cheap Haiku call) before giving up on this attempt.
-        if (!candidate && text) {
-          console.warn("generate-workout: parse failed, attempting repair pass");
-          const repairResponse = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "claude-haiku-4-5",
-              max_tokens: 16000,
-              stream: false,
-              thinking: { type: "disabled" },
-              system: "You are a JSON repair tool. Output only valid JSON. No text before or after. Fix any syntax errors in the training plan JSON provided.",
-              messages: [{ role: "user", content: text }],
-            }),
-          });
-          if (repairResponse.ok) {
-            const repairResult = await repairResponse.json();
-            candidate = tryParseJson(repairResult?.content?.[0]?.text ?? "");
-          }
-        }
-
-        const issue = !candidate
-          ? "invalid JSON"
-          : planIssue(Array.isArray(candidate?.plan) ? candidate.plan : [], totalWeeks);
-
-        if (!issue) { parsed = candidate; break; }
-        console.warn(`generate-workout: single-call attempt ${attempt} rejected: ${issue}`);
-      }
-
-      await logUsage(supabase, { user_id, function_name: "generate-workout", model: "claude-sonnet-5", input_tokens: usageInput, output_tokens: usageOutput, cache_hit: false });
-      await recordUsage(supabase, user_id, usageInput + usageOutput);
-    }
-
-    // Final completeness gate — never cache or return an incomplete plan.
-    const planWeeks = Array.isArray(parsed?.plan) ? parsed.plan : [];
-    const finalIssue = planIssue(planWeeks, totalWeeks);
-    if (finalIssue) {
-      console.warn(`generate-workout: rejecting incomplete plan: ${finalIssue}`);
-      return new Response(JSON.stringify({
-        error: `Plan generation incomplete (${finalIssue}). Please try again.`,
-      }), {
-        status: 422,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    await setCached(supabase, cacheKey, parsed, TTL.DAY, "claude-sonnet-5", 0, 0);
-
-    return new Response(JSON.stringify(parsed), {
+    return new Response(stream, {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Cache": "MISS",
+      },
     });
   } catch (e) {
     console.error("generate-workout: unhandled error:", e);

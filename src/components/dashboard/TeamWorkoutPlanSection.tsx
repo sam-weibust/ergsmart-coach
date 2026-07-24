@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { invokeAI } from "@/lib/aiInvoke";
+import { generateWorkoutStream } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -97,18 +97,23 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
       // Initialize progress tracking
       setGenerationProgress({ currentBatch: 1, totalBatches });
 
-      const { data, error } = await invokeAI("generate-workout", {
-        body: {
+      const data = await generateWorkoutStream(
+        {
           months: parseInt(months),
           weight: profile.weight,
           height: profile.height,
           experience: profile.experience_level || "intermediate",
           goals: profile.goals || "general fitness",
         },
-      });
+        {
+          onChunk: (c) =>
+            setGenerationProgress({
+              currentBatch: Math.min(totalBatches, Math.max(1, Math.ceil(c.weeksSoFar / 4))),
+              totalBatches,
+            }),
+        },
+      );
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
       return data;
     },
     onSuccess: async (data) => {
