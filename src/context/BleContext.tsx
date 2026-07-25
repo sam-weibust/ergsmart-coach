@@ -40,8 +40,9 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
   const [ergConnecting, setErgConnecting] = useState(false);
   const [webErgDevice, setWebErgDevice]   = useState<any | null>(null);
 
-  // Keep a stable ref to deviceId for callbacks
+  // Keep a stable ref to deviceId + name for callbacks / reconnect restore
   const ergDeviceIdRef = useRef<string | null>(null);
+  const ergDeviceNameRef = useRef<string | null>(null);
 
   const connectPM5 = useCallback(async () => {
     setErgConnecting(true);
@@ -58,8 +59,11 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
         ergDeviceIdRef.current = id;
 
         const handleDisconnect = () => {
-          // Always reset connected state and deviceId on any disconnect
+          // Fix 4: reset ALL exposed state on any disconnect — user-initiated OR
+          // device-dropped. Refs are kept so best-effort auto-reconnect can restore.
           setErgConnected(false);
+          setErgDeviceId(null);
+          setErgDeviceName(null);
           // Auto-reconnect (best-effort)
           setTimeout(async () => {
             const currentId = ergDeviceIdRef.current;
@@ -67,6 +71,9 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
             if (!Capacitor.isNativePlatform()) return;
             try {
               await BleClient.connect(currentId, handleDisconnect);
+              // Restore identity on successful reconnect
+              setErgDeviceId(currentId);
+              setErgDeviceName(ergDeviceNameRef.current || 'Concept2 PM5');
               setErgConnected(true);
             } catch {}
           }, 2000);
@@ -94,8 +101,23 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
           throw e;
         }
         setErgDeviceId(id);
+        ergDeviceNameRef.current = device.name || 'Concept2 PM5';
         setErgDeviceName(device.name || 'Concept2 PM5');
         setErgConnected(true);
+
+        // Log all discovered services + characteristics — critical for verifying
+        // the force-curve characteristic UUID on real PM5 hardware.
+        try {
+          const services = await BleClient.getServices(id);
+          for (const svc of services) {
+            console.log('[PM5 discovered service]', svc.uuid);
+            for (const ch of svc.characteristics ?? []) {
+              console.log('[PM5 discovered char]', svc.uuid, '→', ch.uuid);
+            }
+          }
+        } catch (e) {
+          console.warn('[PM5] getServices discovery failed:', e);
+        }
       } else {
         // Web Bluetooth — safe disabled state on mobile web, otherwise picker
         if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
@@ -113,10 +135,15 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
         });
 
         const handleWebDisconnect = async () => {
+          // Fix 4: reset ALL exposed state on any disconnect (user or device-dropped).
           setErgConnected(false);
+          setErgDeviceId(null);
+          setErgDeviceName(null);
           setTimeout(async () => {
             try {
               await device.gatt.connect();
+              setErgDeviceId(device.id);
+              setErgDeviceName(device.name || 'Concept2 PM5');
               setErgConnected(true);
             } catch {}
           }, 2000);
@@ -143,6 +170,7 @@ function BleProviderNative({ children }: { children: React.ReactNode }) {
         }
 
         ergDeviceIdRef.current = device.id;
+        ergDeviceNameRef.current = device.name || 'Concept2 PM5';
         setErgDeviceId(device.id);
         setErgDeviceName(device.name || 'Concept2 PM5');
         setWebErgDevice(device);

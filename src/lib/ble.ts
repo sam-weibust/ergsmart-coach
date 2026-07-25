@@ -57,11 +57,11 @@ export interface InitResult {
   error?: string;
 }
 
-// ── Debug counters (log first 20 strokes per char for field verification) ────
+// ── Debug counters (log first 10 strokes per char for field verification) ────
 const _dbg: Record<string, number> = {};
 function _log(tag: string, dv: DataView, parsed: object) {
   _dbg[tag] = (_dbg[tag] ?? 0) + 1;
-  if (_dbg[tag] > 20) return;
+  if (_dbg[tag] > 10) return;
   const hex = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
     .map(b => b.toString(16).padStart(2, '0')).join(' ');
   console.log(`[PM5 ${tag}] #${_dbg[tag]} hex: ${hex} | parsed:`, parsed);

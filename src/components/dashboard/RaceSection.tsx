@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
-import { toDataView, parseCharacteristic } from "@/lib/ble";
+import { initBle, toDataView, parseCharacteristic } from "@/lib/ble";
 import { useBle } from "@/context/BleContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,8 +92,10 @@ export default function RaceSection() {
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      // Guarded: only call BleClient on native platforms
-      BleClient.initialize({ requestBluetooth: true }).catch(() => setBtSupported(false));
+      // Route through initBle() so BleClient.initialize runs at most once (isInitialized guard).
+      initBle()
+        .then((status) => { if (status !== "ready") setBtSupported(false); })
+        .catch(() => setBtSupported(false));
     } else if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
       setBtSupported(false);
     }

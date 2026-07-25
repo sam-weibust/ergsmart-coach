@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
 import {
+  initBle,
   toDataView,
   parseCharacteristic,
   parseHRMeasurement,
@@ -125,11 +126,13 @@ function LiveErgViewNative() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) { setBtSupported(false); return; }
-    // BleClient.initialize is guarded by isNativePlatform check above
-    BleClient.initialize({ requestBluetooth: true }).catch((err) => {
-      console.error("[LiveErgView] BleClient.initialize() failed:", err?.message, err?.code, err);
-      setBtSupported(false);
-    });
+    // Route through initBle() so BleClient.initialize runs at most once (isInitialized guard).
+    initBle()
+      .then((status) => { if (status !== "ready") setBtSupported(false); })
+      .catch((err) => {
+        console.error("[LiveErgView] initBle() failed:", err);
+        setBtSupported(false);
+      });
   }, []);
 
   const [hrConnected,  setHrConnected]  = useState(false);
