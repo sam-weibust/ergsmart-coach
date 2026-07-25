@@ -194,7 +194,10 @@ ${file_content}`;
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 8000,
+        // Disable adaptive thinking (Sonnet 5 default) and widen the budget so the
+        // parsed plan JSON isn't truncated (8000 with thinking on failed to parse).
+        max_tokens: 16000,
+        thinking: { type: "disabled" },
         system:
           "You are a rowing training plan parser. Parse the provided training plan spreadsheet content and return ONLY valid JSON with no explanation or markdown.",
         messages: [{ role: "user", content: userMessage }],

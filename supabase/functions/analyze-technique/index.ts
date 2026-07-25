@@ -107,7 +107,10 @@ Return ONLY valid JSON:
 
   const claudeRequestBody = {
     model: MODEL,
-    max_tokens: 800,
+    // Sonnet 5 runs adaptive thinking unless disabled, which ate the 800-token
+    // budget and truncated the critique JSON. Disable it and give room for the JSON.
+    max_tokens: 2500,
+    thinking: { type: "disabled" },
     system: systemPrompt,
     messages: [{
       role: "user",

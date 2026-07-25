@@ -71,7 +71,10 @@ Respond with ONLY valid JSON:
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        // Disable adaptive thinking (Sonnet 5 default) — otherwise it consumed the
+        // 1024-token budget and returned an empty {} analysis.
+        max_tokens: 2048,
+        thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
     });

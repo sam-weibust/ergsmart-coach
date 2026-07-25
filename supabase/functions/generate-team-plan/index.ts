@@ -220,7 +220,10 @@ Express all pace targets as 2K±Xs/500m format. Generate all ${weeks} weeks.`;
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 8000,
+        // Disable adaptive thinking (Sonnet 5 default) so the full token budget
+        // goes to the plan JSON; 8000 with thinking on was truncating it.
+        max_tokens: 16000,
+        thinking: { type: "disabled" },
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),

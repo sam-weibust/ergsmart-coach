@@ -204,7 +204,11 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 4000,
+        // A 4-week chunk × 7 days with full required+optional session detail does
+        // not fit in 4000 tokens — the JSON was truncated and failed to parse.
+        // Also disable adaptive thinking (Sonnet 5 default) so the budget goes to JSON.
+        max_tokens: 16000,
+        thinking: { type: "disabled" },
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: prompt }],
       }),

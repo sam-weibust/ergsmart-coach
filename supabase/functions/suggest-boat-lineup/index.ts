@@ -102,7 +102,10 @@ Respond with ONLY valid JSON, no extra text:
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-5",
+        // Disable adaptive thinking (Sonnet 5 default) — it consumed the token
+        // budget and left an empty {} lineup.
         max_tokens: 2048,
+        thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
     });

@@ -114,7 +114,10 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 800,
+      // Sonnet 5's default adaptive thinking ate the 800-token budget, truncating
+      // the critique JSON. Disable thinking and give the JSON room.
+      max_tokens: 2500,
+      thinking: { type: "disabled" },
       system: systemPrompt,
       messages: [{ role: "user", content: messageContent }],
     }),

@@ -22,52 +22,68 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { user_id, athlete_info, target_school } = await req.json();
-    if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+    // Accept both the athlete-app shape ({ user_id, target_school }) and the
+    // RecruitEmailSection shape ({ school, division, profile, goals, gpa, gender, prediction }).
+    const bodyIn = await req.json();
+    const user_id: string | null = bodyIn.user_id ?? null;
+    const target_school: string = bodyIn.target_school ?? bodyIn.school ?? "";
+    const division: string = bodyIn.division ?? "";
+    const gpa = bodyIn.gpa ?? null;
+    const gender = bodyIn.gender ?? null;
+
+    if (!target_school) {
+      return new Response(JSON.stringify({ error: "Missing target school" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Cache by user + target_school hash (7 days)
-    const cacheKey = `recruit_email_${user_id}_${hashKey(target_school || "")}`;
+    // Cache by user (or "anon") + school/athlete hash (7 days)
+    const cacheKey = `recruit_email_${user_id || "anon"}_${hashKey(`${target_school}|${bodyIn.profile?.full_name ?? ""}`)}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
+      if (user_id) await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
     }
 
-    // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
-    const blocked = await preflight(supabase, { userId: user_id, functionName: "generate-recruit-emails", corsHeaders });
-    if (blocked) return blocked;
+    // Failsafe 9 + 1: only enforce per-user limits when a user_id is supplied.
+    if (user_id) {
+      const blocked = await preflight(supabase, { userId: user_id, functionName: "generate-recruit-emails", corsHeaders });
+      if (blocked) return blocked;
+    }
 
-    const [profileRes, goalsRes, ergRes] = await Promise.all([
-      supabase.from("profiles").select("full_name,grad_year,height,weight,experience_level").eq("id", user_id).maybeSingle(),
-      supabase.from("user_goals").select("current_2k_time,goal_2k_time").eq("user_id", user_id).maybeSingle(),
-      supabase.from("erg_workouts").select("workout_date,distance,avg_split").eq("user_id", user_id)
-        .order("workout_date", { ascending: false }).limit(3),
-    ]);
-
-    const profile = profileRes.data;
-    const goals = goalsRes.data;
-    const recentErg = ergRes.data || [];
+    // Prefer athlete data supplied in the body; fall back to DB when a user_id is given.
+    let profile: any = bodyIn.profile ?? null;
+    let goals: any = bodyIn.goals ?? null;
+    let recentErg: any[] = [];
+    if (user_id) {
+      const [profileRes, goalsRes, ergRes] = await Promise.all([
+        supabase.from("profiles").select("full_name,grad_year,height,weight,experience_level").eq("id", user_id).maybeSingle(),
+        supabase.from("user_goals").select("current_2k_time,goal_2k_time").eq("user_id", user_id).maybeSingle(),
+        supabase.from("erg_workouts").select("workout_date,distance,avg_split").eq("user_id", user_id)
+          .order("workout_date", { ascending: false }).limit(3),
+      ]);
+      profile = profile ?? profileRes.data;
+      goals = goals ?? goalsRes.data;
+      recentErg = ergRes.data || [];
+    }
 
     const ergSummary = recentErg.length
-      ? recentErg.map(w => `${w.workout_date}: ${w.distance}m (${w.avg_split})`).join("; ")
+      ? recentErg.map((w: any) => `${w.workout_date}: ${w.distance}m (${w.avg_split})`).join("; ")
       : "No recent erg results";
 
     const systemPrompt = `Rowing recruiting email assistant. Output ONLY valid JSON, no markdown:
 {"general_email":"email","coaches":[{"name":"...","title":"...","email":"...","confidence":"likely","notes":"..."}],"email_campaign":[{"sequence_number":1,"email_type":"Initial Contact","timing":"Send now","subject":"...","body":"...","tips":"..."},{"sequence_number":2,"email_type":"Follow-Up","timing":"2 weeks after","subject":"...","body":"...","tips":"..."},{"sequence_number":3,"email_type":"Final","timing":"4 weeks after","subject":"...","body":"...","tips":"..."}],"campaign_tips":["...","...","..."]}
-Athlete: ${profile?.full_name||"?"}, grad ${profile?.grad_year||"?"}, ${profile?.height||"?"}cm, 2K: ${goals?.current_2k_time||"?"} → ${goals?.goal_2k_time||"?"}. Recent: ${ergSummary}. Target: ${target_school}`;
+Athlete: ${profile?.full_name||"?"}, grad ${profile?.grad_year||profile?.graduation_year||"?"}, ${profile?.height||"?"}cm, GPA ${gpa ?? "?"}, ${gender ?? "?"}, 2K: ${goals?.current_2k_time||"?"} → ${goals?.goal_2k_time||"?"}. Recent: ${ergSummary}. Target: ${target_school}${division ? ` (${division})` : ""}`;
 
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 400,
+        // 400 truncated the 3-email campaign JSON, so it always fell back to empty.
+        max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: "user", content: `Generate recruiting email campaign for: ${target_school}` }],
       }),
@@ -91,8 +107,10 @@ Athlete: ${profile?.full_name||"?"}, grad ${profile?.grad_year||"?"}, ${profile?
     }
 
     await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    if (user_id) {
+      await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+      await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    }
 
     return new Response(JSON.stringify(parsed), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

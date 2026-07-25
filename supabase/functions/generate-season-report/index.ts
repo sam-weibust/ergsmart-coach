@@ -165,12 +165,33 @@ serve(async (req) => {
     const MARGIN = 48;
     const COL_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
-    let page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    // The standard PDF fonts use WinAnsi encoding, which cannot encode characters
+    // like "→" (U+2192) or smart quotes — drawText throws and the whole report 500s.
+    // Normalize common typographic characters and drop anything outside Latin-1.
+    const safe = (t: unknown): string =>
+      String(t ?? "")
+        .replace(/→/g, "->")
+        .replace(/⇒/g, "=>")
+        .replace(/[–—]/g, "-")
+        .replace(/[‘’]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/•/g, "*")
+        .replace(/…/g, "...")
+        .replace(/[^\x00-\xFF]/g, "");
+
+    // Patch each page so every drawText call is sanitized, regardless of call site.
+    const patchPage = (pg: any) => {
+      const orig = pg.drawText.bind(pg);
+      pg.drawText = (text: string, opts: any) => orig(safe(text), opts);
+      return pg;
+    };
+
+    let page = patchPage(pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]));
     let y = PAGE_HEIGHT - MARGIN;
 
     function checkPage(needed = 40) {
       if (y < MARGIN + needed) {
-        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+        page = patchPage(pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]));
         y = PAGE_HEIGHT - MARGIN;
       }
     }
