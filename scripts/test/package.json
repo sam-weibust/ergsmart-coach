@@ -1,0 +1,4 @@
+{
+  "//": "Isolates the sucrase-node test harness from the root package \"type\": \"module\" so it can be require()-loaded.",
+  "type": "commonjs"
+}

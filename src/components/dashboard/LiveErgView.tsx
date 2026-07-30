@@ -9,6 +9,7 @@ import {
   PM5_FORCE_CURVE_CHAR,
   PM5_FORCE_CURVE_LEGACY,
 } from "@/lib/ble";
+import { buildForceCurveAreaData, forceCurveAxisMax } from "@/lib/forceCurve";
 import { useBle } from "@/context/BleContext";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,11 +18,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/TimeInput";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Bluetooth, Heart, Loader2, AlertTriangle, Save } from "lucide-react";
+import { invokeAI } from "@/lib/aiInvoke";
+import { Bluetooth, Heart, Loader2, AlertTriangle, Sparkles, Square } from "lucide-react";
 import ForceCurveCanvas from "./ForceCurveCanvas";
+import { WorkoutFeedback } from "./WorkoutFeedback";
 import { getSessionUser } from '@/lib/getUser';
+import {
+  fmtTime, fmtPace, fmtWatts, fmtStrokeRate, fmtDistance,
+  fmtDriveTime, fmtDriveLength, parseSplitInput,
+  csToInterval, localDateISO,
+} from "@/lib/ergFormat";
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
 const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
@@ -57,46 +66,28 @@ interface StrokePoint {
   hr: number;
 }
 
-// ── Formatters ─────────────────────────────────────────────────
-// mm:ss.t  e.g. 3:42.5
-function fmtTime(cs: number): string {
-  const s      = Math.floor(cs / 100);
-  const tenths = Math.floor((cs % 100) / 10);
-  const h   = Math.floor(s / 3600);
-  const m   = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0)
-    return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}.${tenths}`;
-  return `${m}:${String(sec).padStart(2,"0")}.${tenths}`;
-}
+// Formatters live in src/lib/ergFormat.ts so they can be unit-tested against
+// known PM5 byte payloads (npm run test:pm5).
 
-// mm:ss  e.g. 1:52
-function fmtPace(cs: number): string {
-  if (!cs || cs <= 0 || cs > 100000) return "--:--";
-  const s   = Math.floor(cs / 100);
-  const m   = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
+// Grace period before a dropped PM5 connection counts as the end of the
+// session — BleContext retries the connection at 2 s, so give it room to win.
+const DISCONNECT_SAVE_GRACE_MS = 8000;
 
-// 0.00s  e.g. 0.85s
-function fmtDriveTime(cs: number): string {
-  if (!cs) return "--";
-  return `${(cs / 100).toFixed(2)}s`;
-}
+/**
+ * The erg_workouts row an auto-saved live session writes. Loosely typed on
+ * purpose: insertErgWorkout() deletes keys the database hasn't migrated yet.
+ */
+type ErgWorkoutRow = Record<string, string | number | object | null | undefined>;
 
-// 0.00m  e.g. 1.23m
-function fmtDriveLength(cm: number): string {
-  if (!cm) return "--";
-  return `${(cm / 100).toFixed(2)}m`;
-}
-
-function parseSplitInput(str: string): number | null {
-  const match = str.match(/^(\d+):(\d{1,2}(?:\.\d)?)$/);
-  if (!match) return null;
-  const mins = parseInt(match[1], 10);
-  const secs = parseFloat(match[2]);
-  return Math.round((mins * 60 + secs) * 100); // centiseconds
+/** AI feedback shape returned by the analyze-workout edge function. */
+interface AIFeedback {
+  overallRating: "excellent" | "good" | "average" | "needs_improvement";
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  recommendation: string;
+  motivationalMessage: string;
+  progressNote?: string;
 }
 
 const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"];
@@ -144,6 +135,10 @@ function LiveErgViewNative() {
   const [strokes, setStrokes] = useState<StrokePoint[]>([]);
   const [saved,   setSaved]   = useState(false);
 
+  const [analyzing,    setAnalyzing]    = useState(false);
+  const [feedback,     setFeedback]     = useState<AIFeedback | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
   const [currentCurve,        setCurrentCurve]        = useState<number[]>([]);
   const [prevCurve,           setPrevCurve]           = useState<number[]>([]);
   const [allCurves,           setAllCurves]           = useState<number[][]>([]);
@@ -162,6 +157,18 @@ function LiveErgViewNative() {
   const dataRef         = useRef<Partial<LiveData>>({}); // keep in sync for save
   const currentCurveRef = useRef<number[]>([]);
   const allCurvesRef    = useRef<number[][]>([]);
+
+  // Every reading taken during the session — averages/extremes are computed from
+  // these on save, not from the last frame the PM5 happened to send.
+  const splitSamplesRef = useRef<number[]>([]);   // centiseconds / 500 m
+  const wattSamplesRef  = useRef<number[]>([]);   // watts
+  const spmSamplesRef   = useRef<number[]>([]);   // strokes / minute
+  const hrSamplesRef    = useRef<number[]>([]);   // bpm
+  // Peak elapsed time / distance seen, so a disconnect frame of zeros can't
+  // shrink the saved workout.
+  const peakElapsedRef  = useRef(0);
+  const peakDistRef     = useRef(0);
+  const disconnectSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync strokes & data to refs for callbacks
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
@@ -253,6 +260,15 @@ function LiveErgViewNative() {
     if (d.strokeRate !== undefined) latestSpm.current = d.strokeRate;
     if (d.heartRate !== undefined && d.heartRate > 0) latestHr.current = d.heartRate;
 
+    // Session-long sample collection for the auto-save averages. Bounds mirror
+    // the sanity ranges in ble.ts so an idle or garbled frame can't skew a mean.
+    if (d.splitPace   && d.splitPace >= 6000 && d.splitPace <= 30000) splitSamplesRef.current.push(d.splitPace);
+    if (d.power       && d.power > 0 && d.power <= 2000)              wattSamplesRef.current.push(d.power);
+    if (d.strokeRate  && d.strokeRate > 0 && d.strokeRate <= 60)      spmSamplesRef.current.push(d.strokeRate);
+    if (d.heartRate   && d.heartRate >= 40 && d.heartRate <= 220)     hrSamplesRef.current.push(d.heartRate);
+    if (d.elapsedTime && d.elapsedTime > peakElapsedRef.current)      peakElapsedRef.current = d.elapsedTime;
+    if (d.distance    && d.distance    > peakDistRef.current)         peakDistRef.current    = d.distance;
+
     // Only record when actually rowing and we have a valid split
     setData(prev => {
       const next = { ...prev, ...d };
@@ -277,70 +293,129 @@ function LiveErgViewNative() {
     });
   }, []);
 
+  // ── Session end ──────────────────────────────────────────────
+  // A Bluetooth session is never saved by hand: it saves itself when the PM5
+  // reports Finished, when the athlete taps Stop, or when the PM5 goes away.
+  const endSession = useCallback((reason: "finished" | "stop" | "disconnect") => {
+    if (autoSavedRef.current) return;
+    // Nothing rowed — don't create an empty row.
+    if (!peakDistRef.current || !peakElapsedRef.current) return;
+    autoSavedRef.current = true;
+    console.log(`[LiveErg] session ended (${reason}) — auto-saving`);
+    void saveWorkout(dataRef.current, strokesRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-save on Rowing→Finished
   useEffect(() => {
     const prev = prevStateRef.current;
     const curr = data.workoutState;
     prevStateRef.current = curr;
 
-    if (prev === 2 && curr === 4 && !autoSavedRef.current) {
-      autoSavedRef.current = true;
-      saveWorkout(dataRef.current, strokesRef.current);
+    if (prev === 2 && curr === 4) endSession("finished");
+  }, [data.workoutState, endSession]);
+
+  // Auto-save when the PM5 drops out mid-session. BleContext retries at 2 s, so
+  // wait out the grace period first — a brief dropout is not the end of a piece.
+  useEffect(() => {
+    if (ergConnected) {
+      if (disconnectSaveTimer.current) {
+        clearTimeout(disconnectSaveTimer.current);
+        disconnectSaveTimer.current = null;
+      }
+      return;
     }
-  }, [data.workoutState]);
+    if (!wasConnectedRef.current || autoSavedRef.current) return;
+    if (!peakDistRef.current || !peakElapsedRef.current) return;
+
+    disconnectSaveTimer.current = setTimeout(
+      () => endSession("disconnect"),
+      DISCONNECT_SAVE_GRACE_MS,
+    );
+    return () => {
+      if (disconnectSaveTimer.current) {
+        clearTimeout(disconnectSaveTimer.current);
+        disconnectSaveTimer.current = null;
+      }
+    };
+  }, [ergConnected, endSession]);
+
+  // Leaving the Live Erg screen mid-session ends it too — the accumulated
+  // readings live in this component, so unmounting without saving loses them.
+  useEffect(() => () => { endSession("stop"); }, [endSession]);
+
+  const mean = (xs: number[]) =>
+    xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
   const saveWorkout = async (d: Partial<LiveData>, pts: StrokePoint[]) => {
-    if (!d.distance || !d.elapsedTime) return;
+    // Prefer the session peaks over the last frame received — a disconnect or
+    // reset frame can arrive with zeroed counters.
+    const elapsedCs = Math.max(peakElapsedRef.current, d.elapsedTime ?? 0);
+    const distanceM = Math.max(peakDistRef.current, d.distance ?? 0);
+    if (!distanceM || !elapsedCs) return;
+
     try {
       const user = await getSessionUser();
       if (!user) return;
 
-      const dist    = Math.round(d.distance);
-      const dur     = fmtTime(d.elapsedTime);
-      const avgSplit = d.elapsedTime > 0 && d.distance > 0
-        ? fmtPace(Math.round((d.elapsedTime / d.distance) * 500))
-        : null;
-      const avgWatts = pts.length > 0 && d.power
-        ? Math.round(d.power) : null;
+      const dist = Math.round(distanceM);
 
-      // Per user spec: save the last 10 force curves to the erg workout record
+      // Averages over every reading taken during the session. Fall back to the
+      // distance/time quotient if the PM5 sent no usable split frames.
+      const avgSplitCs = mean(splitSamplesRef.current)
+        ?? (elapsedCs > 0 && distanceM > 0 ? (elapsedCs / distanceM) * 500 : null);
+      const minSplitCs = splitSamplesRef.current.length
+        ? Math.min(...splitSamplesRef.current) : null;
+      const avgWatts   = mean(wattSamplesRef.current);
+      const maxWatts   = wattSamplesRef.current.length
+        ? Math.max(...wattSamplesRef.current) : null;
+      const avgSpm     = mean(spmSamplesRef.current);
+      const avgHr      = mean(hrSamplesRef.current);
+      const maxHr      = hrSamplesRef.current.length ? Math.max(...hrSamplesRef.current) : null;
+      const minHr      = hrSamplesRef.current.length ? Math.min(...hrSamplesRef.current) : null;
+
+      // Per user spec: the last 10 strokes' force curves go on the record.
       const lastTenCurves = allCurvesRef.current.slice(-10);
 
-      const baseRow: any = {
-        user_id:        user.id,
-        workout_type:   "steady_state",
-        distance:       dist,
-        duration:       dur,
-        avg_split:      avgSplit,
-        avg_heart_rate: d.heartRate || hrBpm || null,
-        calories:       d.calories  || null,
-        avg_watts:      avgWatts,
-        stroke_data: (() => {
-          const hasCurves = allCurvesRef.current.length > 0;
-          if (pts.length > 0 && hasCurves) return { strokes: pts, forceCurves: allCurvesRef.current };
-          return pts.length > 0 ? pts : null;
-        })(),
+      // INTERVAL columns need a fully-qualified literal — Postgres reads a bare
+      // "1:50" as 1 h 50 min, so csToInterval() is required, not fmtPace().
+      const row: ErgWorkoutRow = {
+        user_id:             user.id,
+        workout_date:        localDateISO(),
+        workout_type:        "live_erg",
+        distance:            dist,
+        elapsed_time:        Math.round(elapsedCs / 100),         // whole seconds
+        duration:            csToInterval(elapsedCs),
+        avg_split:           avgSplitCs != null ? csToInterval(Math.round(avgSplitCs)) : null,
+        split_best:          minSplitCs != null ? csToInterval(minSplitCs) : null,
+        avg_watts:           avgWatts != null ? Math.round(avgWatts) : null,
+        max_watts:           maxWatts,
+        stroke_rate_average: avgSpm != null ? Math.round(avgSpm) : null,
+        stroke_rate:         avgSpm != null ? Math.round(avgSpm) : null,
+        stroke_count:        allCurvesRef.current.length || d.strokeCount || null,
+        avg_heart_rate:      avgHr != null ? Math.round(avgHr) : (hrBpm ?? null),
+        heart_rate_average:  avgHr != null ? Math.round(avgHr) : null,
+        heart_rate_max:      maxHr,
+        heart_rate_min:      minHr,
+        calories:            d.calories || null,
+        force_curves:        lastTenCurves.length > 0 ? lastTenCurves : null,
+        // HistorySection renders stroke_data.forceCurves — cap it so an hour-long
+        // piece doesn't push a few hundred KB of JSONB into the row.
+        stroke_data:         pts.length > 0
+          ? { strokes: pts, forceCurves: allCurvesRef.current.slice(-60) }
+          : null,
       };
 
-      // Try with force_curves column (added by migration 20260611000000).
-      // If the column doesn't exist on this database yet, retry without.
-      const rowWithCurves = lastTenCurves.length > 0
-        ? { ...baseRow, force_curves: lastTenCurves }
-        : baseRow;
-      let insertErr: any = null;
-      try {
-        const { error } = await (supabase.from("erg_workouts") as any).insert(rowWithCurves);
-        if (error) insertErr = error;
-      } catch (e) { insertErr = e; }
-      if (insertErr) {
-        const msg = String(insertErr?.message ?? insertErr ?? '');
-        if (/force_curves/i.test(msg) || /column/i.test(msg)) {
-          // Column doesn't exist yet — fall back to no-column insert
-          await (supabase.from("erg_workouts") as any).insert(baseRow);
-        } else {
-          throw insertErr;
-        }
-      }
+      const saved = await insertErgWorkout(row);
+      setSaved(true);
+
+      toast({
+        title: "Workout saved",
+        description: "Analyzing performance…",
+      });
+
+      // Fire the AI analysis without blocking the rest of the save.
+      void runAnalysis(saved?.id ?? null, row, user.id);
 
       // Save to erg_scores for leaderboard-eligible distances
       const BENCHMARK_DISTANCES: Record<number, string> = {
@@ -350,41 +425,118 @@ function LiveErgViewNative() {
       const matchedDist = Object.keys(BENCHMARK_DISTANCES).find(
         bd => Math.abs(dist - parseInt(bd)) <= TOLERANCE
       );
-      const is60min = Math.abs(d.elapsedTime / 100 - 3600) <= 30; // ±30s
+      const is60min = Math.abs(elapsedCs / 100 - 3600) <= 30; // ±30s
       const testType = is60min
         ? "60min"
         : matchedDist ? BENCHMARK_DISTANCES[parseInt(matchedDist)] : null;
 
       if (testType) {
-        const timeSeconds = d.elapsedTime / 100;
-        const splitSecs = d.elapsedTime > 0 && d.distance > 0
-          ? (timeSeconds / dist) * 500 : null;
+        const timeSeconds = elapsedCs / 100;
+        const splitSecs = avgSplitCs != null ? avgSplitCs / 100 : null;
         const { data: profile } = await supabase
           .from("profiles")
           .select("weight_kg")
           .eq("id", user.id)
           .maybeSingle();
-        const wkg = avgWatts && profile?.weight_kg
-          ? avgWatts / profile.weight_kg : null;
+        const watts = avgWatts != null ? Math.round(avgWatts) : null;
+        const wkg = watts && profile?.weight_kg
+          ? watts / profile.weight_kg : null;
         await (supabase.from("erg_scores") as any).insert({
           user_id: user.id,
           test_type: testType,
           time_seconds: testType === "60min" ? null : Math.round(timeSeconds),
           total_meters: testType === "60min" ? dist : null,
           avg_split_seconds: splitSecs,
-          watts: avgWatts,
+          watts,
           watts_per_kg: wkg,
           source: "live_erg",
           is_verified: true,
           to_leaderboard: true,
         });
       }
-
-      setSaved(true);
-      toast({ title: "Workout saved", description: `${dist}m in ${dur}` });
-
     } catch (e: any) {
+      autoSavedRef.current = false; // let a retry (Stop / disconnect) through
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  /**
+   * Insert into erg_workouts, degrading gracefully if this database hasn't run
+   * every column migration yet: on an unknown-column error, drop that column
+   * and retry rather than losing the whole session.
+   */
+  const insertErgWorkout = async (row: ErgWorkoutRow) => {
+    const OPTIONAL_COLS = [
+      "force_curves", "elapsed_time", "max_watts", "split_best",
+      "stroke_rate_average", "stroke_rate", "stroke_count",
+      "heart_rate_average", "heart_rate_max", "heart_rate_min", "stroke_data",
+    ];
+    const attempt: ErgWorkoutRow = { ...row };
+
+    for (let i = 0; i <= OPTIONAL_COLS.length; i++) {
+      const { data, error } = await (supabase.from("erg_workouts") as any)
+        .insert(attempt).select("id").single();
+      if (!error) return data as { id: string };
+
+      const msg = String(error.message ?? error);
+      const missing = OPTIONAL_COLS.find(c => c in attempt && new RegExp(`\\b${c}\\b`).test(msg));
+      if (!missing) throw error;
+      console.warn(`[LiveErg] erg_workouts.${missing} missing on this database — retrying without it`);
+      delete attempt[missing];
+    }
+    throw new Error("Could not save workout — schema mismatch");
+  };
+
+  /**
+   * FIX 2 — the analysis comes to the athlete. Nobody has to navigate anywhere:
+   * the panel opens by itself as soon as analyze-workout answers.
+   */
+  const runAnalysis = async (
+    workoutId: string | null,
+    row: ErgWorkoutRow,
+    userId: string,
+  ) => {
+    setAnalyzing(true);
+    try {
+      // analyze-workout stringifies the whole workout into the prompt, so send
+      // the metrics only — the per-stroke arrays would be tens of thousands of
+      // tokens of noise. Peak force per stroke carries the same signal.
+      const { stroke_data: _sd, force_curves: curves, ...metrics } = row;
+      const peakForces = Array.isArray(curves)
+        ? (curves as number[][]).map(c => Math.max(...c))
+        : undefined;
+
+      const { data: fbData, error } = await invokeAI("analyze-workout", {
+        body: {
+          workoutType: "erg",
+          // analyze-workout keys its permanent cache off workout.id, so the
+          // saved row id is what makes this analysis stable and re-fetchable.
+          workout: {
+            ...metrics,
+            source: "live_erg_bluetooth",
+            recent_stroke_peak_forces_n: peakForces,
+            id: workoutId,
+            workout_id: workoutId,
+          },
+          user_id: userId,
+        },
+      });
+      if (error) throw error;
+      if (fbData?.feedback) {
+        setFeedback(fbData.feedback as AIFeedback);
+        setFeedbackOpen(true);          // slides up on its own — no navigation
+        toast({ title: "Your AI analysis is ready" });
+      } else {
+        toast({ title: "Analysis unavailable", description: "Your workout was saved." });
+      }
+    } catch (e: any) {
+      console.error("[LiveErg] analyze-workout failed:", e);
+      toast({
+        title: "Analysis unavailable",
+        description: e?.message ? `Your workout was saved. ${e.message}` : "Your workout was saved.",
+      });
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -464,13 +616,29 @@ function LiveErgViewNative() {
     autoSavedRef.current = false;
     prevStateRef.current = undefined;
     setSaved(false);
+    setFeedback(null);
     setCurrentCurve([]);
     setPrevCurve([]);
     setAllCurves([]);
     setForceCurveSupported(null);
     wasConnectedRef.current = false;
+    // Fresh session — clear the accumulated readings from the previous one.
+    splitSamplesRef.current = [];
+    wattSamplesRef.current  = [];
+    spmSamplesRef.current   = [];
+    hrSamplesRef.current    = [];
+    peakElapsedRef.current  = 0;
+    peakDistRef.current     = 0;
+    setStrokes([]);
     await connectPM5();
   }, [btSupported, connectPM5]);
+
+  // ── Stop button: end the session, save, analyse, then drop the link ─────────
+  const stopSession = useCallback(() => {
+    endSession("stop");
+    disconnectPM5();
+    wasConnectedRef.current = false;
+  }, [endSession, disconnectPM5]);
 
   // ── Web-only: re-subscribe GATT characteristics on an existing server ────────
   const resubscribeErg = async (server: any) => {
@@ -531,9 +699,12 @@ function LiveErgViewNative() {
   };
 
   const disconnectErg = useCallback(() => {
+    // A user-initiated disconnect ends the session too — a Bluetooth workout is
+    // never lost for want of tapping Save.
+    endSession("stop");
     wasConnectedRef.current = false;
     disconnectPM5();
-  }, [disconnectPM5]);
+  }, [endSession, disconnectPM5]);
 
   // ── Target split ─────────────────────────────────────────────
   const applyTarget = () => {
@@ -573,6 +744,8 @@ function LiveErgViewNative() {
   const isRowing  = state === 2;
   const isFinished = state === 4;
   const hr        = (data.heartRate && data.heartRate > 0) ? data.heartRate : hrBpm;
+  // Something worth saving has been rowed this session.
+  const hasSessionData = (data.distance ?? 0) > 0 && (data.elapsedTime ?? 0) > 0;
 
   // Y-axis tick formatter for the graph (split in centiseconds → m:ss)
   const fmtYTick = (v: number) => fmtPace(v);
@@ -583,19 +756,17 @@ function LiveErgViewNative() {
   const maxSplit = splitValues.length ? Math.max(...splitValues) + 500 : 12000;
 
   // ── Force curve area chart data (per user spec) ──────────────────────────
-  // X axis: sample index. Y axis: force 0-800N. Line color #2272FF, strokeWidth 2.
-  const forceCurveAreaData = currentCurve.length > 0
-    ? currentCurve.map((force, i) => ({ idx: i, force }))
-    // Empty state: flat baseline line, not a crashed/blank component
-    : Array.from({ length: 20 }, (_, i) => ({ idx: i, force: 0 }));
+  // X axis: sample index. Y axis: force from 0 N, 800 N floor (grows for bigger
+  // strokes — recharts clamps out-of-domain samples). Line #2272FF, strokeWidth 2.
+  const forceCurveAreaData = buildForceCurveAreaData(currentCurve);
 
   const statBlocks = [
     { label: "Split /500m",   value: fmtPace(data.splitPace ?? 0),                               big: true  },
-    { label: "Stroke Rate",   value: data.strokeRate ? `${data.strokeRate} spm` : "-- spm",       big: false },
-    { label: "Distance",      value: data.distance   ? `${Math.round(data.distance)}m` : "--m",   big: false },
+    { label: "Stroke Rate",   value: fmtStrokeRate(data.strokeRate),                              big: false },
+    { label: "Distance",      value: fmtDistance(data.distance),                                  big: false },
     { label: "Elapsed",       value: data.elapsedTime ? fmtTime(data.elapsedTime) : "--:--.0",     big: false },
     { label: "Calories",      value: data.calories   ? `${data.calories} cal` : "-- cal",          big: false },
-    { label: "Power",         value: data.power      ? `${data.power} W` : "-- W",                 big: false },
+    { label: "Power",         value: fmtWatts(data.power),                                        big: false },
     { label: "Heart Rate",    value: hr ? `${hr} bpm` : "-- bpm",                                  big: false },
     { label: "Drive Length",  value: data.driveLength ? fmtDriveLength(data.driveLength) : "--m",  big: false },
     { label: "Drive Time",    value: data.driveTime ? fmtDriveTime(data.driveTime) : "--",          big: false },
@@ -605,6 +776,15 @@ function LiveErgViewNative() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col overflow-x-hidden">
+      {/* ── AI analysis — slides up by itself once analyze-workout answers ── */}
+      <Dialog open={feedbackOpen && !!feedback} onOpenChange={setFeedbackOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto p-0 border-0 bg-transparent shadow-none">
+          {feedback && (
+            <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedbackOpen(false)} />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* ── Header bar ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <div className="flex items-center gap-3">
@@ -631,9 +811,15 @@ function LiveErgViewNative() {
             </Button>
           )}
           {ergConnected ? (
-            <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-sm h-10 px-3 min-w-[44px]" onClick={disconnectErg}>
-              Disconnect
-            </Button>
+            hasSessionData ? (
+              <Button size="sm" variant="destructive" className="h-10 text-sm px-3 min-w-[44px]" onClick={stopSession}>
+                <Square className="h-3.5 w-3.5 mr-1.5" /> Stop &amp; save
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-sm h-10 px-3 min-w-[44px]" onClick={disconnectErg}>
+                Disconnect
+              </Button>
+            )
           ) : (
             <Button size="sm" className="h-10 text-sm px-4 min-w-[44px]" onClick={connectErg} disabled={ergConnecting || !btSupported}>
               {ergConnecting
@@ -702,13 +888,22 @@ function LiveErgViewNative() {
       <div className="flex-1 min-h-0 p-4 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-gray-500 uppercase tracking-widest">Split over distance</span>
-          {isFinished && !saved && (
-            <Button size="sm" className="h-7 text-xs" onClick={() => saveWorkout(dataRef.current, strokesRef.current)}>
-              <Save className="h-3 w-3 mr-1" /> Save workout
+          {/* Bluetooth sessions save themselves — this is status, not a control. */}
+          {analyzing && (
+            <span className="flex items-center gap-1.5 text-xs text-blue-400">
+              <Loader2 className="h-3 w-3 animate-spin" /> Analyzing performance…
+            </span>
+          )}
+          {!analyzing && saved && feedback && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-400 hover:text-blue-300" onClick={() => setFeedbackOpen(true)}>
+              <Sparkles className="h-3 w-3 mr-1" /> View AI analysis
             </Button>
           )}
-          {saved && (
-            <span className="text-xs text-green-400">Saved</span>
+          {!analyzing && saved && !feedback && (
+            <span className="text-xs text-green-400">Saved automatically</span>
+          )}
+          {!saved && isFinished && (
+            <span className="text-xs text-gray-500">Saving…</span>
           )}
         </div>
 
@@ -776,7 +971,7 @@ function LiveErgViewNative() {
         <div className="h-32 bg-gray-900 rounded-lg overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={forceCurveAreaData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-              <YAxis domain={[0, 800]} hide />
+              <YAxis domain={[0, forceCurveAxisMax]} hide />
               <XAxis dataKey="idx" hide />
               <Area
                 type="monotone"
