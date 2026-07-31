@@ -16,6 +16,17 @@ import {
 const FALLBACK_METERS = 1_800_000;
 const FALLBACK_ATHLETES = 53;
 
+type Navigate = ReturnType<typeof useNavigate>;
+
+const scrollTo = (id: string) =>
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+
+const NAV_ITEMS: { label: string; go: (navigate: Navigate) => void }[] = [
+  { label: "Features", go: () => scrollTo("features") },
+  { label: "Pricing", go: () => scrollTo("pricing") },
+  { label: "For Coaches", go: (navigate) => navigate("/coaches") },
+];
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 function useLiveStats() {
@@ -76,6 +87,22 @@ function useAnimatedNumber(target: number): number {
   }, [target]);
 
   return displayed;
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
 }
 
 function useReveal(threshold = 0.08) {
@@ -143,6 +170,11 @@ const LandingPage = () => {
   const { meters, athletes } = useLiveStats();
   const animatedMeters = useAnimatedNumber(meters);
   const animatedAthletes = useAnimatedNumber(athletes);
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Below lg the hero text fills the width, so the ribbon would sit under it —
+  // skip the WebGL scene entirely rather than hide it with CSS.
+  const showHeroViz = useMediaQuery("(min-width: 63rem)");
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -152,17 +184,51 @@ const LandingPage = () => {
     });
   }, [navigate]);
 
+  // Nav gains a border + shadow once the hero starts scrolling past it.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <div
       style={{
         fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
         margin: 0,
         padding: 0,
-        backgroundColor: "var(--navy)",
+        backgroundColor: "#FFFFFF",
         color: "var(--text)",
       }}
     >
       <style>{`
+        /* Body/UI typeface from the design system. Headings use Arial Black. */
+        @font-face {
+          font-family: 'Proxima Nova';
+          src: url('/fonts/proxima-nova-Regular.ttf') format('truetype');
+          font-weight: 400;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Proxima Nova';
+          src: url('/fonts/proxima-nova-500.ttf') format('truetype');
+          font-weight: 500;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Proxima Nova';
+          src: url('/fonts/proxima-nova-600.ttf') format('truetype');
+          font-weight: 600;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Proxima Nova';
+          src: url('/fonts/proxima-nova-700.ttf') format('truetype');
+          font-weight: 700;
+          font-display: swap;
+        }
+
         :root {
           --navy: #08121F;
           --navy-mid: #0E1A2E;
@@ -172,8 +238,294 @@ const LandingPage = () => {
           --off-white: #EBF0F8;
           --muted: #4E6580;
           --text: #A8BECD;
+
+          /* ── Light theme (nav + hero) ───────────────────────────────── */
+          --lp-bg: #FFFFFF;
+          --lp-ink: #1A1A2E;
+          --lp-ink-70: rgba(26,26,46,0.70);
+          --lp-ink-56: rgba(26,26,46,0.56);
+          --lp-ink-12: rgba(26,26,46,0.12);
+          --lp-ink-08: rgba(26,26,46,0.08);
+          --lp-display: 'Arial Black', 'Arial Bold', Gadget, Arial, sans-serif;
+          --lp-body: 'Proxima Nova', -apple-system, BlinkMacSystemFont, sans-serif;
+          --lp-ease: cubic-bezier(.4,0,.2,1);
         }
         * { box-sizing: border-box; }
+
+        /* ── Motion (expressive: staggered reveals, enter from bottom) ── */
+        @keyframes lpRise {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes lpDraw {
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
+        }
+        @keyframes lpPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.8); }
+        }
+        @keyframes lpSlideUpFadeIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Navigation ─────────────────────────────────────────────────── */
+        .lp-nav {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 1000;
+          background: var(--lp-bg);
+          border-bottom: 1px solid transparent;
+          transition: border-color .2s var(--lp-ease), box-shadow .2s var(--lp-ease);
+        }
+        .lp-nav[data-scrolled='true'] {
+          border-bottom-color: var(--lp-ink-08);
+          box-shadow: 0 4px 20px 0 hsla(0,0%,87%,.2);
+        }
+        .lp-nav__inner {
+          max-width: 80rem;
+          margin: 0 auto;
+          height: 64px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+          padding: 0 24px;
+        }
+        .lp-brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          background: none;
+          border: none;
+          padding: 0;
+        }
+        .lp-brand__mark {
+          height: 32px;
+          width: 32px;
+          object-fit: contain;
+          border-radius: .375rem;
+        }
+        .lp-brand__word {
+          font-family: var(--lp-display);
+          font-weight: 900;
+          font-size: 20px;
+          line-height: 1;
+          letter-spacing: -.02em;
+          color: var(--lp-ink);
+        }
+        .lp-nav__links {
+          display: flex;
+          align-items: center;
+          gap: 40px;
+          margin-left: auto;
+        }
+        .lp-navlink {
+          font-family: var(--lp-body);
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          color: var(--lp-ink-56);
+          background: none;
+          border: none;
+          padding: 8px 0;
+          cursor: pointer;
+          transition: color .15s var(--lp-ease);
+        }
+        .lp-navlink:hover { color: var(--lp-ink); }
+
+        /* ── Buttons (light theme) ──────────────────────────────────────── */
+        .lp-btn {
+          font-family: var(--lp-body);
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          border-radius: 100px;
+          padding: 12px 24px;
+          line-height: 1;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          text-decoration: none;
+          transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
+                      border-color .2s var(--lp-ease), transform .15s var(--lp-ease);
+        }
+        .lp-btn:focus-visible {
+          outline: 2px solid var(--lp-ink);
+          outline-offset: 2px;
+        }
+        .lp-btn--solid {
+          background: var(--lp-ink);
+          color: var(--lp-bg);
+          border: 1px solid var(--lp-ink);
+        }
+        .lp-btn--solid:hover { transform: translateY(-1px); }
+        .lp-btn--outline {
+          background: transparent;
+          color: var(--lp-ink);
+          border: 1px solid var(--lp-ink-12);
+        }
+        .lp-btn--outline:hover { border-color: var(--lp-ink); }
+        .lp-btn--lg { padding: 16px 32px; font-size: 13px; }
+        .lp-btn__arrow {
+          display: inline-block;
+          transition: transform .2s var(--lp-ease);
+        }
+        .lp-btn:hover .lp-btn__arrow { transform: translateX(4px); }
+
+        /* ── Mobile menu ────────────────────────────────────────────────── */
+        .lp-burger {
+          display: none;
+          background: none;
+          border: none;
+          padding: 8px;
+          cursor: pointer;
+          color: var(--lp-ink);
+        }
+        .lp-burger span {
+          display: block;
+          width: 20px;
+          height: 2px;
+          background: var(--lp-ink);
+          transition: transform .2s var(--lp-ease), opacity .2s var(--lp-ease);
+        }
+        .lp-burger span + span { margin-top: 4px; }
+        .lp-burger[data-open='true'] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+        .lp-burger[data-open='true'] span:nth-child(2) { opacity: 0; }
+        .lp-burger[data-open='true'] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+        .lp-nav__mobile {
+          display: none;
+          flex-direction: column;
+          gap: 4px;
+          padding: 8px 24px 24px;
+          border-top: 1px solid var(--lp-ink-08);
+          background: var(--lp-bg);
+          animation: lpSlideUpFadeIn .25s var(--lp-ease) both;
+        }
+        .lp-nav__mobile .lp-navlink {
+          padding: 16px 0;
+          text-align: left;
+          border-bottom: 1px solid var(--lp-ink-08);
+        }
+        .lp-nav__mobile .lp-btn { margin-top: 16px; }
+
+        /* ── Hero ───────────────────────────────────────────────────────── */
+        .lp-hero {
+          position: relative;
+          overflow: hidden;
+          background: var(--lp-bg);
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 160px 24px 96px;
+        }
+        .lp-hero__inner {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          max-width: 80rem;
+          margin: 0 auto;
+        }
+        .lp-hero__col { max-width: 800px; }
+        .lp-eyebrow {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 24px;
+          animation: lpRise .5s var(--lp-ease) both;
+        }
+        .lp-eyebrow__rule {
+          width: 24px;
+          height: 2px;
+          background: var(--lp-ink);
+          flex-shrink: 0;
+        }
+        .lp-eyebrow__text {
+          font-family: var(--lp-body);
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .12em;
+          color: var(--lp-ink-56);
+        }
+        .lp-hero__title {
+          font-family: var(--lp-display);
+          font-weight: 900;
+          /* Arial Black is wide — cap the size so each line holds on one row. */
+          font-size: clamp(36px, 5.6vw, 76px);
+          line-height: 1;
+          letter-spacing: -.03em;
+          color: var(--lp-ink);
+          margin: 0 0 32px;
+        }
+        .lp-hero__title .lp-line {
+          display: block;
+          animation: lpRise .6s var(--lp-ease) both;
+        }
+        .lp-hero__title .lp-line:nth-child(1) { animation-delay: .08s; }
+        .lp-hero__title .lp-line:nth-child(2) { animation-delay: .16s; }
+        .lp-mark { position: relative; white-space: nowrap; }
+        .lp-mark::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: .11em;
+          height: .055em;
+          background: var(--lp-ink);
+          transform-origin: left;
+          animation: lpDraw .6s var(--lp-ease) .7s both;
+        }
+        .lp-hero__sub {
+          font-family: var(--lp-body);
+          font-size: 18px;
+          font-weight: 400;
+          line-height: 1.5;
+          color: var(--lp-ink-70);
+          max-width: 480px;
+          margin: 0 0 40px;
+          animation: lpRise .6s var(--lp-ease) .24s both;
+        }
+        .lp-hero__cta {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          flex-wrap: wrap;
+          margin-bottom: 48px;
+          animation: lpRise .6s var(--lp-ease) .32s both;
+        }
+        .lp-hero__live {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          animation: lpRise .6s var(--lp-ease) .4s both;
+        }
+        .lp-hero__dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 100px;
+          background: var(--lp-ink);
+          flex-shrink: 0;
+          animation: lpPulse 2s var(--lp-ease) infinite;
+        }
+        .lp-hero__live-text {
+          font-family: var(--lp-body);
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .1em;
+          color: var(--lp-ink-56);
+        }
+
         @keyframes scrollCurve {
           from { transform: translateX(0); }
           to { transform: translateX(-680px); }
@@ -260,10 +612,35 @@ const LandingPage = () => {
         }
         .feature-card-new:hover { background: var(--navy-light); }
         .feature-card-new:hover::after { transform: scaleX(1); }
+        /* ── Responsive: nav collapses below lg (63rem) ─────────────────── */
+        @media (max-width: 62.9375rem) {
+          .lp-nav__links { display: none; }
+          .lp-burger { display: block; }
+          .lp-nav__mobile[data-open='true'] { display: flex; }
+        }
+        @media (max-width: 40rem) {
+          .lp-hero { padding: 120px 24px 64px; }
+          .lp-hero__cta { flex-direction: column; align-items: stretch; }
+          .lp-hero__cta .lp-btn { width: 100%; }
+        }
+
+        /* ── Reduced motion ─────────────────────────────────────────────── */
+        @media (prefers-reduced-motion: reduce) {
+          .lp-hero__title .lp-line,
+          .lp-eyebrow,
+          .lp-hero__sub,
+          .lp-hero__cta,
+          .lp-hero__live,
+          .lp-nav__mobile,
+          .lp-mark::after,
+          .lp-hero__dot {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+        }
+
         @media (max-width: 768px) {
-          .lp-nav-desktop { display: none !important; }
-          .lp-nav-mobile { display: flex !important; }
-          .lp-hero-btns { flex-direction: column !important; align-items: flex-start !important; }
           .lp-stats-row { flex-direction: column !important; gap: 20px !important; }
           .lp-stats-row > div { border-right: none !important; border-bottom: 1px solid rgba(255,255,255,0.07) !important; padding-left: 0 !important; padding-right: 0 !important; padding-bottom: 20px !important; }
           .lp-stats-row > div:last-child { border-bottom: none !important; padding-bottom: 0 !important; }
@@ -275,87 +652,64 @@ const LandingPage = () => {
           .lp-cta-btns { flex-direction: column !important; align-items: center !important; }
           .lp-footer-inner { flex-direction: column !important; gap: 24px !important; }
           .lp-footer-links { flex-direction: column !important; gap: 12px !important; }
-          .lp-hero-section { padding: 100px 24px 60px !important; }
           .lp-section-pad { padding: 72px 24px !important; }
         }
       `}</style>
 
       {/* ── NAV ────────────────────────────────────────────────────── */}
-      <nav
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "62px",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 40px",
-          background: "rgba(8,18,31,0.95)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-        }}
-      >
-        {/* Logo */}
-        <div
-          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
-          onClick={() => navigate("/")}
-        >
-          <img
-            src={logoIcon}
-            alt="CrewSync"
-            style={{ height: "30px", width: "30px", objectFit: "contain", borderRadius: "6px" }}
-          />
-          <span
-            style={{
-              color: "#ffffff",
-              fontWeight: 700,
-              fontSize: "16px",
-              fontFamily: "'Space Grotesk', sans-serif",
-              letterSpacing: "-0.3px",
+      <nav className="lp-nav" data-scrolled={scrolled}>
+        <div className="lp-nav__inner">
+          <button className="lp-brand" onClick={() => navigate("/")} aria-label="CrewSync home">
+            <img src={logoIcon} alt="" className="lp-brand__mark" />
+            <span className="lp-brand__word">CrewSync</span>
+          </button>
+
+          <div className="lp-nav__links">
+            {NAV_ITEMS.map(({ label, go }) => (
+              <button key={label} className="lp-navlink" onClick={() => go(navigate)}>
+                {label}
+              </button>
+            ))}
+            <button
+              className="lp-btn lp-btn--solid"
+              onClick={() => navigate("/auth/signup")}
+            >
+              Get Started
+            </button>
+          </div>
+
+          <button
+            className="lp-burger"
+            data-open={menuOpen}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+
+        <div className="lp-nav__mobile" data-open={menuOpen}>
+          {NAV_ITEMS.map(({ label, go }) => (
+            <button
+              key={label}
+              className="lp-navlink"
+              onClick={() => {
+                setMenuOpen(false);
+                go(navigate);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            className="lp-btn lp-btn--solid"
+            onClick={() => {
+              setMenuOpen(false);
+              navigate("/auth/signup");
             }}
-          >
-            CrewSync
-          </span>
-        </div>
-
-        {/* Desktop links */}
-        <div
-          className="lp-nav-desktop"
-          style={{ display: "flex", alignItems: "center", gap: "32px" }}
-        >
-          <button
-            className="lp-nav-link"
-            onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
-          >
-            Features
-          </button>
-          <button
-            className="lp-nav-link"
-            onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
-          >
-            Pricing
-          </button>
-          <button className="lp-nav-link" onClick={() => navigate("/coaches")}>
-            For Coaches
-          </button>
-          <button
-            className="lp-btn-primary"
-            style={{ padding: "8px 16px", fontSize: "12px" }}
-            onClick={() => navigate("/auth/signup")}
-          >
-            Get Started
-          </button>
-        </div>
-
-        {/* Mobile CTA only */}
-        <div className="lp-nav-mobile" style={{ display: "none" }}>
-          <button
-            className="lp-btn-primary"
-            style={{ padding: "8px 16px", fontSize: "12px" }}
-            onClick={() => navigate("/auth/signup")}
           >
             Get Started
           </button>
@@ -363,156 +717,48 @@ const LandingPage = () => {
       </nav>
 
       {/* ── HERO ───────────────────────────────────────────────────── */}
-      <section
-        className="lp-hero-section"
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "120px 52px 80px",
-          position: "relative",
-          overflow: "hidden",
-          backgroundColor: "var(--navy)",
-        }}
-      >
-        {/* Radial glow */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "radial-gradient(ellipse at 80% 60%, rgba(34,114,255,0.06) 0%, transparent 60%)",
-            pointerEvents: "none",
-          }}
-        />
-
+      <section className="lp-hero">
         {/* 3D force-curve ribbon (right half, behind text) */}
-        <HeroForceCurve />
+        {showHeroViz && <HeroForceCurve color={0x1a1a2e} glowOpacity={0.06} />}
 
-        <div style={{ position: "relative", zIndex: 1, maxWidth: "680px" }}>
-          {/* Eyebrow */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "28px",
-              animation: "fadeInUp 0.5s ease both",
-            }}
-          >
-            <div
-              style={{
-                width: "24px",
-                height: "1px",
-                background: "var(--accent)",
-                flexShrink: 0,
-              }}
-            />
-            <span
-              style={{
-                fontSize: "11px",
-                fontFamily: "'Space Grotesk', sans-serif",
-                color: "var(--accent)",
-                textTransform: "uppercase",
-                fontWeight: 500,
-                letterSpacing: "0.12em",
-              }}
-            >
-              Crew Management Platform
-            </span>
-          </div>
+        <div className="lp-hero__inner">
+          <div className="lp-hero__col">
+            <div className="lp-eyebrow">
+              <span className="lp-eyebrow__rule" />
+              <span className="lp-eyebrow__text">Crew Management Platform</span>
+            </div>
 
-          {/* Headline */}
-          <h1
-            style={{
-              fontFamily: "'DM Serif Display', Georgia, serif",
-              fontWeight: 400,
-              fontSize: "clamp(54px, 6.5vw, 92px)",
-              color: "#ffffff",
-              letterSpacing: "-0.01em",
-              lineHeight: 1.05,
-              margin: "0 0 24px",
-              animation: "fadeInUp 0.5s ease 0.08s both",
-            }}
-          >
-            The data behind
-            <br />
-            every <em>decision.</em>
-          </h1>
+            <h1 className="lp-hero__title">
+              <span className="lp-line">The data behind</span>
+              <span className="lp-line">
+                every <span className="lp-mark">decision.</span>
+              </span>
+            </h1>
 
-          {/* Subheadline */}
-          <p
-            style={{
-              fontSize: "17px",
-              fontWeight: 300,
-              fontFamily: "'Space Grotesk', sans-serif",
-              color: "var(--muted)",
-              maxWidth: "440px",
-              lineHeight: 1.72,
-              margin: "0 0 40px",
-              animation: "fadeInUp 0.5s ease 0.16s both",
-            }}
-          >
-            CrewSync connects every erg score, every on-water split, and every
-            lineup decision in one place. Built for programs that take the sport
-            seriously.
-          </p>
+            <p className="lp-hero__sub">
+              CrewSync connects every erg score, every on-water split, and every
+              lineup decision in one place. Built for programs that take the sport
+              seriously.
+            </p>
 
-          {/* Buttons */}
-          <div
-            className="lp-hero-btns"
-            style={{
-              display: "flex",
-              gap: "12px",
-              alignItems: "center",
-              marginBottom: "48px",
-              animation: "fadeInUp 0.5s ease 0.24s both",
-            }}
-          >
-            <button
-              className="lp-btn-primary"
-              style={{ padding: "13px 30px", fontSize: "13px" }}
-              onClick={() => navigate("/auth/signup")}
-            >
-              Get Started Free
-            </button>
-            <button className="lp-btn-ghost" onClick={() => navigate("/coaches")}>
-              For Coaches <span className="lp-arrow">→</span>
-            </button>
-          </div>
-
-          {/* Force-curve label (the 3D ribbon renders behind the hero on the right) */}
-          <div style={{ animation: "fadeInUp 0.5s ease 0.32s both" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <span
-                style={{
-                  width: "7px",
-                  height: "7px",
-                  borderRadius: "50%",
-                  backgroundColor: "var(--blue)",
-                  flexShrink: 0,
-                  animation: "pulseDot 2s ease infinite",
-                }}
-              />
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  color: "var(--muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  fontWeight: 500,
-                }}
+            <div className="lp-hero__cta">
+              <button
+                className="lp-btn lp-btn--solid lp-btn--lg"
+                onClick={() => navigate("/auth/signup")}
               >
+                Get Started Free
+              </button>
+              <button
+                className="lp-btn lp-btn--outline lp-btn--lg"
+                onClick={() => navigate("/coaches")}
+              >
+                For Coaches <span className="lp-btn__arrow">→</span>
+              </button>
+            </div>
+
+            <div className="lp-hero__live">
+              <span className="lp-hero__dot" />
+              <span className="lp-hero__live-text">
                 Live Force Curve — PM5 Bluetooth
               </span>
             </div>

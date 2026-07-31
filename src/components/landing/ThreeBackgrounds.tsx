@@ -24,7 +24,17 @@ const BLUE = 0x2272ff;
 const ACCENT = 0x3d8fd4;
 
 // ── HERO — glowing 3D force-curve ribbon ────────────────────────────────────
-export function HeroForceCurve() {
+// `color`/`glowOpacity` let the hero tune the ribbon for its background: the
+// default blue-on-dark, or a solid ink stroke on a light hero.
+interface HeroForceCurveProps {
+  color?: number;
+  glowOpacity?: number;
+}
+
+export function HeroForceCurve({
+  color = BLUE,
+  glowOpacity = 0.08,
+}: HeroForceCurveProps = {}) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -38,7 +48,10 @@ export function HeroForceCurve() {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 100);
-    camera.position.set(0, 0, 6);
+    // The curve spans ~7.2 units, so in tall/narrow containers the camera has to
+    // pull back or the stroke runs off the sides.
+    const fitZ = (w: number, h: number) => 6 * Math.max(1, 1.35 / (w / h));
+    camera.position.set(0, 0, fitZ(width, height));
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setPixelRatio(clampPR());
@@ -66,13 +79,13 @@ export function HeroForceCurve() {
     const innerGeo = new THREE.TubeGeometry(curve, segments, 0.03, 8, false);
     const inner = new THREE.Mesh(
       innerGeo,
-      new THREE.MeshBasicMaterial({ color: BLUE, wireframe: false })
+      new THREE.MeshBasicMaterial({ color, wireframe: false })
     );
 
     const glowGeo = new THREE.TubeGeometry(curve, segments, 0.08, 8, false);
     const glow = new THREE.Mesh(
       glowGeo,
-      new THREE.MeshBasicMaterial({ color: BLUE, transparent: true, opacity: 0.08 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: glowOpacity })
     );
 
     group.add(glow);
@@ -105,6 +118,7 @@ export function HeroForceCurve() {
       width = container.clientWidth || 1;
       height = container.clientHeight || 1;
       camera.aspect = width / height;
+      camera.position.z = fitZ(width, height);
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
@@ -118,7 +132,7 @@ export function HeroForceCurve() {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, []);
+  }, [color, glowOpacity]);
 
   return (
     <div
