@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logUsage } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -46,10 +46,6 @@ serve(async (req) => {
       });
     }
 
-    // Failsafe 9 + 1: circuit breaker (after the existing-challenge check, which is this function's cache).
-    const blocked = await preflight(supabase, { userId: null, functionName: FN, corsHeaders });
-    if (blocked) return blocked;
-
     const month = new Date(week_start).getMonth(); // 0-11
     // Season phases: base = Aug-Oct (7-9), build = Nov-Jan (10-0), race_prep = Feb-Apr (1-3), peak = May-Jul (4-6)
     let season_phase = "base";
@@ -57,72 +53,114 @@ serve(async (req) => {
     else if (month >= 1 && month <= 3) season_phase = "race_prep";
     else if (month >= 4 && month <= 6) season_phase = "peak";
 
-    const challengeTypes = ["fastest_2k_improvement", "most_meters", "consistent_splits", "highest_wpk_gain"];
+    const prompt = `Rowing coach setting this week's team challenge.
+Season phase: ${season_phase}. Week of: ${week_start}.
 
-    const prompt = `You are a rowing coach setting the weekly challenge for your athletes.
+Challenge types:
+- fastest_2k_improvement: biggest 2k erg time improvement vs last week
+- most_meters: most total erg meters this week
+- consistent_splits: most consistent splits across a 2k+ piece
+- highest_wpk_gain: biggest watts-per-kilogram gain vs last week
 
-Current season phase: ${season_phase}
-Week of: ${week_start}
+Phase emphasis: base = volume/aerobic; build = volume + intensity; race_prep = intensity/speed work; peak = race simulation and speed.
 
-Available challenge types:
-- fastest_2k_improvement: athletes improve their 2k erg time the most vs last week
-- most_meters: athletes log the most total erg meters this week
-- consistent_splits: athletes maintain the most consistent split times during a 2k+ piece
-- highest_wpk_gain: athletes show the highest watts-per-kilogram improvement vs last week
+Pick the best type for this phase. Title max 60 chars, description max 150 chars, both motivating.
 
-Season phase context:
-- base: emphasize volume and aerobic development
-- build: mix of volume and intensity
-- race_prep: emphasize intensity and speed work
-- peak: race simulation and speed
-
-Choose the best challenge type for this season phase and write a short, motivating title (max 60 chars) and description (max 150 chars).
-
-Respond in this exact JSON format:
+Respond with ONLY this JSON:
 {
-  "challenge_type": "<type>",
+  "challenge_type": "<one of the four types above>",
   "title": "<title>",
   "description": "<description>",
   "reasoning": "<one sentence why>"
 }`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+    // Cache the MODEL OUTPUT (the parsed challenge), not the HTTP response: the
+    // response is the weekly_challenges row, which must be inserted for real.
+    // week_start already is the date component — the challenge is per-week by
+    // definition, so no separate YYYY-MM-DD field is needed. season_phase is
+    // derived from week_start but is in the key because the derivation could
+    // change. This layer only fires when the weekly_challenges row is missing
+    // (deleted, or a retry after a failed insert) — the row check above is the
+    // first-line cache.
+    const cacheKey = `generate-weekly-challenge_${hashKey({ week_start, season_phase })}`;
+    const cachedChallenge = await getCached(supabase, cacheKey) as any;
+    // A contentless entry is treated as a miss, not served.
+    let parsed: any = cachedChallenge?.challenge_type && cachedChallenge?.title ? cachedChallenge : null;
+    const cacheHit = parsed !== null;
+
+    if (cacheHit) {
+      await logUsage(supabase, {
+        user_id: null,
+        function_name: FN,
         model: MODEL,
-        max_tokens: 300,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_hit: true,
+      });
+    } else {
+      // Failsafe 9 + 1: circuit breaker (after both cache checks).
+      const blocked = await preflight(supabase, { userId: null, functionName: FN, corsHeaders });
+      if (blocked) return blocked;
 
-    if (!response.ok) {
-      console.error("Anthropic error:", await response.text());
-      await recordApiError(supabase, FN);
-      return jsonError(corsHeaders, 503, "AI service unavailable");
-    }
-    await recordApiSuccess(supabase, FN);
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          // 300, not 500: the required output is four short fields with hard
+          // caps (60 + 150 chars + one sentence) — roughly 120 tokens.
+          max_tokens: 300,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
 
-    const aiData = await response.json();
-    const text = aiData.content?.[0]?.text || "{}";
-    const usage = aiData?.usage ?? {};
-    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+      if (!response.ok) {
+        console.error("Anthropic error:", await response.text());
+        await recordApiError(supabase, FN);
+        return jsonError(corsHeaders, 503, "AI service unavailable");
+      }
+      await recordApiSuccess(supabase, FN);
 
-    let parsed;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch?.[0] || "{}");
-    } catch {
-      parsed = {
-        challenge_type: season_phase === "base" ? "most_meters" : "fastest_2k_improvement",
-        title: season_phase === "base" ? "Volume King Challenge" : "Speed Improvement Challenge",
-        description: season_phase === "base" ? "Log the most meters this week!" : "Improve your 2k the most this week!",
-        reasoning: "Defaulted based on season phase.",
-      };
+      const aiData = await response.json();
+      const text = aiData.content?.[0]?.text || "{}";
+      const tok = tokensFrom(aiData?.usage);
+      await logUsage(supabase, {
+        user_id: null,
+        function_name: FN,
+        model: MODEL,
+        input_tokens: tok.input_tokens,
+        output_tokens: tok.output_tokens,
+        cache_creation_input_tokens: tok.cache_creation_input_tokens,
+        cache_read_input_tokens: tok.cache_read_input_tokens,
+        cache_hit: false,
+      });
+
+      let didParse = false;
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(jsonMatch?.[0] || "{}");
+        didParse = true;
+      } catch {
+        parsed = {
+          challenge_type: season_phase === "base" ? "most_meters" : "fastest_2k_improvement",
+          title: season_phase === "base" ? "Volume King Challenge" : "Speed Improvement Challenge",
+          description: season_phase === "base" ? "Log the most meters this week!" : "Improve your 2k the most this week!",
+          reasoning: "Defaulted based on season phase.",
+        };
+      }
+
+      // A week: the entry is scoped to one week_start and is worthless after it.
+      // Only cache a real, populated parse — never persist the hardcoded
+      // fallback or an empty `{}` from a model reply with no JSON in it.
+      if (didParse && parsed?.challenge_type && parsed?.title) {
+        await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, tok.input_tokens, tok.output_tokens);
+      }
     }
 
     const { data: newChallenge, error } = await supabase
@@ -141,7 +179,7 @@ Respond in this exact JSON format:
     if (error) throw error;
 
     return new Response(JSON.stringify(newChallenge), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": cacheHit ? "HIT" : "MISS" },
     });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {

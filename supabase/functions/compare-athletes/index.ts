@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -31,8 +31,14 @@ serve(async (req) => {
       });
     }
 
-    // Cache by sorted athlete data hash (6h TTL)
-    const cacheKey = `compare_${hashKey([athlete1, athlete2])}`;
+    // Cache by sorted athlete-pair hash (6h TTL). hashKey preserves array order,
+    // so sort explicitly — the comparison is symmetric and A-vs-B must share a
+    // cache entry with B-vs-A instead of paying for the same analysis twice.
+    const pairKey = [athlete1, athlete2]
+      .map((a: any) => ({ a, k: String(a?.id ?? a?.user_id ?? a?.name ?? "") }))
+      .sort((x, y) => (x.k < y.k ? -1 : x.k > y.k ? 1 : 0))
+      .map((e) => e.a);
+    const cacheKey = `compare_${hashKey(pairKey)}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       await logUsage(supabase, { function_name: "compare-athletes", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
@@ -56,7 +62,7 @@ Write one paragraph comparing erg performance, training consistency, and develop
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 400, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
     });
 
     if (!response.ok) {
@@ -67,7 +73,7 @@ Write one paragraph comparing erg performance, training consistency, and develop
     await recordApiSuccess(supabase, "compare-athletes");
 
     const data = await response.json();
-    const usage = data?.usage ?? {};
+    const usage = tokensFrom(data?.usage);
     const text = data.content?.[0]?.text || "";
     const parts = text.split("RECOMMENDATION:");
     const summary = parts[0].trim();
@@ -75,7 +81,7 @@ Write one paragraph comparing erg performance, training consistency, and develop
 
     const result = { summary, recommendation };
     await setCached(supabase, cacheKey, result, TTL.SIX_HOURS, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { function_name: "compare-athletes", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await logUsage(supabase, { function_name: "compare-athletes", model: MODEL, ...usage, cache_hit: false });
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

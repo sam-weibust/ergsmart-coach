@@ -459,7 +459,7 @@ export default function AthleticDirectorDashboard({ profile }: Props) {
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                    <Bar dataKey="Attendance %" fill="#0a1628" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Attendance %" fill="#1A1A2E" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -679,7 +679,7 @@ function ProgramDetail({ team, tab, setTab, ergData, attendanceData, alerts, onB
                   <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
                   <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
                     formatter={(v: number) => [formatSplit(v), "Avg 2K"]} />
-                  <Line type="monotone" dataKey="avg2k" stroke="#0a1628" strokeWidth={2} dot={{ fill: "#0a1628", r: 3 }} />
+                  <Line type="monotone" dataKey="avg2k" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -714,7 +714,7 @@ function ProgramDetail({ team, tab, setTab, ergData, attendanceData, alerts, onB
                   <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
                   <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
                     formatter={(v: number) => [`${v}%`, "Attendance"]} />
-                  <Line type="monotone" dataKey="rate" stroke="#0a1628" strokeWidth={2} dot={{ fill: "#0a1628", r: 3 }} />
+                  <Line type="monotone" dataKey="rate" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

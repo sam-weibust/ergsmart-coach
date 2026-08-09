@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -69,17 +69,12 @@ serve(async (req) => {
     const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
     if (blocked) return blocked;
 
-    const systemPrompt = `
-You are CrewSync AI, an expert at reading Concept2 PM5 ergometer screens.
+    const systemPrompt = `CrewSync AI — read Concept2 PM5 ergometer screens.
 
-Your job:
-- Extract workout data from the image
-- Identify distance, time, split, stroke rate, pace, and intervals
-- Return clean JSON
-- If the image is unclear, say so
-- Do NOT hallucinate values
-- Use rowing terminology naturally
-`.trim();
+- Extract distance, time, split, stroke rate, pace and every interval row.
+- Return clean JSON only.
+- Do NOT hallucinate values. If the image is unclear, say so.
+- Use rowing terminology.`;
 
     // Anthropic Vision request
     const anthropicResponse = await fetch(
@@ -93,7 +88,14 @@ Your job:
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 2048,
+          // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+          // thinking + text together, so with it on the budget is spent
+          // thinking and the parse returns nothing.
+          thinking: { type: "disabled" },
+          // Not 500: a PM5 interval/memory screen has an unbounded split table
+          // and each row costs ~30 output tokens, so 500 only covers ~8 rows.
+          // 1024 covers a full 30-split screen with headroom.
+          max_tokens: 1024,
           system: systemPrompt,
           messages: [
             {
@@ -137,9 +139,10 @@ Your job:
       created_at: new Date().toISOString(),
     });
 
-    await setCached(supabase, cacheKey, result, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, result, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, user_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(result), {
       headers: {

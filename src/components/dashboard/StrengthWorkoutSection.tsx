@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { generateWorkout } from "@/lib/api";
+import { useDebouncedAction } from "@/hooks/useDebouncedAction";
+import { csToInterval } from "@/lib/ergFormat";
 
 interface StrengthWorkoutSectionProps {
   profile: any;
@@ -16,6 +18,24 @@ interface StrengthWorkoutSectionProps {
 }
 
 const lbsToKg = (lbs: number) => lbs / 2.20462;
+
+/**
+ * strength_workouts.rest_between_sets is an INTERVAL column. Postgres reads a
+ * bare "2:00" as 2 HOURS, so the typed value has to be normalised to
+ * HH:MM:SS.ss first. "2:00" here means two minutes of rest.
+ */
+const restToInterval = (text: string): string | null => {
+  const t = text.trim();
+  if (!t) return null;
+  const parts = t.split(":").map((p) => parseFloat(p));
+  if (parts.some((n) => !isFinite(n))) return null;
+  const secs =
+    parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+    : parts.length === 2 ? parts[0] * 60 + parts[1]
+    : parts[0];
+  if (!isFinite(secs) || secs <= 0) return null;
+  return csToInterval(Math.round(secs * 100));
+};
 
 const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
   const { toast } = useToast();
@@ -38,8 +58,9 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     rest_between_sets: "",
   });
 
-  // ⭐ FIXED: generate-strength via centralized API
-  const getSuggestions = async () => {
+  // ⭐ FIXED: generate-strength via centralized API.
+  // Wrapped in useDebouncedAction below so a double-tap can't buy two calls.
+  const getSuggestionsImpl = async () => {
     setLoadingSuggestions(true);
 
     try {
@@ -85,6 +106,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
       setLoadingSuggestions(false);
     }
   };
+  const getSuggestions = useDebouncedAction(getSuggestionsImpl);
 
   const selectSuggestion = (s: any) => {
     const weightLbs = Math.round(s.recommendedWeight * 2.205);
@@ -156,8 +178,8 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
     }
   };
 
-  // ⭐ FIXED: save workout + AI feedback
-  const handleSave = async () => {
+  // ⭐ FIXED: save workout + AI feedback (debounced — see handleSave below)
+  const handleSaveImpl = async () => {
     if (!profile || !workout.exercise) return;
 
     setLoading(true);
@@ -184,7 +206,8 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
         notes: workout.notes || null,
         warmup_notes: workout.warmup_notes || null,
         cooldown_notes: workout.cooldown_notes || null,
-        rest_between_sets: workout.rest_between_sets || null,
+        // INTERVAL column — normalise, never pass the raw "2:00".
+        rest_between_sets: restToInterval(workout.rest_between_sets),
       };
 
       const { data, error } = await supabase
@@ -226,6 +249,7 @@ const StrengthWorkoutSection = ({ profile }: StrengthWorkoutSectionProps) => {
       setLoading(false);
     }
   };
+  const handleSave = useDebouncedAction(handleSaveImpl);
 
   return (
     <div className="space-y-4">

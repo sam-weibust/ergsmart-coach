@@ -86,7 +86,7 @@ export default function RecruitingPortalPage() {
     enabled: !!team?.id,
   });
 
-  const color = team?.primary_color || "#0a1628";
+  const color = team?.primary_color || "#1A1A2E";
 
   const filtered = athletes.filter((a: any) => {
     const name = (a.full_name || a.username || "").toLowerCase();
@@ -114,9 +114,9 @@ export default function RecruitingPortalPage() {
       <div className="text-white py-10 px-4" style={{ background: color }}>
         <div className="max-w-5xl mx-auto flex items-center gap-5">
           {team.logo_url ? (
-            <img src={team.logo_url} alt={team.name} className="h-16 w-16 rounded-xl object-cover bg-white shadow-lg" />
+            <img src={team.logo_url} alt={team.name} className="h-16 w-16 rounded-lg object-cover bg-white shadow-lg" />
           ) : (
-            <img src={crewsyncLogo} alt="CrewSync" className="h-16 w-16 rounded-xl object-cover shadow-lg" />
+            <img src={crewsyncLogo} alt="CrewSync" className="h-16 w-16 rounded-lg object-cover shadow-lg" />
           )}
           <div className="flex-1">
             <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-1">Recruiting Portal</p>
@@ -126,7 +126,7 @@ export default function RecruitingPortalPage() {
           {coachName && (
             <a
               href={`mailto:${coachName}`}
-              className="hidden sm:inline-block border border-white/40 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-white/10 transition-colors whitespace-nowrap"
+              className="hidden sm:inline-block border border-white/40 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-white/10 transition-colors whitespace-nowrap"
             >
               Contact Coaching Staff
             </a>
@@ -161,7 +161,7 @@ export default function RecruitingPortalPage() {
               <Link
                 key={a.id}
                 to={`/athlete/${a.username || a.id}`}
-                className="rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-shadow block group"
+                className="rounded-lg border border-border bg-card p-5 hover:shadow-md transition-shadow block group"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>

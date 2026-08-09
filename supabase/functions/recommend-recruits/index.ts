@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -147,7 +147,7 @@ Target height: ${coachProfile.target_height_min_cm ?? "?"}–${coachProfile.targ
 Target weight: ${coachProfile.target_weight_min_kg ?? "?"}–${coachProfile.target_weight_max_kg ?? "?"}kg.`
       : "No program profile on file. Use general collegiate rowing recruiting standards.";
 
-    const prompt = `You are a rowing recruiting analyst. Based on this coach's current roster and program profile, identify the top 10 recruits from the pool that would best fill roster gaps.
+    const prompt = `Rowing recruiting analyst. From the pool below, pick at most 10 recruits that best fill this program's roster gaps.
 
 Program profile:
 ${programContext}
@@ -155,13 +155,11 @@ ${programContext}
 Current roster:
 ${rosterSummary}
 
-Recruit pool (select the 10 best fits to fill roster gaps):
-${JSON.stringify(athleteSummaries, null, 2)}
+Recruit pool:
+${JSON.stringify(athleteSummaries)}
 
-Return ONLY valid JSON array with exactly this format (no markdown):
-[{"user_id":"...","reasoning":"Why this recruit fills a specific gap","gap_addressed":"What gap this fills (e.g. port-side heavyweight with sub-6:30 2k)"}]
-
-Return at most 10 athletes.`;
+Return ONLY a valid JSON array in exactly this format (no markdown), one short sentence per field:
+[{"user_id":"...","reasoning":"Why this recruit fills a specific gap","gap_addressed":"What gap this fills (e.g. port-side heavyweight with sub-6:30 2k)"}]`;
 
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -172,7 +170,14 @@ Return at most 10 athletes.`;
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
+        // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+        // thinking + text together, so with it on the budget is spent
+        // thinking and JSON.parse gets an empty string.
+        thinking: { type: "disabled" },
+        // Not 500: 10 items x (36-char uuid ~24 tokens + reasoning + gap
+        // sentence) is ~750-800 output tokens, and the raw text goes straight
+        // into JSON.parse with no fallback — truncation is a hard 500.
+        max_tokens: 1200,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -203,9 +208,10 @@ Return at most 10 athletes.`;
     }
 
     const payload = { recommendations };
-    await setCached(supabase, cacheKey, payload, TTL.SIX_HOURS, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: coach_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, payload, TTL.SIX_HOURS, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id: coach_id, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, coach_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(payload), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

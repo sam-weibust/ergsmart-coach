@@ -42,7 +42,7 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
   const [openSection, setOpenSection] = useState<string | null>("team-settings");
 
   // Team branding state
-  const [newColor, setNewColor] = useState(primaryColor || "#0a1628");
+  const [newColor, setNewColor] = useState(primaryColor || "#1A1A2E");
   const [logoUploading, setLogoUploading] = useState(false);
 
   // Team settings state
@@ -487,7 +487,7 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
 
               <div className="pt-2 border-t border-border">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Role</p>
-                <ChangeRoleSection profile={profile} accentColor={primaryColor || "#0a1628"} />
+                <ChangeRoleSection profile={profile} accentColor={primaryColor || "#1A1A2E"} />
               </div>
             </CardContent>
           </Card>

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -69,9 +69,9 @@ serve(async (req) => {
     const blocked = await preflight(supabase, { userId: user_id, functionName: FN, corsHeaders });
     if (blocked) return blocked;
 
-    const systemPrompt = `You are CrewSync AI, an expert at reading rowing and athletic training plan images.
+    const systemPrompt = `CrewSync AI — read rowing / athletic training plan images.
 
-Extract the workout schedule from this image and return a JSON array of weeks in EXACTLY this format:
+Extract the workout schedule and return a JSON array of weeks in EXACTLY this format:
 [
   {
     "week": 1,
@@ -128,6 +128,13 @@ Rules:
         },
         body: JSON.stringify({
           model: MODEL,
+          // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+          // thinking + text together, so the full budget must go to the plan.
+          thinking: { type: "disabled" },
+          // Keep 4096. Output is a whole multi-week plan lifted off the image:
+          // an uploaded 8-12 week chart is 56-84 day objects at ~50 tokens each
+          // (~3-4k). 500 would cut it off inside week 1 and the regex parse
+          // would find no closing bracket, yielding an empty plan.
           max_tokens: 4096,
           system: systemPrompt,
           messages: [
@@ -179,9 +186,10 @@ Rules:
     }
 
     const response = { plan };
-    await setCached(supabase, cacheKey, response, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, response, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, user_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

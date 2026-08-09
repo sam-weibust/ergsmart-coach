@@ -571,6 +571,85 @@ export async function startNotification(
   });
 }
 
+// ── Force curve subscription ─────────────────────────────────────────────────
+
+/**
+ * Subscribe to the PM5 force curve, robustly.
+ *
+ * ce060393 is the UUID this project was specified against but it sits outside
+ * the documented ce0600xx family, so it is treated as unproven: BOTH it and the
+ * legacy ce060035 characteristic are subscribed when the firmware allows it and
+ * the first one to actually deliver samples wins. Samples from the loser are
+ * dropped afterwards — the two characteristics use different encodings
+ * (uint16 vs uint8) and interleaving them would produce nonsense curves.
+ *
+ * `onWinner` fires once with the UUID that produced real data, so the caller
+ * (and the console) can see which characteristic this erg speaks.
+ *
+ * Returns the list of UUIDs that accepted a subscription (not necessarily ones
+ * that will deliver data), or an empty array when neither did.
+ */
+export async function subscribeForceCurve(
+  opts: {
+    /** Native deviceId. Omit on web and pass `gattServer` instead. */
+    deviceId?: string | null;
+    /** Web Bluetooth GATTServer (device.gatt). Omit on native. */
+    gattServer?: any;
+    onCurve: (forces: number[], uuid: string) => void;
+    onWinner?: (uuid: string) => void;
+    /** Caller-controlled kill switch for late notifications after unmount. */
+    isCancelled?: () => boolean;
+  }
+): Promise<string[]> {
+  const { deviceId, gattServer, onCurve, onWinner, isCancelled } = opts;
+  const candidates = [PM5_FORCE_CURVE_CHAR, PM5_FORCE_CURVE_LEGACY];
+  const subscribed: string[] = [];
+  let winner: string | null = null;
+
+  const handle = (uuid: string, dv: DataView) => {
+    if (isCancelled?.()) return;
+    const forces = uuid === PM5_FORCE_CURVE_LEGACY
+      ? parseForceCurveLegacy(dv)
+      : parseForceCurve(dv);
+    if (!forces.length) return;
+    if (winner === null) {
+      winner = uuid;
+      console.log(`[BLE] force curve is live on ${uuid} (${forces.length} samples/stroke)`);
+      onWinner?.(uuid);
+    }
+    if (uuid !== winner) return;   // ignore the losing characteristic's encoding
+    onCurve(forces, uuid);
+  };
+
+  for (const uuid of candidates) {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        if (!deviceId) continue;
+        await BleClient.startNotifications(deviceId, PM5_ROWING_SERVICE, uuid, (value) => {
+          handle(uuid, toDataView(value));
+        });
+      } else {
+        if (!gattServer) continue;
+        const svc  = await gattServer.getPrimaryService(PM5_ROWING_SERVICE);
+        const char = await svc.getCharacteristic(uuid);
+        await char.startNotifications();
+        char.addEventListener('characteristicvaluechanged', (e: Event) => {
+          handle(uuid, (e.target as any).value as DataView);
+        });
+      }
+      subscribed.push(uuid);
+      console.log(`[BLE] force curve subscription accepted on ${uuid}`);
+    } catch (err) {
+      console.warn(`[BLE] force curve subscription rejected on ${uuid}:`, err);
+    }
+  }
+
+  if (!subscribed.length) {
+    console.warn('[BLE] no force curve characteristic available on this PM5 firmware');
+  }
+  return subscribed;
+}
+
 // ── Disconnect ───────────────────────────────────────────────────────────────
 
 export async function disconnectDevice(deviceId: string): Promise<void> {

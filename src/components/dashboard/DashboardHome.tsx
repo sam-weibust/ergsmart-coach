@@ -353,13 +353,13 @@ export function DashboardHome({ profile, navTo }: DashboardHomeProps) {
         {/* Profile Card + Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Profile Card */}
-          <Card className="md:col-span-1 overflow-hidden border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+          <Card className="md:col-span-1 overflow-hidden border-0 bg-primary">
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-14 w-14 ring-2 ring-white/20">
                     <AvatarImage src={ap?.avatar_url} />
-                    <AvatarFallback className="text-lg bg-[#2d6be4] text-white">
+                    <AvatarFallback className="text-lg bg-primary text-white">
                       {name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>

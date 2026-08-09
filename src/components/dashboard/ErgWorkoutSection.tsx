@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { getLocalDate } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { csToInterval } from "@/lib/ergFormat";
 import { invokeAI } from "@/lib/aiInvoke";
+import { useDebouncedAction } from "@/hooks/useDebouncedAction";
 import { WorkoutFeedback } from "./WorkoutFeedback";
 import { toast } from "sonner";
 
@@ -52,6 +54,21 @@ function parseDuration(d: string | null): number | null {
   if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
   if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
   return parseFloat(d);
+}
+
+/**
+ * Convert a user-typed "M:SS" / "H:MM:SS" string into a Postgres INTERVAL
+ * literal (HH:MM:SS.ss).
+ *
+ * erg_workouts.duration, .avg_split, .warmup_duration and .cooldown_duration
+ * are all INTERVAL columns. Postgres parses a bare "1:50" as 1 HOUR 50 MINUTES,
+ * so writing the raw form text stored a value 60x too large. Everything bound
+ * to one of those columns must be normalised here first.
+ */
+function toIntervalLiteral(text: string | null): string | null {
+  const secs = parseDuration(text);
+  if (secs == null || !isFinite(secs) || secs <= 0) return null;
+  return csToInterval(Math.round(secs * 100));
 }
 
 async function checkAndUpdatePR(userId: string, distanceM: number | null, splitStr: string | null, durationStr: string | null, strokeRate: string | null) {
@@ -172,7 +189,8 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
   const [analyzingFeedback, setAnalyzingFeedback] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
 
-  const handleSave = async () => {
+  // Debounced below — this writes an erg_workouts row AND fires analyze-workout.
+  const handleSaveImpl = async () => {
     setSaving(true);
     setFeedback(null);
 
@@ -195,15 +213,17 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
         workout_type: workout.workout_type || "steady_state",
         workout_date: workout.workout_date || today,
         distance: workout.distance ? parseInt(workout.distance) : null,
-        duration: workout.duration || null,
-        avg_split: workout.split || null,
+        // INTERVAL columns — must be HH:MM:SS.ss, never the raw "1:50" the user
+        // typed (Postgres would read that as 1 hour 50 minutes).
+        duration: toIntervalLiteral(workout.duration),
+        avg_split: toIntervalLiteral(workout.split),
         avg_heart_rate: workout.heart_rate ? parseInt(workout.heart_rate) : null,
         stroke_rate: workout.stroke_rate ? parseInt(workout.stroke_rate) : null,
         drag_factor: workout.drag_factor ? parseInt(workout.drag_factor) : null,
         avg_watts: avgWatts,
         notes: workout.notes || null,
-        warmup_duration: workout.warmup_duration || null,
-        cooldown_duration: workout.cooldown_duration || null,
+        warmup_duration: toIntervalLiteral(workout.warmup_duration),
+        cooldown_duration: toIntervalLiteral(workout.cooldown_duration),
         rest_periods: workout.rest_periods || null,
       } as any);
 
@@ -263,6 +283,7 @@ const ErgWorkoutSection = ({ profile }: { profile?: any }) => {
       setAnalyzingFeedback(false);
     }
   };
+  const handleSave = useDebouncedAction(handleSaveImpl);
 
   const isWorking = saving || analyzingFeedback;
 

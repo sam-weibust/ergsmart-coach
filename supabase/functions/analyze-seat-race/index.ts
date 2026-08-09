@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -39,19 +39,19 @@ serve(async (req) => {
     const blocked = await preflight(supabase, { userId: null, functionName: FN, corsHeaders });
     if (blocked) return blocked;
 
-    const prompt = `You are an expert rowing coach analyzing seat racing results.
+    const prompt = `Expert rowing coach analyzing seat racing results.
 
 Boat class: ${boat_class}
 Athletes: ${JSON.stringify(athletes)}
 
 Seat race pieces (each piece swaps athletes between lineups A and B):
-${JSON.stringify(pieces, null, 2)}
+${JSON.stringify(pieces)}
 
-Analyze the cumulative seat racing data. Consider:
-- Time margins between lineup A and B in each piece
+Analyze the cumulative data across:
+- Time margins between lineup A and B per piece
 - Which athletes were in which lineup
-- Statistical significance of margins
-- Any inconsistencies or noise in results
+- Statistical significance of the margins
+- Inconsistencies or noise in the results
 
 Respond with ONLY valid JSON:
 {
@@ -71,9 +71,12 @@ Respond with ONLY valid JSON:
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
+        // 1200, not 500: `rankings` is one entry per athlete (a seat race is
+        // typically 8-16 athletes) each with a rationale, plus suggested_pairs
+        // and two notes fields — ~900 output tokens worst case.
+        max_tokens: 1200,
         // Disable adaptive thinking (Sonnet 5 default) — otherwise it consumed the
-        // 1024-token budget and returned an empty {} analysis.
-        max_tokens: 2048,
+        // token budget and returned an empty {} analysis.
         thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
@@ -88,13 +91,13 @@ Respond with ONLY valid JSON:
 
     const result = await resp.json();
     const text = result?.content?.[0]?.text ?? "{}";
-    const usage = result?.usage ?? {};
+    const usage = tokensFrom(result?.usage);
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const analysis = JSON.parse(text.slice(start, end + 1));
 
     await setCached(supabase, cacheKey, analysis, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, ...usage, cache_hit: false });
 
     return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {

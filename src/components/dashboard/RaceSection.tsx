@@ -18,6 +18,7 @@ import {
   RotateCcw, Zap, Heart,
 } from "lucide-react";
 import { getSessionUser } from '@/lib/getUser';
+import { csToInterval } from "@/lib/ergFormat";
 
 // ── BLE UUIDs (Concept2 PM5) ────────────────────────────────────
 const C2_SERVICE     = "ce060000-43e5-11e4-916c-0800200c9a66";
@@ -552,8 +553,11 @@ export default function RaceSection() {
         user_id: myUserId,
         workout_type: "race",
         distance: raceDist,
-        duration: finishTime ? fmtTime(finishTime) : null,
-        avg_split: avgSplitCs ? fmtPace(avgSplitCs) : null,
+        // duration / avg_split are INTERVAL columns — they MUST be written as a
+        // fully-qualified HH:MM:SS.ss literal. A display string like "1:50" is
+        // read by Postgres as 1 hour 50 minutes (60x too large).
+        duration: finishTime ? csToInterval(finishTime) : null,
+        avg_split: avgSplitCs ? csToInterval(avgSplitCs) : null,
         notes: `Head-to-Head Race ${raceDist}m`,
       });
       setMySaved(true);
@@ -629,13 +633,13 @@ export default function RaceSection() {
   // ── Countdown screen ─────────────────────────────────────────
   if (appState === "countdown") {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-400 text-lg mb-4 uppercase tracking-widest">Race starts in</p>
-          <div className="text-[12rem] font-black tabular-nums leading-none text-white drop-shadow-2xl">
-            {countdown > 0 ? countdown : <span className="text-green-400">GO!</span>}
+          <p className="text-muted-foreground text-lg mb-4 uppercase tracking-widest">Race starts in</p>
+          <div className="text-[12rem] font-black tabular-nums leading-none text-foreground drop-shadow-2xl">
+            {countdown > 0 ? countdown : <span className="text-[hsl(var(--success))]">GO!</span>}
           </div>
-          <p className="text-gray-500 mt-6">{room?.distance}m — {participants.length} athletes</p>
+          <p className="text-muted-foreground mt-6">{room?.distance}m — {participants.length} athletes</p>
         </div>
       </div>
     );
@@ -650,13 +654,13 @@ export default function RaceSection() {
     const allFinished = participants.length > 0 && participants.every(p => p.finished_at !== null);
 
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3">
-            <Swords className="h-5 w-5 text-green-400" />
+            <Swords className="h-5 w-5 text-[hsl(var(--success))]" />
             <span className="font-bold">{raceDist}m Race</span>
-            <Badge variant="outline" className="text-green-400 border-green-400/50 text-xs">{participants.length} athletes</Badge>
+            <Badge variant="outline" className="text-[hsl(var(--success))] border-green-400/50 text-xs">{participants.length} athletes</Badge>
           </div>
           <div className="flex items-center gap-2">
             {(iFinished || allFinished) && (
@@ -664,8 +668,8 @@ export default function RaceSection() {
                 <Flag className="h-3 w-3 mr-1" /> Results
               </Button>
             )}
-            <div className={`flex items-center gap-1.5 text-xs ${ergConnected ? "text-green-400" : "text-red-400"}`}>
-              <div className={`w-2 h-2 rounded-full ${ergConnected ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
+            <div className={`flex items-center gap-1.5 text-xs ${ergConnected ? "text-[hsl(var(--success))]" : "text-destructive"}`}>
+              <div className={`w-2 h-2 rounded-full ${ergConnected ? "bg-[hsl(var(--success))] animate-pulse" : "bg-destructive"}`} />
               {ergConnected ? "PM5" : "Disconnected"}
             </div>
           </div>
@@ -683,56 +687,56 @@ export default function RaceSection() {
             return (
               <div
                 key={p.user_id}
-                className={`rounded-xl border p-3 ${
+                className={`rounded-lg border p-3 ${
                   isMe
-                    ? "border-green-500/50 bg-green-950/20"
-                    : "border-gray-800 bg-gray-900/50"
+                    ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10"
+                    : "border-border bg-muted/50"
                 }`}
               >
                 <div className="flex items-center gap-3 mb-2">
                   {/* Position */}
                   <span className={`text-xs font-bold w-6 text-center tabular-nums ${
-                    isLeader ? "text-yellow-400" : "text-gray-500"
+                    isLeader ? "text-[hsl(var(--warning))]" : "text-muted-foreground"
                   }`}>
                     {isLeader ? <Crown className="h-4 w-4" /> : ordinal(idx + 1)}
                   </span>
 
                   {/* Name */}
-                  <span className={`font-semibold text-sm flex-1 ${isMe ? "text-green-300" : "text-white"}`}>
+                  <span className={`font-semibold text-sm flex-1 ${isMe ? "text-green-300" : "text-foreground"}`}>
                     {p.display_name}
                     {isMe && <span className="ml-1 text-xs text-green-500">(you)</span>}
-                    {finished && <span className="ml-1 text-xs text-yellow-400">✓ Finished</span>}
+                    {finished && <span className="ml-1 text-xs text-[hsl(var(--warning))]">✓ Finished</span>}
                   </span>
 
                   {/* Stats */}
                   <div className="flex items-center gap-3 text-xs tabular-nums">
-                    <span className="text-gray-400">
-                      <span className="text-white font-mono">{fmtPace(p.current_split)}</span>
-                      <span className="text-gray-600">/500m</span>
+                    <span className="text-muted-foreground">
+                      <span className="text-foreground font-mono">{fmtPace(p.current_split)}</span>
+                      <span className="text-muted-foreground">/500m</span>
                     </span>
-                    <span className="text-gray-400">
-                      <span className="text-white font-mono">{p.current_spm ?? "--"}</span>
-                      <span className="text-gray-600">spm</span>
+                    <span className="text-muted-foreground">
+                      <span className="text-foreground font-mono">{p.current_spm ?? "--"}</span>
+                      <span className="text-muted-foreground">spm</span>
                     </span>
-                    <span className="text-gray-400">
-                      <span className="text-white font-mono">{Math.round(dist)}</span>
-                      <span className="text-gray-600">/{raceDist}m</span>
+                    <span className="text-muted-foreground">
+                      <span className="text-foreground font-mono">{Math.round(dist)}</span>
+                      <span className="text-muted-foreground">/{raceDist}m</span>
                     </span>
                   </div>
                 </div>
 
                 {/* Progress bar */}
-                <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+                <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      finished ? "bg-yellow-400" :
-                      isLeader ? "bg-green-400" :
+                      finished ? "bg-[hsl(var(--warning))]" :
+                      isLeader ? "bg-[hsl(var(--success))]" :
                       isMe ? "bg-blue-400" : "bg-gray-500"
                     }`}
                     style={{ width: `${progress}%` }}
                   />
                   {/* Finish line */}
-                  <div className="absolute right-0 top-0 h-full w-px bg-gray-600" />
+                  <div className="absolute right-0 top-0 h-full w-px bg-muted-foreground" />
                 </div>
               </div>
             );
@@ -740,7 +744,7 @@ export default function RaceSection() {
         </div>
 
         {/* My stats bar */}
-        <div className="border-t border-gray-800 px-4 py-3 bg-gray-900/80">
+        <div className="border-t border-border px-4 py-3 bg-muted/80">
           <div className="grid grid-cols-4 gap-2 text-center">
             {[
               { label: "Split", value: fmtPace(bleDataRef.current.splitPace) },
@@ -749,8 +753,8 @@ export default function RaceSection() {
               { label: "Time",  value: fmtTime(bleDataRef.current.elapsedTime) },
             ].map(s => (
               <div key={s.label}>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider">{s.label}</div>
-                <div className="font-mono font-bold text-green-400 text-lg leading-tight">{s.value}</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</div>
+                <div className="font-mono font-bold text-[hsl(var(--success))] text-lg leading-tight">{s.value}</div>
               </div>
             ))}
           </div>
@@ -766,13 +770,13 @@ export default function RaceSection() {
     const dnfResults = results.filter(r => r.finish_time === null);
 
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-yellow-400" />
+            <Trophy className="h-5 w-5 text-[hsl(var(--warning))]" />
             <span className="font-bold text-lg">Race Results</span>
           </div>
-          <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white" onClick={() => {
+          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => {
             leaveRoom();
             setAppState("home");
           }}>
@@ -790,26 +794,26 @@ export default function RaceSection() {
               return (
                 <div
                   key={p.user_id}
-                  className={`flex items-center gap-4 p-4 rounded-xl border ${
-                    isMe ? "border-green-500/50 bg-green-950/20" : "border-gray-800 bg-gray-900/50"
+                  className={`flex items-center gap-4 p-4 rounded-lg border ${
+                    isMe ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10" : "border-border bg-muted/50"
                   }`}
                 >
                   <div className="text-2xl w-8 text-center">
-                    {isDNF ? "—" : rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : <span className="text-gray-400 text-sm font-bold">{rank}</span>}
+                    {isDNF ? "—" : rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : <span className="text-muted-foreground text-sm font-bold">{rank}</span>}
                   </div>
                   <div className="flex-1">
-                    <div className={`font-semibold ${isMe ? "text-green-300" : "text-white"}`}>
+                    <div className={`font-semibold ${isMe ? "text-green-300" : "text-foreground"}`}>
                       {p.display_name} {isMe && <span className="text-xs text-green-500">(you)</span>}
                     </div>
                     {isDNF ? (
-                      <div className="text-xs text-gray-500">Did not finish</div>
+                      <div className="text-xs text-muted-foreground">Did not finish</div>
                     ) : (
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         {fmtTime(p.finish_time)} • avg {fmtPace(p.avg_split)}/500m • {p.avg_spm ?? "--"} avg spm
                       </div>
                     )}
                   </div>
-                  {!isDNF && <div className="font-mono font-bold text-green-400">{fmtTime(p.finish_time)}</div>}
+                  {!isDNF && <div className="font-mono font-bold text-[hsl(var(--success))]">{fmtTime(p.finish_time)}</div>}
                 </div>
               );
             })}
@@ -817,8 +821,8 @@ export default function RaceSection() {
 
           {/* Replay Chart */}
           {replayData.length > 10 && (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Race Replay — Split over Distance</h3>
+            <div className="bg-muted rounded-lg border border-border p-4">
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Race Replay — Split over Distance</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={replayData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
@@ -866,7 +870,7 @@ export default function RaceSection() {
                 {results.map((p, i) => (
                   <div key={p.user_id} className="flex items-center gap-1.5 text-xs">
                     <div className="w-3 h-3 rounded-full" style={{ background: ATHLETE_COLORS[i % ATHLETE_COLORS.length] }} />
-                    <span className="text-gray-400">{p.display_name}</span>
+                    <span className="text-muted-foreground">{p.display_name}</span>
                   </div>
                 ))}
               </div>
@@ -880,7 +884,7 @@ export default function RaceSection() {
   // ── Matchmaking screen ────────────────────────────────────────
   if (appState === "matchmaking") {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-8">
         <div className="text-center space-y-6 max-w-md w-full">
           <div className="relative">
             <div className="w-20 h-20 rounded-full border-4 border-blue-500/30 border-t-blue-400 animate-spin mx-auto" />
@@ -888,22 +892,22 @@ export default function RaceSection() {
           </div>
           <div>
             <h2 className="text-2xl font-bold mb-2">Finding a Race…</h2>
-            <p className="text-gray-400 text-sm">Matching you with athletes of similar ability</p>
+            <p className="text-muted-foreground text-sm">Matching you with athletes of similar ability</p>
             {my2k && <p className="text-blue-400 text-xs mt-1 font-mono">Your 2k benchmark: {fmtPace(my2k)}/500m</p>}
           </div>
           {queueEntries.length > 0 && (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 text-left">
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">{queueEntries.length} in queue</p>
+            <div className="bg-muted rounded-lg border border-border p-4 text-left">
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">{queueEntries.length} in queue</p>
               {queueEntries.map(q => (
-                <div key={q.user_id} className={`flex items-center gap-2 py-1.5 text-sm ${q.user_id === myUserId ? "text-blue-300 font-semibold" : "text-gray-300"}`}>
+                <div key={q.user_id} className={`flex items-center gap-2 py-1.5 text-sm ${q.user_id === myUserId ? "text-blue-300 font-semibold" : "text-muted-foreground"}`}>
                   <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
                   {q.display_name} {q.user_id === myUserId && "(you)"}
-                  {q.erg_score_2k && <span className="text-gray-500 text-xs ml-auto font-mono">{fmtPace(q.erg_score_2k)}</span>}
+                  {q.erg_score_2k && <span className="text-muted-foreground text-xs ml-auto font-mono">{fmtPace(q.erg_score_2k)}</span>}
                 </div>
               ))}
             </div>
           )}
-          <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white" onClick={leaveMatchmaking}>
+          <Button variant="outline" className="border-border text-muted-foreground hover:text-foreground" onClick={leaveMatchmaking}>
             <LogOut className="h-4 w-4 mr-2" /> Cancel
           </Button>
         </div>
@@ -917,52 +921,52 @@ export default function RaceSection() {
     const canStart = isCreator && participants.length >= 2;
 
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-blue-400" />
             <span className="font-bold">Race Lobby</span>
           </div>
-          <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-400 text-xs" onClick={leaveRoom}>
+          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive text-xs" onClick={leaveRoom}>
             <LogOut className="h-3.5 w-3.5 mr-1" /> Leave
           </Button>
         </div>
 
         <div className="flex-1 p-4 space-y-4">
           {/* Room code */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-center">
-            <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Room Code</p>
+          <div className="bg-muted border border-border rounded-lg p-5 text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Room Code</p>
             <div className="flex items-center justify-center gap-3">
-              <span className="text-4xl font-black tracking-[0.2em] font-mono text-white">{room.room_code}</span>
-              <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white h-8 w-8 p-0" onClick={() => {
+              <span className="text-4xl font-black tracking-[0.2em] font-mono text-foreground">{room.room_code}</span>
+              <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground h-8 w-8 p-0" onClick={() => {
                 navigator.clipboard.writeText(room.room_code);
                 toast({ title: "Copied!", description: room.room_code });
               }}>
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-gray-500 mt-2">Share this code with up to {8 - participants.length} more athletes</p>
+            <p className="text-xs text-muted-foreground mt-2">Share this code with up to {8 - participants.length} more athletes</p>
             <Badge className="mt-2 bg-blue-900/50 text-blue-300 border-blue-700/50">{room.distance}m</Badge>
           </div>
 
           {/* Participants */}
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{participants.length}/8 Athletes</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{participants.length}/8 Athletes</p>
             <div className="space-y-2">
               {participants.map((p, idx) => (
                 <div key={p.user_id} className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  p.user_id === myUserId ? "border-green-500/40 bg-green-950/20" : "border-gray-800 bg-gray-900/50"
+                  p.user_id === myUserId ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10" : "border-border bg-muted/50"
                 }`}>
-                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold" style={{ color: ATHLETE_COLORS[idx % ATHLETE_COLORS.length] }}>
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold" style={{ color: ATHLETE_COLORS[idx % ATHLETE_COLORS.length] }}>
                     {p.display_name.charAt(0).toUpperCase()}
                   </div>
-                  <span className={`flex-1 text-sm font-medium ${p.user_id === myUserId ? "text-green-300" : "text-white"}`}>
+                  <span className={`flex-1 text-sm font-medium ${p.user_id === myUserId ? "text-green-300" : "text-foreground"}`}>
                     {p.display_name}
-                    {p.user_id === room.creator_id && <span className="ml-1.5 text-[10px] text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded">HOST</span>}
-                    {p.user_id === myUserId && <span className="ml-1 text-xs text-gray-500">(you)</span>}
+                    {p.user_id === room.creator_id && <span className="ml-1.5 text-[10px] text-[hsl(var(--warning))] bg-[hsl(var(--warning))]/10 px-1.5 py-0.5 rounded">HOST</span>}
+                    {p.user_id === myUserId && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}
                   </span>
-                  {p.erg_score_2k && <span className="text-xs text-gray-500 font-mono">{fmtPace(p.erg_score_2k)}</span>}
-                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                  {p.erg_score_2k && <span className="text-xs text-muted-foreground font-mono">{fmtPace(p.erg_score_2k)}</span>}
+                  <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
                 </div>
               ))}
             </div>
@@ -972,7 +976,7 @@ export default function RaceSection() {
           {isCreator && (
             <div className="space-y-2">
               {!canStart && (
-                <p className="text-xs text-gray-500 text-center">Waiting for at least 1 more athlete to join…</p>
+                <p className="text-xs text-muted-foreground text-center">Waiting for at least 1 more athlete to join…</p>
               )}
               <Button
                 className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 disabled:opacity-40"
@@ -984,7 +988,7 @@ export default function RaceSection() {
             </div>
           )}
           {!isCreator && (
-            <p className="text-xs text-gray-400 text-center py-2">Waiting for host to start the race…</p>
+            <p className="text-xs text-muted-foreground text-center py-2">Waiting for host to start the race…</p>
           )}
         </div>
       </div>
@@ -1005,13 +1009,13 @@ export default function RaceSection() {
       </div>
 
       {/* BLE Connection */}
-      <Card className={`border ${ergConnected ? "border-green-500/40 bg-green-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
+      <Card className={`border ${ergConnected ? "border-[hsl(var(--success))]/40 bg-green-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${ergConnected ? "bg-green-400 animate-pulse" : "bg-amber-400"}`} />
+              <div className={`w-3 h-3 rounded-full ${ergConnected ? "bg-[hsl(var(--success))] animate-pulse" : "bg-amber-400"}`} />
               <div>
-                <p className={`font-semibold text-sm ${ergConnected ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
+                <p className={`font-semibold text-sm ${ergConnected ? "text-green-600 dark:text-[hsl(var(--success))]" : "text-amber-600 dark:text-amber-400"}`}>
                   {ergConnected ? "Erg Connected — Ready to Race" : "Erg Not Connected"}
                 </p>
                 <p className="text-xs text-muted-foreground">

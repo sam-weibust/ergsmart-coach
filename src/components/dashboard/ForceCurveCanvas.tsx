@@ -54,7 +54,7 @@ function PeakForceSparkline({ allCurves }: { allCurves: number[][] }) {
 
     // Line
     ctx.beginPath();
-    ctx.strokeStyle = "#3b82f6";
+    ctx.strokeStyle = "#1A1A2E";
     ctx.lineWidth = 1.5;
     ctx.lineJoin = "round";
     peaks.forEach((p, i) => {
@@ -70,7 +70,7 @@ function PeakForceSparkline({ allCurves }: { allCurves: number[][] }) {
 
   return (
     <div className="px-4 pb-3">
-      <p className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">
+      <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">
         Peak Force / Stroke — {allCurves.length} strokes
       </p>
       <canvas ref={canvasRef} width={600} height={48} className="w-full h-12 rounded" />
@@ -123,17 +123,17 @@ export default function ForceCurveCanvas({
     ctx.scale(dpr, dpr);
 
     // Background
-    ctx.fillStyle = "#050d18";
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, W, H);
 
     drawGrid(ctx, W, H, Math.round(maxN));
 
     // Ideal bell (muted gray dashed)
-    drawCurve(ctx, W, H, idealCurve, maxN, "#334155", 1.5, 0.7, true, [4, 4]);
+    drawCurve(ctx, W, H, idealCurve, maxN, "#C9C9D4", 1.5, 0.7, true, [4, 4]);
 
     // Session average (white dashed)
     if (avgCurve) {
-      drawCurve(ctx, W, H, avgCurve, maxN, "#e2e8f0", 1.5, 0.6, true, [6, 3]);
+      drawCurve(ctx, W, H, avgCurve, maxN, "#8B8B9E", 1.5, 0.6, true, [6, 3]);
     }
 
     // Previous stroke (blue 30% opacity)
@@ -146,18 +146,18 @@ export default function ForceCurveCanvas({
             return prevCurve[lo] + (prevCurve[hi] - prevCurve[lo]) * (t - lo);
           })
         : prevCurve;
-      drawCurve(ctx, W, H, resampled, maxN, "#3b82f6", 2, 0.3);
+      drawCurve(ctx, W, H, resampled, maxN, "#1A1A2E", 2, 0.3);
     }
 
     // Current stroke (bright blue solid)
-    drawCurve(ctx, W, H, currentCurve, maxN, "#60a5fa", 2.5, 1);
+    drawCurve(ctx, W, H, currentCurve, maxN, "#1A1A2E", 2.5, 1);
 
     // Legend
     const legendItems = [
-      { color: "#60a5fa", alpha: 1, dash: false, label: "Current" },
-      { color: "#3b82f6", alpha: 0.3, dash: false, label: "Previous" },
-      { color: "#e2e8f0", alpha: 0.6, dash: true, label: "Avg" },
-      { color: "#334155", alpha: 0.7, dash: true, label: "Ideal" },
+      { color: "#1A1A2E", alpha: 1, dash: false, label: "Current" },
+      { color: "#1A1A2E", alpha: 0.3, dash: false, label: "Previous" },
+      { color: "#8B8B9E", alpha: 0.6, dash: true, label: "Avg" },
+      { color: "#C9C9D4", alpha: 0.7, dash: true, label: "Ideal" },
     ];
     ctx.font = "9px 'Inter', system-ui, sans-serif";
     ctx.textAlign = "left";
@@ -173,7 +173,7 @@ export default function ForceCurveCanvas({
       ctx.lineTo(lx + 16, PAD.top + 8);
       ctx.stroke();
       ctx.restore();
-      ctx.fillStyle = "#6b7a99";
+      ctx.fillStyle = "#6B6B7D";
       ctx.fillText(item.label, lx + 20, PAD.top + 12);
       lx += 60;
     }
@@ -208,11 +208,11 @@ export default function ForceCurveCanvas({
   const stats = useMemo(() => computeStats(currentCurve, driveTime, recoveryTime), [currentCurve, driveTime, recoveryTime]);
 
   return (
-    <div className="rounded-xl border border-gray-800 overflow-hidden" style={{ background: "#050d18" }}>
+    <div className="rounded-lg border border-border overflow-hidden" style={{ background: "#FFFFFF" }}>
       {/* Header */}
       <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-xs text-gray-500 uppercase tracking-widest">Force Curve</span>
-        <span className="text-xs text-gray-600 font-mono">{strokeCount} stroke{strokeCount !== 1 ? "s" : ""}</span>
+        <span className="text-xs text-muted-foreground uppercase tracking-widest">Force Curve</span>
+        <span className="text-xs text-muted-foreground font-mono">{strokeCount} stroke{strokeCount !== 1 ? "s" : ""}</span>
       </div>
 
       {/* Canvas */}
@@ -224,35 +224,35 @@ export default function ForceCurveCanvas({
 
       {/* Metrics row */}
       {stats && (
-        <div className="grid grid-cols-5 gap-px" style={{ background: "#0f1929" }}>
-          <div className="px-3 py-2.5 text-center" style={{ background: "#050d18" }}>
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Peak Force</p>
-            <p className="text-sm font-bold text-white font-mono">{stats.peakForce}N</p>
+        <div className="grid grid-cols-5 gap-px" style={{ background: "#E2E1E9" }}>
+          <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Peak Force</p>
+            <p className="text-sm font-bold text-foreground font-mono">{stats.peakForce}N</p>
           </div>
-          <div className="px-3 py-2.5 text-center" style={{ background: "#050d18" }}>
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Time to Peak</p>
-            <p className="text-sm font-bold text-white font-mono">
+          <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Time to Peak</p>
+            <p className="text-sm font-bold text-foreground font-mono">
               {stats.timeToPeak != null ? `${stats.timeToPeak}ms` : "--"}
             </p>
           </div>
-          <div className="px-3 py-2.5 text-center" style={{ background: "#050d18" }}>
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Drive Efficiency</p>
-            <p className="text-sm font-bold text-white font-mono">{stats.driveEfficiency}%</p>
+          <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Drive Efficiency</p>
+            <p className="text-sm font-bold text-foreground font-mono">{stats.driveEfficiency}%</p>
           </div>
-          <div className="px-3 py-2.5 text-center" style={{ background: "#050d18" }}>
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Smoothness</p>
-            <p className={`text-sm font-bold font-mono ${stats.smoothness >= 7 ? "text-green-400" : stats.smoothness >= 5 ? "text-yellow-400" : "text-red-400"}`}>
+          <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoothness</p>
+            <p className={`text-sm font-bold font-mono ${stats.smoothness >= 7 ? "text-[hsl(var(--success))]" : stats.smoothness >= 5 ? "text-[hsl(var(--warning))]" : "text-destructive"}`}>
               {stats.smoothness}/10
             </p>
           </div>
-          <div className="px-3 py-2.5 text-center" style={{ background: "#050d18" }}>
-            <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Catch Slip</p>
+          <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Catch Slip</p>
             {stats.catchSlip ? (
-              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-400 border border-red-700/40">
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-destructive/10 text-destructive border border-destructive/30">
                 SLIP
               </span>
             ) : (
-              <p className="text-sm font-bold text-green-400 font-mono">OK</p>
+              <p className="text-sm font-bold text-[hsl(var(--success))] font-mono">OK</p>
             )}
           </div>
         </div>

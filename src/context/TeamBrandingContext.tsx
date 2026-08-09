@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
 
-const DEFAULT_COLOR = "#0a1628";
+const DEFAULT_COLOR = "#1A1A2E";
 
 export interface TeamBranding {
   teamId: string | null;

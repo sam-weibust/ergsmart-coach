@@ -18,31 +18,14 @@ import {
 } from "@/lib/ble";
 import { c2Connect, c2Sync, c2Disconnect } from "@/lib/api";
 import { getSessionUser } from '@/lib/getUser';
+import { csToInterval } from "@/lib/ergFormat";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
-
-function formatTime(cs: number): string {
-  const s = Math.floor(cs / 100);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-  return `${m}:${String(sec).padStart(2,"0")}`;
-}
-
-function formatPace(cs: number): string {
-  if (!cs || cs <= 0 || cs > 60000) return "--:--";
-  const s = cs / 100;
-  const m = Math.floor(s / 60);
-  const sec = (s % 60).toFixed(1).padStart(4, "0");
-  return `${m}:${sec}`;
-}
-
-function formatDuration(cs: number): string {
-  const s = Math.floor(cs / 100);
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
+// Display formatting now comes from @/lib/ergFormat (fmtTime / fmtPace) and
+// INTERVAL-column writes go through csToInterval. The local formatTime /
+// formatPace / formatDuration helpers were removed: they produced bare "m:ss"
+// display strings that Postgres mis-read as HOURS:MINUTES when written to the
+// erg_workouts INTERVAL columns.
 
 const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"];
 
@@ -128,14 +111,16 @@ const DeviceSection = () => {
           const user = await getSessionUser();
           if (!user) return;
           const dist = Math.round(ergData.distance!);
-          const dur = formatDuration(ergData.elapsedTime!);
           const avgSplitCs = (ergData.elapsedTime! / ergData.distance!) * 500;
           await supabase.from("erg_workouts").insert({
             user_id: user.id,
             workout_type: "steady_state",
             distance: dist,
-            duration: dur,
-            avg_split: formatPace(avgSplitCs),
+            // duration / avg_split are INTERVAL columns — write a fully
+            // qualified HH:MM:SS.ss literal. Postgres reads a bare "1:50" as
+            // 1 hour 50 minutes, storing a value 60x too large.
+            duration: csToInterval(ergData.elapsedTime!),
+            avg_split: csToInterval(Math.round(avgSplitCs)),
             avg_heart_rate: ergData.heartRate || heartRate || null,
             calories: ergData.calories || null,
           });

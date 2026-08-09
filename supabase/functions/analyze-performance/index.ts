@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -9,7 +9,10 @@ const corsHeaders = {
 };
 
 const MODEL = "claude-sonnet-5";
-const MAX_TOKENS = 1500;
+// 1200, not 500: the team prompt asks for 6 sections x 3-5 sentences plus a
+// 5-item recommendation list (~900 output tokens worst case). At 500 the last
+// two sections never render and parseSections() silently drops them.
+const MAX_TOKENS = 1200;
 const FN = "analyze-performance";
 
 serve(async (req) => {
@@ -139,7 +142,7 @@ async function analyzeIndividual(supabase: any, userId: string, apiKey: string, 
     `  ${r.result_date}: ${r.piece_type} ${r.distance_meters || "?"}m, split ${formatSplit(r.avg_split_seconds)}`
   ).join("\n") : "  No on-water data.";
 
-  const prompt = `You are an expert rowing performance coach analyzing an individual athlete's data. Provide a detailed, data-driven analysis.
+  const prompt = `Expert rowing performance coach. Data-driven analysis of one athlete.
 
 ATHLETE: ${profile?.full_name || "Unknown"}
 WEIGHT: ${profile?.weight_kg ? `${profile.weight_kg}kg` : "Not recorded"}
@@ -165,24 +168,24 @@ ${whoopLines}
 ON-WATER SESSIONS:
 ${onWaterLines}
 
-Analyze this data and provide a structured response with these EXACT section headers:
+Use these EXACT section headers:
 
 **OVERALL TRAJECTORY**
-Is the athlete improving or declining? At what rate? Cite specific data points.
+Improving or declining, and at what rate.
 
 **STRONGEST AND WEAKEST PERIODS**
-Which training weeks/periods showed the best performance and why? What correlated with peak performance vs. decline?
+Best/worst training weeks and what correlated with each.
 
 **PREDICTED 2K TIME**
-Based on current trajectory and watts, what is the predicted 2k time? Show your calculation.
+Predicted 2k from current watts trajectory. Show the calculation.
 
 **SPECIFIC WEAKNESSES**
-What specific technical or training weaknesses does the data reveal? (e.g., pacing consistency, training volume, recovery)
+Technical or training weaknesses in the data (pacing consistency, volume, recovery).
 
 **NEXT 4 WEEKS RECOMMENDATIONS**
-5 specific, actionable training recommendations for the next 4 weeks based on this data. Be precise with volumes and intensities.
+5 actionable recommendations. Precise volumes and intensities.
 
-Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
+Direct, cite specific numbers, 3-5 sentences per section.`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -194,6 +197,9 @@ Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
     body: JSON.stringify({
       model: MODEL,
       max_tokens: MAX_TOKENS,
+      // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the
+      // max_tokens budget and would truncate the tail sections.
+      thinking: { type: "disabled" },
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -207,7 +213,7 @@ Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
 
   const data = await response.json();
   const text = data.content?.[0]?.text || "";
-  const usage = data?.usage ?? {};
+  const usage = tokensFrom(data?.usage);
 
   const sections = parseSections(text, [
     "OVERALL TRAJECTORY",
@@ -219,8 +225,8 @@ Be direct, cite specific numbers, keep each section to 3-5 sentences.`;
 
   const result = { sections, raw: text, type: "individual" };
   await setCached(supabase, cacheKey, result, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
-  await logUsage(supabase, { user_id: userId, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-  await recordUsage(supabase, userId, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+  await logUsage(supabase, { user_id: userId, function_name: FN, model: MODEL, ...usage, cache_hit: false });
+  await recordUsage(supabase, userId, usage.input_tokens + usage.output_tokens);
 
   return new Response(JSON.stringify(result), {
     headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
@@ -325,7 +331,7 @@ async function analyzeTeam(supabase: any, teamId: string, apiKey: string, corsHe
     `  ${memberMap[uid] || uid.slice(0, 8)}: ${d.present}/${d.total} (${Math.round(d.present / Math.max(d.total, 1) * 100)}%)`
   ).join("\n");
 
-  const prompt = `You are an expert rowing coach analyzing team-wide performance data. Provide a structured team analysis.
+  const prompt = `Expert rowing coach. Structured team-wide performance analysis.
 
 TEAM ERG SCORES (last 90 days) BY ATHLETE:
 ${athleteLines || "  No erg scores logged."}
@@ -339,27 +345,27 @@ ${loadLines || "  No load data."}
 ATTENDANCE (last 90 days):
 ${attendanceLines || "  No attendance data."}
 
-Analyze this data and provide a structured response with these EXACT section headers:
+Use these EXACT section headers:
 
 **TEAM TRAJECTORY**
-Is the team overall improving or declining? Cite specific data. What is the trend line for average 2k?
+Overall improving or declining; trend line for average 2k.
 
 **TOP AND BOTTOM PERFORMERS**
-Who is improving fastest? Who needs the most attention? Cite names and specific numbers.
+Fastest improvers and who needs attention. Name them.
 
 **TRAINING LOAD RECOMMENDATIONS**
-Based on current load and fatigue data, what adjustments should be made for the next training block?
+Adjustments for the next block from current load and fatigue.
 
 **ATTENDANCE PATTERNS**
-Which athletes have attendance issues? Does attendance correlate with performance gains or losses?
+Attendance issues and whether attendance correlates with performance.
 
 **LINEUP RECOMMENDATIONS**
-Based on current form and improvement rates, who should be prioritized for the top boat(s)?
+Who to prioritize for the top boat(s) on current form and improvement rate.
 
 **RED FLAGS**
-Any athletes who are declining, overtraining, or showing concerning patterns that need immediate attention?
+Athletes declining, overtraining, or otherwise needing immediate attention.
 
-Be direct, cite specific athletes and numbers where available, keep each section to 3-5 sentences.`;
+Direct, cite athletes and numbers, 3-5 sentences per section.`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -371,6 +377,9 @@ Be direct, cite specific athletes and numbers where available, keep each section
     body: JSON.stringify({
       model: MODEL,
       max_tokens: MAX_TOKENS,
+      // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the
+      // max_tokens budget and would truncate the tail sections.
+      thinking: { type: "disabled" },
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -384,7 +393,7 @@ Be direct, cite specific athletes and numbers where available, keep each section
 
   const data = await response.json();
   const text = data.content?.[0]?.text || "";
-  const usage = data?.usage ?? {};
+  const usage = tokensFrom(data?.usage);
 
   const sections = parseSections(text, [
     "TEAM TRAJECTORY",
@@ -397,7 +406,7 @@ Be direct, cite specific athletes and numbers where available, keep each section
 
   const result = { sections, raw: text, type: "team" };
   await setCached(supabase, cacheKey, result, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
-  await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+  await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, ...usage, cache_hit: false });
 
   return new Response(JSON.stringify(result), {
     headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

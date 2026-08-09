@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -50,14 +50,14 @@ serve(async (req) => {
 
     const currentYear = new Date().getFullYear();
 
-    const prompt = `You are an expert rowing recruiting coordinator.
+    const prompt = `Expert rowing recruiting coordinator.
 
 Current year: ${currentYear}
-Team members with profiles: ${JSON.stringify(members || [], null, 2)}
+Team members with profiles: ${JSON.stringify(members || [])}
 Recent erg scores: ${JSON.stringify(ergScores?.slice(0, 50) || [])}
 
-Analyze the team roster for recruiting gaps. Consider:
-- Graduation year distribution (who graduates in 1, 2, 3, 4 years)
+Assess the roster for recruiting gaps across:
+- Graduation year distribution (1/2/3/4 years out)
 - Port/starboard balance (side_preference)
 - Erg score distribution (speed depth)
 - Weight distribution (lightweight vs heavyweight)
@@ -79,9 +79,12 @@ Respond with ONLY valid JSON:
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        // Disable adaptive thinking (Sonnet 5 default) — it consumed the 1024-token
+        // 1000, not 500: the JSON carries a `gaps` array (up to ~6 entries),
+        // a graduation_risk paragraph, 3 recommendations and a recruit profile —
+        // ~650 output tokens worst case. 500 truncates and JSON.parse throws.
+        max_tokens: 1000,
+        // Disable adaptive thinking (Sonnet 5 default) — it consumed the token
         // budget and left an empty {} result.
-        max_tokens: 2500,
         thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
@@ -95,14 +98,14 @@ Respond with ONLY valid JSON:
     await recordApiSuccess(supabase, "analyze-recruiting-gaps");
 
     const result = await resp.json();
-    const usage = result?.usage ?? {};
+    const usage = tokensFrom(result?.usage);
     const text = result?.content?.[0]?.text ?? "{}";
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const analysis = JSON.parse(text.slice(start, end + 1));
 
     await setCached(supabase, cacheKey, analysis, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: "analyze-recruiting-gaps", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await logUsage(supabase, { user_id: null, function_name: "analyze-recruiting-gaps", model: MODEL, ...usage, cache_hit: false });
 
     return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {

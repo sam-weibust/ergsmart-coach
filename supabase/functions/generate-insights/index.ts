@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -119,12 +119,12 @@ serve(async (req) => {
 
     const aiResult = await anthropicResponse.json();
     const insight = aiResult?.content?.[0]?.text ?? "";
-    const usage = aiResult?.usage ?? {};
+    const usage = tokensFrom(aiResult?.usage);
 
     const result = { insight, last_updated: new Date().toISOString() };
     await setCached(supabase, cacheKey, result, TTL.HALF_DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "generate-insights", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    await logUsage(supabase, { user_id, function_name: "generate-insights", model: MODEL, ...usage, cache_hit: false });
+    await recordUsage(supabase, user_id, usage.input_tokens + usage.output_tokens);
 
     // Also store in ai_insights table
     await supabase.from("ai_insights").upsert({

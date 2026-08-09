@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -8,6 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MODEL = "claude-sonnet-5";
 
 const FALLBACK_PHILOSOPHY = `You are generating training plans following a competitive high school rowing program methodology.
 
@@ -61,7 +63,7 @@ serve(async (req) => {
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       console.log("generate-team-training-plan: cache hit");
-      await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { function_name: "generate-team-training-plan", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -126,11 +128,19 @@ serve(async (req) => {
       ? twokScores.reduce((acc, e) => acc + (e.watts || 0), 0) / twokScores.length
       : 0;
 
+    // NOTE: this system prompt is NOT prompt-cacheable and deliberately carries
+    // no cache_control. It is ~450-550 tokens (philosophy is truncated to 1500
+    // chars), well under claude-sonnet-5's 1024-token minimum cacheable prefix,
+    // so a breakpoint here is a silent no-op. It is also per-team, since
+    // philosophyPrompt comes from team_training_philosophy.
     const systemPrompt = `${philosophyPrompt}
 
-You are generating a team training plan. Apply the methodology above to all sessions.
+Apply the methodology above to every session in the plan.
 
-You must return a complete training plan as a JSON object. Every single day must have all fields populated — never return empty strings or null values for workout fields. If a day is a rest day populate it with type: "Rest", warmup: "none", workout: "Rest day — light stretching only", rest: "none", breakup: "none", rates: "none", cooldown: "none". Use the athlete's 2k time to calculate all pace targets as 2k plus or minus seconds per 500m. Never use absolute splits. You must generate ALL requested weeks completely — do not stop early, do not truncate, never omit a week or a day.`;
+- Return the plan as a JSON object; no field may be empty string or null.
+- Rest day: type "Rest", warmup "none", workout "Rest day — light stretching only", rest "none", breakup "none", rates "none", cooldown "none".
+- All pace targets are 2k +/- seconds per 500m. Never absolute splits.
+- Generate every requested week and all 7 days. Do not stop early or truncate.`;
 
     console.log("generate-team-training-plan: system prompt built, chars:", systemPrompt.length);
 
@@ -146,18 +156,18 @@ Injured/restricted athletes: ${JSON.stringify(injured_athletes)}
 Team average 2k watts: ${avgWatts2k?.toFixed(0) || "unknown"}
 High fatigue athletes: ${JSON.stringify(loadData?.filter(l => (l.fatigue_score || 0) >= 7).map(l => l.user_id) || [])}
 
-Generate EXACTLY ${weeksToGenerate} weeks (week_number ${start_week} through ${chunkEnd}). All 7 days per week must be included (practice days + rest days).
+Generate EXACTLY ${weeksToGenerate} weeks (week_number ${start_week} through ${chunkEnd}), all 7 days each (practice + rest days).
 
-Each session object must have all fields filled — never empty string, never null:
-- type: zone name (UT1, UT2, AT, TR1, TR2, Rest)
+Session fields:
+- type: UT1, UT2, AT, TR1, TR2, or Rest
 - warmup: duration and description
-- workout: specific piece description (e.g. "4x10 minutes at 2k+18s/500m")
+- workout: specific piece (e.g. "4x10 minutes at 2k+18s/500m")
 - rest: rest interval between pieces
 - breakup: stroke rate pattern (e.g. "2/2/2/2/2")
-- rates: stroke rates for each segment (e.g. "18/20/22/20/18")
+- rates: stroke rates per segment (e.g. "18/20/22/20/18")
 - cooldown: duration and description
 
-Varsity gets ~20% more volume than novice. Fatigue athletes get reduced load.
+Varsity gets ~20% more volume than novice. Fatigued athletes get reduced load.
 
 Respond with ONLY valid JSON (no markdown, no explanation):
 {
@@ -199,17 +209,17 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       headers: {
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
-        "anthropic-beta": "prompt-caching-2024-07-31",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
-        // A 4-week chunk × 7 days with full required+optional session detail does
-        // not fit in 4000 tokens — the JSON was truncated and failed to parse.
-        // Also disable adaptive thinking (Sonnet 5 default) so the budget goes to JSON.
+        model: MODEL,
+        // Keep 16000. A 4-week chunk x 7 days x (required + optional session,
+        // 7 populated fields each) is ~10-14k output tokens; 4000 already
+        // truncated it and 500 would return nothing usable.
+        // thinking stays disabled so the whole budget goes to the JSON.
         max_tokens: 16000,
         thinking: { type: "disabled" },
-        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+        system: systemPrompt,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -244,10 +254,10 @@ Respond with ONLY valid JSON (no markdown, no explanation):
       throw new Error("AI returned malformed JSON");
     }
 
-    const usage = result?.usage ?? {};
+    const tokens = tokensFrom(result?.usage);
     console.log("generate-team-training-plan: success, weeks in chunk:", chunk?.weeks?.length);
-    await setCached(supabase, cacheKey, chunk, TTL.DAY, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { function_name: "generate-team-training-plan", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await setCached(supabase, cacheKey, chunk, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { function_name: "generate-team-training-plan", model: MODEL, ...tokens, cache_hit: false });
 
     return new Response(JSON.stringify(chunk), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

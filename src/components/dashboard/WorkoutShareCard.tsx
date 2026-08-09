@@ -50,26 +50,9 @@ function drawCard(canvas: HTMLCanvasElement, stats: WorkoutStats, onDone: () => 
   canvas.width = W;
   canvas.height = H;
 
-  // Background
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, "#0a1628");
-  bg.addColorStop(0.5, "#112240");
-  bg.addColorStop(1, "#0a1628");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Glow top-right
-  const glow1 = ctx.createRadialGradient(W * 0.85, H * 0.12, 0, W * 0.85, H * 0.12, 420);
-  glow1.addColorStop(0, "rgba(45,107,228,0.22)");
-  glow1.addColorStop(1, "transparent");
-  ctx.fillStyle = glow1;
-  ctx.fillRect(0, 0, W, H);
-
-  // Glow bottom-left
-  const glow2 = ctx.createRadialGradient(W * 0.12, H * 0.88, 0, W * 0.12, H * 0.88, 350);
-  glow2.addColorStop(0, "rgba(45,107,228,0.14)");
-  glow2.addColorStop(1, "transparent");
-  ctx.fillStyle = glow2;
+  // Background — flat navy. The shared graphic stays a navy panel with white
+  // ink (the inverse of the app), matching the navy blocks on the marketing site.
+  ctx.fillStyle = "#1A1A2E";
   ctx.fillRect(0, 0, W, H);
 
   // Card border
@@ -80,13 +63,10 @@ function drawCard(canvas: HTMLCanvasElement, stats: WorkoutStats, onDone: () => 
   ctx.stroke();
   ctx.restore();
 
-  // Top accent line
-  const accent = ctx.createLinearGradient(48, 48, W - 48, 48);
-  accent.addColorStop(0, "#2d6be4");
-  accent.addColorStop(1, "#1e55c4");
+  // Top accent line — white, since the accent is inverted on a navy surface
   ctx.save();
   drawRoundedRect(ctx, 48, 48, W - 96, 5, 2.5);
-  ctx.fillStyle = accent;
+  ctx.fillStyle = "#ffffff";
   ctx.fill();
   ctx.restore();
 
@@ -123,9 +103,9 @@ function drawCard(canvas: HTMLCanvasElement, stats: WorkoutStats, onDone: () => 
     ctx.font = "bold 22px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     const typeW = ctx.measureText(typeText).width + 36;
     drawRoundedRect(ctx, 80, 348, typeW, 42, 21);
-    ctx.fillStyle = "#2d6be4";
-    ctx.fill();
     ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.fillStyle = "#1A1A2E";
     ctx.fillText(typeText, 98, 375);
     ctx.restore();
 
@@ -212,9 +192,9 @@ function drawCard(canvas: HTMLCanvasElement, stats: WorkoutStats, onDone: () => 
 
         ctx.save();
         drawRoundedRect(ctx, x, y, secCardW, secCardH, 12);
-        ctx.fillStyle = "rgba(45,107,228,0.12)";
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
         ctx.fill();
-        ctx.strokeStyle = "rgba(45,107,228,0.2)";
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
@@ -316,29 +296,29 @@ export function WorkoutShareCard({ open, onClose, stats }: WorkoutShareCardProps
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg bg-[#0a1628] border-white/10 text-white">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <Share2 className="h-5 w-5 text-[#2d6be4]" />
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="h-5 w-5 text-primary" />
             Share Workout
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="relative w-full aspect-square rounded-xl overflow-hidden border border-white/10">
-            <canvas ref={canvasRef} className="w-full h-full object-contain" style={{ background: "#0a1628" }} />
+          <div className="relative w-full aspect-square rounded-lg overflow-hidden border border-border">
+            <canvas ref={canvasRef} className="w-full h-full object-contain" style={{ background: "#1A1A2E" }} />
             {!rendered && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#0a1628]">
-                <div className="w-8 h-8 border-2 border-[#2d6be4] border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </div>
 
           <div className="flex gap-3">
-            <Button onClick={handleDownload} disabled={!rendered} className="flex-1 bg-[#2d6be4] hover:bg-[#1e55c4] text-white gap-2">
+            <Button onClick={handleDownload} disabled={!rendered} className="flex-1 gap-2">
               <Download className="h-4 w-4" />Download Image
             </Button>
-            <Button onClick={handleCopyLink} variant="outline" className="flex-1 border-white/20 text-white hover:bg-white/10 gap-2">
+            <Button onClick={handleCopyLink} variant="outline" className="flex-1 gap-2">
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copied!" : "Copy Link"}
             </Button>
@@ -519,7 +499,7 @@ export function ShareWorkoutButton({ workout, athleteName, workoutType = "Erg", 
         size="sm"
         variant="outline"
         onClick={() => setOpen(true)}
-        className="gap-1.5 border-[#2d6be4]/40 text-[#2d6be4] hover:bg-[#2d6be4]/10"
+        className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
       >
         <Share2 className="h-3.5 w-3.5" />
         Share

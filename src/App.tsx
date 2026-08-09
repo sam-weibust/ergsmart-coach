@@ -55,7 +55,7 @@ function Splash() {
       style={{
         position: "fixed",
         inset: 0,
-        background: "#0a1628",
+        background: "#FFFFFF",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -65,7 +65,7 @@ function Splash() {
       <img
         src={crewsyncLogo}
         alt="CrewSync"
-        style={{ width: 96, height: 96, borderRadius: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}
+        style={{ width: 96, height: 96, borderRadius: 20, boxShadow: "0 .25rem 1.25rem 0 rgba(0,0,0,.2)" }}
       />
     </div>
   );
@@ -276,7 +276,10 @@ const App = () => {
   return (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      {/* Light mode only. enableSystem previously applied `.dark` for anyone on
+          OS dark mode, which activated the `dark:` utility variants still left
+          in components and produced a half-dark UI. */}
+      <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
         <BleProvider>
           <TooltipProvider>
             <TeamBrandingProvider>

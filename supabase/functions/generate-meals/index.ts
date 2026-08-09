@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -32,7 +32,10 @@ serve(async (req) => {
     }
 
     const today = new Date().toISOString().split("T")[0];
-    const cacheKey = `meal_plan_${user_id}_${calorie_target || "auto"}_${today}_${hashKey({ dietGoal, allergies })}`;
+    // hashKey preserves array order, so sort `allergies` explicitly — it is a set,
+    // and ["nuts","dairy"] must hit the same cache entry as ["dairy","nuts"].
+    const allergyKey = [...(allergies ?? [])].map(String).sort();
+    const cacheKey = `meal_plan_${user_id}_${calorie_target || "auto"}_${today}_${hashKey({ dietGoal, allergies: allergyKey })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       await logUsage(supabase, { user_id, function_name: "generate-meals", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
@@ -62,7 +65,9 @@ Include: Breakfast, Morning Snack, Lunch, Pre-Workout, Dinner, Evening Snack. Re
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1500, system: systemPrompt, messages: [{ role: "user", content: userMsg }] }),
+      // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the
+      // max_tokens budget and 1500 barely fits 6 meals with recipes as it is.
+      body: JSON.stringify({ model: MODEL, max_tokens: 1500, thinking: { type: "disabled" }, system: systemPrompt, messages: [{ role: "user", content: userMsg }] }),
     });
 
     if (!anthropicResponse.ok) {
@@ -73,7 +78,7 @@ Include: Breakfast, Morning Snack, Lunch, Pre-Workout, Dinner, Evening Snack. Re
     await recordApiSuccess(supabase, "generate-meals");
 
     const aiResult = await anthropicResponse.json();
-    const usage = aiResult?.usage ?? {};
+    const usage = tokensFrom(aiResult?.usage);
     const rawText = aiResult?.content?.[0]?.text ?? "";
     const start = rawText.indexOf("{");
     const end = rawText.lastIndexOf("}");
@@ -83,8 +88,8 @@ Include: Breakfast, Morning Snack, Lunch, Pre-Workout, Dinner, Evening Snack. Re
     }
 
     await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "generate-meals", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    await logUsage(supabase, { user_id, function_name: "generate-meals", model: MODEL, ...usage, cache_hit: false });
+    await recordUsage(supabase, user_id, usage.input_tokens + usage.output_tokens);
 
     return new Response(JSON.stringify(parsed), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

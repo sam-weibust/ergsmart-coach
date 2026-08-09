@@ -2323,7 +2323,7 @@ function StrokeWatch() {
   })();
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[500px] bg-[#0a1628] rounded-2xl overflow-hidden select-none">
+    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[500px] bg-primary rounded-2xl overflow-hidden select-none">
       {/* Top bar: timer + target */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
         <div className="font-mono text-3xl font-bold text-white tracking-widest">
@@ -2369,7 +2369,9 @@ function StrokeWatch() {
         className="flex-1 mx-4 rounded-2xl flex items-center justify-center transition-colors active:scale-[0.99] cursor-pointer touch-manipulation"
         style={{
           minHeight: 250,
-          backgroundColor: flash ? "#2d6be4" : "#0a1628",
+          // Monochrome flash: the panel is navy, so brightness carries the
+          // feedback (a second navy would be invisible against it).
+          backgroundColor: flash ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.06)",
           border: "3px solid rgba(255,255,255,0.15)",
           transition: flash ? "none" : "background-color 0.15s ease",
           WebkitTapHighlightColor: "transparent",

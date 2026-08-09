@@ -203,40 +203,15 @@ const LandingPage = () => {
       }}
     >
       <style>{`
-        /* Body/UI typeface from the design system. Headings use Arial Black. */
-        @font-face {
-          font-family: 'Proxima Nova';
-          src: url('/fonts/proxima-nova-Regular.ttf') format('truetype');
-          font-weight: 400;
-          font-display: swap;
-        }
-        @font-face {
-          font-family: 'Proxima Nova';
-          src: url('/fonts/proxima-nova-500.ttf') format('truetype');
-          font-weight: 500;
-          font-display: swap;
-        }
-        @font-face {
-          font-family: 'Proxima Nova';
-          src: url('/fonts/proxima-nova-600.ttf') format('truetype');
-          font-weight: 600;
-          font-display: swap;
-        }
-        @font-face {
-          font-family: 'Proxima Nova';
-          src: url('/fonts/proxima-nova-700.ttf') format('truetype');
-          font-weight: 700;
-          font-display: swap;
-        }
-
+        /* Proxima Nova @font-face lives in src/index.css (app-wide). */
         :root {
           --navy: #08121F;
           --navy-mid: #0E1A2E;
           --navy-light: #152235;
           --blue: #2272FF;
-          --accent: #3D8FD4;
+          --lp-blue-accent: #3D8FD4;
           --off-white: #EBF0F8;
-          --muted: #4E6580;
+          --lp-muted-navy: #4E6580;
           --text: #A8BECD;
 
           /* ── Light theme (nav + hero) ───────────────────────────────── */
@@ -807,7 +782,7 @@ const LandingPage = () => {
                 fontSize: "11px",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,
               }}
@@ -843,7 +818,7 @@ const LandingPage = () => {
                 fontSize: "11px",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,
               }}
@@ -871,7 +846,7 @@ const LandingPage = () => {
                 fontSize: "11px",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,
               }}
@@ -975,7 +950,7 @@ const LandingPage = () => {
                     fontFamily: "'Space Grotesk', sans-serif",
                     fontSize: "15px",
                     fontWeight: 300,
-                    color: "var(--muted)",
+                    color: "var(--lp-muted-navy)",
                     margin: 0,
                     lineHeight: 1.7,
                   }}
@@ -1008,7 +983,7 @@ const LandingPage = () => {
               style={{
                 fontSize: "11px",
                 fontFamily: "'Space Grotesk', sans-serif",
-                color: "var(--accent)",
+                color: "var(--lp-blue-accent)",
                 textTransform: "uppercase",
                 letterSpacing: "0.12em",
                 fontWeight: 500,
@@ -1091,7 +1066,7 @@ const LandingPage = () => {
                     fontWeight: 500,
                     textTransform: "uppercase",
                     letterSpacing: "0.12em",
-                    color: "var(--accent)",
+                    color: "var(--lp-blue-accent)",
                     marginBottom: "14px",
                   }}
                 >
@@ -1157,7 +1132,7 @@ const LandingPage = () => {
               style={{
                 fontSize: "11px",
                 fontFamily: "'Space Grotesk', sans-serif",
-                color: "var(--accent)",
+                color: "var(--lp-blue-accent)",
                 textTransform: "uppercase",
                 letterSpacing: "0.12em",
                 fontWeight: 500,
@@ -1184,7 +1159,7 @@ const LandingPage = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "16px",
                 fontWeight: 300,
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 margin: 0,
               }}
             >
@@ -1216,7 +1191,7 @@ const LandingPage = () => {
                   fontWeight: 500,
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  color: "var(--muted)",
+                  color: "var(--lp-muted-navy)",
                   marginBottom: "12px",
                 }}
               >
@@ -1244,7 +1219,7 @@ const LandingPage = () => {
                 <span
                   style={{
                     fontSize: "15px",
-                    color: "var(--muted)",
+                    color: "var(--lp-muted-navy)",
                     fontFamily: "'Space Grotesk', sans-serif",
                   }}
                 >
@@ -1254,7 +1229,7 @@ const LandingPage = () => {
               <div
                 style={{
                   fontSize: "11px",
-                  color: "var(--muted)",
+                  color: "var(--lp-muted-navy)",
                   fontFamily: "'Space Grotesk', sans-serif",
                   marginBottom: "16px",
                   fontStyle: "italic",
@@ -1310,7 +1285,7 @@ const LandingPage = () => {
                   >
                     <span
                       style={{
-                        color: "var(--accent)",
+                        color: "var(--lp-blue-accent)",
                         flexShrink: 0,
                         marginTop: "2px",
                         fontSize: "12px",
@@ -1366,7 +1341,7 @@ const LandingPage = () => {
                   fontWeight: 500,
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  color: "var(--muted)",
+                  color: "var(--lp-muted-navy)",
                   marginBottom: "12px",
                 }}
               >
@@ -1394,7 +1369,7 @@ const LandingPage = () => {
                 <span
                   style={{
                     fontSize: "15px",
-                    color: "var(--muted)",
+                    color: "var(--lp-muted-navy)",
                     fontFamily: "'Space Grotesk', sans-serif",
                   }}
                 >
@@ -1404,7 +1379,7 @@ const LandingPage = () => {
               <div
                 style={{
                   fontSize: "11px",
-                  color: "var(--muted)",
+                  color: "var(--lp-muted-navy)",
                   fontFamily: "'Space Grotesk', sans-serif",
                   marginBottom: "16px",
                   fontStyle: "italic",
@@ -1488,14 +1463,14 @@ const LandingPage = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "13px",
                 fontStyle: "italic",
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 margin: 0,
               }}
             >
               Individual plans from free.{" "}
               <a
                 href="/pricing"
-                style={{ color: "var(--accent)", textDecoration: "none" }}
+                style={{ color: "var(--lp-blue-accent)", textDecoration: "none" }}
                 onClick={(e) => {
                   e.preventDefault();
                   navigate("/pricing");
@@ -1543,7 +1518,7 @@ const LandingPage = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "17px",
                 fontWeight: 300,
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 margin: "0 0 36px",
                 lineHeight: 1.7,
               }}
@@ -1580,7 +1555,7 @@ const LandingPage = () => {
                 fontWeight: 500,
                 textTransform: "uppercase",
                 letterSpacing: "0.1em",
-                color: "var(--muted)",
+                color: "var(--lp-muted-navy)",
                 margin: 0,
               }}
             >

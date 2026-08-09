@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -89,7 +89,7 @@ RECENT ERG RESULTS:
 ${ergSummary}
 `.trim();
 
-    const systemPrompt = `You are CrewSync AI, an expert rowing recruiting analyst.
+    const systemPrompt = `CrewSync AI — expert rowing recruiting analyst.
 
 Athlete data:
 ${userContext}
@@ -128,7 +128,14 @@ Rules:
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4096,
+          // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+          // thinking + text together, so with it on the budget is spent
+          // thinking and the evaluation JSON is truncated or empty.
+          thinking: { type: "disabled" },
+          // Not 500: school_predictions alone is 8-12 objects (~25 tokens each,
+          // ~300) on top of summary + strengths + weaknesses + action_plan +
+          // missing_data_notes — ~550-650 output tokens worst case.
+          max_tokens: 900,
           stream: false,
           system: systemPrompt,
           messages: [
@@ -158,9 +165,10 @@ Rules:
       try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
     }
 
-    await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, user_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(parsed), {
       status: 200,

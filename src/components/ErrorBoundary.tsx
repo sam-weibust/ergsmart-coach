@@ -38,19 +38,19 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div style={{
-          position: "fixed", inset: 0, background: "#0a1628",
+          position: "fixed", inset: 0, background: "#FFFFFF",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          gap: 16, padding: 24, color: "#fff",
+          gap: 16, padding: 24, color: "#1A1A2E",
         }}>
-          <AlertTriangle style={{ width: 40, height: 40, color: "#f87171" }} />
+          <AlertTriangle style={{ width: 40, height: 40, color: "#e24b4a" }} />
           <p style={{ fontWeight: 600, fontSize: 16, margin: 0 }}>Something went wrong</p>
-          <p style={{ fontSize: 12, color: "#94a3b8", fontFamily: "monospace", maxWidth: 360, textAlign: "center", margin: 0 }}>
+          <p style={{ fontSize: 12, color: "#6B6B7D", fontFamily: "monospace", maxWidth: 360, textAlign: "center", margin: 0 }}>
             {this.state.error?.message}
           </p>
           <button
             onClick={() => { this.setState({ hasError: false, error: null, info: "" }); window.location.href = "/"; }}
-            style={{ marginTop: 8, padding: "8px 20px", borderRadius: 8, background: "#1e3a5f", color: "#fff", border: "none", cursor: "pointer", fontSize: 14 }}
+            style={{ marginTop: 8, padding: "8px 20px", borderRadius: 8, background: "#1A1A2E", color: "#fff", border: "none", cursor: "pointer", fontSize: 14 }}
           >
             Reload App
           </button>

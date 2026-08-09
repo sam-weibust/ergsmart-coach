@@ -1,35 +1,38 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Capacitor } from "@capacitor/core";
 import { BleClient } from "@capacitor-community/bluetooth-le";
+import { ScreenOrientation } from "@capacitor/screen-orientation";
 import {
   initBle,
   toDataView,
   parseCharacteristic,
   parseHRMeasurement,
-  PM5_FORCE_CURVE_CHAR,
-  PM5_FORCE_CURVE_LEGACY,
+  subscribeForceCurve,
+  isWebBluetoothSupported,
+  HR_SERVICE,
+  HR_MEASUREMENT,
 } from "@/lib/ble";
-import { buildForceCurveAreaData, forceCurveAxisMax } from "@/lib/forceCurve";
+import { forceCurveAxisMax } from "@/lib/forceCurve";
 import { useBle } from "@/context/BleContext";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, AreaChart, Area,
+  AreaChart, Area, XAxis, YAxis, ReferenceDot, ResponsiveContainer,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TimeInput } from "@/components/ui/TimeInput";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { invokeAI } from "@/lib/aiInvoke";
-import { Bluetooth, Heart, Loader2, AlertTriangle, Sparkles, Square } from "lucide-react";
-import ForceCurveCanvas from "./ForceCurveCanvas";
-import { WorkoutFeedback } from "./WorkoutFeedback";
-import { getSessionUser } from '@/lib/getUser';
 import {
-  fmtTime, fmtPace, fmtWatts, fmtStrokeRate, fmtDistance,
-  fmtDriveTime, fmtDriveLength, parseSplitInput,
-  csToInterval, localDateISO,
+  Bluetooth, Heart, Loader2, AlertTriangle, Square, ListPlus, Send, Minimize2, Maximize2,
+} from "lucide-react";
+import { getSessionUser } from "@/lib/getUser";
+// Owned by other agents — imported, never created here.
+import WorkoutBuilderModal from "./WorkoutBuilderModal";
+import PostWorkoutScreen from "./PostWorkoutScreen";
+import {
+  fmtPace, fmtClock, parseSplitInput, csToInterval, localDateISO,
+  projectedFinishSeconds, projectedDistanceMeters,
+  driveEfficiencyScore, catchSlipRatio, CATCH_SLIP_THRESHOLD,
 } from "@/lib/ergFormat";
 
 // ── PM5 BLE UUIDs ─────────────────────────────────────────────
@@ -37,11 +40,16 @@ const C2_ROW_SVC      = "ce060030-43e5-11e4-916c-0800200c9a66";
 const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66"; // primary status
 const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66"; // power & calories
 const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66"; // drive metrics
-// Per user spec: force curve characteristic UUID ce060393
-const C2_FORCE_CURVE  = PM5_FORCE_CURVE_CHAR;
-const C2_FORCE_CURVE_FALLBACK = PM5_FORCE_CURVE_LEGACY;
-const HR_SVC          = "heart_rate";
-const HR_CHAR         = "heart_rate_measurement";
+
+// ── Design tokens (whoop design system, dark live-erg surface) ─────────────
+const INK      = "#000000"; // screen background
+const NAVY     = "#1a1a2e"; // tile surface — the system navy
+const BORDER   = "#4c4c4c";
+const MUTED    = "#999999";
+const WHITE    = "#ffffff";
+const SUCCESS  = "#41ff31";
+const DANGER   = "#ff0026";
+const CURVE    = "#2272FF"; // force curve accent, per live-erg spec
 
 // ── Types ──────────────────────────────────────────────────────
 interface LiveData {
@@ -49,7 +57,7 @@ interface LiveData {
   distance: number;      // metres
   workoutState: number;  // 0=Idle 1=Countdown 2=Rowing 3=Paused 4=Finished
   strokeRate: number;    // spm
-  heartRate: number;     // bpm
+  heartRate: number;     // bpm (PM5-relayed)
   calories: number;
   splitPace: number;     // centiseconds per 500 m
   power: number;         // watts
@@ -57,6 +65,7 @@ interface LiveData {
   driveTime: number;     // centiseconds (0.01s from 0x0033)
   recoveryTime: number;  // centiseconds (0.01s from 0x0033)
   strokeCount: number;   // accumulated strokes
+  averagePace: number;   // centiseconds per 500 m (PM5's own average)
 }
 
 interface StrokePoint {
@@ -64,6 +73,8 @@ interface StrokePoint {
   split: number;   // centiseconds / 500 m (lower = faster)
   spm: number;
   hr: number;
+  watts: number;
+  t: number;       // seconds since the start of the piece
 }
 
 // Formatters live in src/lib/ergFormat.ts so they can be unit-tested against
@@ -73,50 +84,105 @@ interface StrokePoint {
 // session — BleContext retries the connection at 2 s, so give it room to win.
 const DISCONNECT_SAVE_GRACE_MS = 8000;
 
+// Watts SAMPLING gate. The PM5 emits a genuine reading for a light warm-up
+// stroke (30–50 W) and a genuine reading for a garbled/idle frame (0 W, or a
+// four-digit value when two bytes get misaligned). Anything below 50 W or above
+// 1500 W is excluded from the avg/max ***aggregation*** only — the live tile
+// always shows the raw number the erg sent, so a real 40 W stroke is never
+// blanked on screen.
+const WATTS_SAMPLE_MIN = 50;
+const WATTS_SAMPLE_MAX = 1500;
+
 /**
  * The erg_workouts row an auto-saved live session writes. Loosely typed on
  * purpose: insertErgWorkout() deletes keys the database hasn't migrated yet.
  */
 type ErgWorkoutRow = Record<string, string | number | object | null | undefined>;
 
-/** AI feedback shape returned by the analyze-workout edge function. */
-interface AIFeedback {
-  overallRating: "excellent" | "good" | "average" | "needs_improvement";
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-  recommendation: string;
-  motivationalMessage: string;
-  progressNote?: string;
+/** Payload handed to PostWorkoutScreen once the row is in the database. */
+interface PostWorkoutPayload {
+  workoutId: string | null;
+  row: ErgWorkoutRow;
+  strokes: { split: number | null; watts: number | null; hr: number | null; t: number }[];
+  forceCurves: number[][];
+  userId: string;
 }
 
 const STATE_LABELS = ["Idle", "Countdown", "Rowing", "Paused", "Finished", "--"];
 
+interface LiveErgViewProps {
+  /** A coach-assigned / builder-built workout to load onto the PM5. */
+  coachWorkout?: any;
+}
+
 // ── Component ──────────────────────────────────────────────────
-export default function LiveErgView() {
-  if (!Capacitor.isNativePlatform()) {
+export default function LiveErgView(props: LiveErgViewProps) {
+  // Native gets full BLE. Desktop web gets the same screen over Web Bluetooth
+  // (Chrome/Edge). Mobile web browsers have no BLE at all.
+  const usable = Capacitor.isNativePlatform() || isWebBluetoothSupported();
+  if (!usable) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center p-8">
-          <Bluetooth className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+          <Bluetooth className="h-12 w-12 mx-auto mb-4" style={{ color: CURVE }} />
           <p className="text-lg font-semibold mb-2">Connect via the iOS app for live erg tracking</p>
-          <p className="text-sm text-gray-400">Live BLE connection to your PM5 requires the native iOS app.</p>
+          <p className="text-sm text-muted-foreground">
+            Live BLE connection to your PM5 requires the native iOS app, or Chrome/Edge on desktop.
+          </p>
         </div>
       </div>
     );
   }
-  return <LiveErgViewNative />;
+  return <LiveErgViewNative {...props} />;
 }
 
-function LiveErgViewNative() {
+// ── Metric tile ────────────────────────────────────────────────
+function Tile({
+  label, value, unit, color,
+}: { label: string; value: string; unit: string; color?: string }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center overflow-hidden rounded-md border px-2 py-2 min-h-0"
+      style={{ background: NAVY, borderColor: BORDER }}
+    >
+      <span
+        className="uppercase leading-none tracking-widest text-center"
+        style={{ fontSize: 11, color: MUTED }}
+      >
+        {label}
+      </span>
+      <span
+        className="font-bold tabular-nums leading-none text-center"
+        style={{ fontSize: 36, color: color ?? WHITE, marginTop: 8, marginBottom: 4 }}
+      >
+        {value}
+      </span>
+      <span className="leading-none" style={{ fontSize: 12, color: MUTED }}>{unit}</span>
+    </div>
+  );
+}
+
+function StatusDot({ on, warn }: { on: boolean; warn?: boolean }) {
+  return (
+    <span
+      className={`inline-block rounded-full ${on || warn ? "animate-pulse" : ""}`}
+      style={{ width: 8, height: 8, background: on ? SUCCESS : warn ? "#f59e0b" : MUTED }}
+    />
+  );
+}
+
+function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
   const { toast } = useToast();
 
-  const { ergDeviceId, ergDeviceName, ergConnected, ergConnecting, webErgDevice, connectPM5, disconnectPM5 } = useBle();
+  const { ergDeviceId, ergConnected, ergConnecting, webErgDevice, connectPM5, disconnectPM5 } = useBle();
 
   const [btSupported, setBtSupported] = useState(true);
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) { setBtSupported(false); return; }
+    if (!Capacitor.isNativePlatform()) {
+      setBtSupported(isWebBluetoothSupported());
+      return;
+    }
     // Route through initBle() so BleClient.initialize runs at most once (isInitialized guard).
     initBle()
       .then((status) => { if (status !== "ready") setBtSupported(false); })
@@ -126,55 +192,94 @@ function LiveErgViewNative() {
       });
   }, []);
 
+  // Full-screen landscape by default; collapsing puts the dashboard chrome
+  // back within reach (and releases the orientation lock).
+  const [immersive, setImmersive] = useState(true);
+
+  // ── Landscape lock ───────────────────────────────────────────
+  // Native only. Locks landscape while the immersive view is up and restores
+  // portrait on EVERY exit path — collapsing, normal unmount, unmount while a
+  // save is in flight, or an error that unmounts the tree — because the effect
+  // cleanup performs the restore and React runs it unconditionally. A lock that
+  // resolves after the component is gone restores again, so a slow lock can't
+  // strand the app sideways.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;   // web: CSS-only, no orientation API
+    if (!immersive) return;
+    let disposed = false;
+
+    const restorePortrait = () =>
+      ScreenOrientation.lock({ orientation: "portrait" })
+        .catch(err => console.warn("[LiveErg] portrait restore failed:", err))
+        // Hand orientation control back to the OS once the device has settled,
+        // otherwise every screen after this one stays pinned to portrait.
+        .then(() => new Promise<void>(r => setTimeout(r, 300)))
+        .then(() => ScreenOrientation.unlock().catch(() => {}));
+
+    ScreenOrientation.lock({ orientation: "landscape" })
+      .then(() => { if (disposed) void restorePortrait(); })
+      .catch(err => console.warn("[LiveErg] landscape lock failed:", err));
+
+    return () => {
+      disposed = true;
+      void restorePortrait();
+    };
+  }, [immersive]);
+
   const [hrConnected,  setHrConnected]  = useState(false);
+  const [hrConnecting, setHrConnecting] = useState(false);
   const [disconnected, setDisconnected] = useState(false); // mid-workout disconnect
   const wasConnectedRef = useRef(false);
 
-  const [data,    setData]    = useState<Partial<LiveData>>({});
-  const [hrBpm,   setHrBpm]   = useState<number | null>(null);
-  const [strokes, setStrokes] = useState<StrokePoint[]>([]);
-  const [saved,   setSaved]   = useState(false);
+  const [data,  setData]  = useState<Partial<LiveData>>({});
+  const [hrBpm, setHrBpm] = useState<number | null>(null); // strap only
+  const [saved, setSaved] = useState(false);
 
-  const [analyzing,    setAnalyzing]    = useState(false);
-  const [feedback,     setFeedback]     = useState<AIFeedback | null>(null);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [postOpen,    setPostOpen]    = useState(false);
+  const [postPayload, setPostPayload] = useState<PostWorkoutPayload | null>(null);
 
-  const [currentCurve,        setCurrentCurve]        = useState<number[]>([]);
-  const [prevCurve,           setPrevCurve]           = useState<number[]>([]);
-  const [allCurves,           setAllCurves]           = useState<number[][]>([]);
+  // Three most recent force curves, kept together so they can never fall out of
+  // step with each other (current, previous, the one before that).
+  const [curves, setCurves] = useState<{ cur: number[]; p1: number[]; p2: number[] }>(
+    { cur: [], p1: [], p2: [] },
+  );
+  const [strokeCurveCount,    setStrokeCurveCount]    = useState(0);
   const [forceCurveSupported, setForceCurveSupported] = useState<boolean | null>(null);
+  const [forceCurveUuid,      setForceCurveUuid]      = useState<string | null>(null);
 
-  const [targetInput,    setTargetInput]    = useState("");
-  const [targetCs,       setTargetCs]       = useState<number | null>(null); // centiseconds
+  const [targetInput,     setTargetInput]     = useState("");
+  const [targetCs,        setTargetCs]        = useState<number | null>(null); // centiseconds
   const [targetDistInput, setTargetDistInput] = useState("");
-  const [targetDist,     setTargetDist]     = useState<number | null>(null); // metres
+  const [targetDist,      setTargetDist]      = useState<number | null>(null); // metres
 
-  const hrDeviceRef        = useRef<any>(null);
+  const hrDeviceRef         = useRef<any>(null);
   const hrNativeDeviceIdRef = useRef<string | null>(null);
+  // Strap BPM in a ref so accumulateStroke (a stable callback) can read it.
+  const hrBpmRef            = useRef<number | null>(null);
   const prevStateRef  = useRef<number | undefined>(undefined);
   const autoSavedRef  = useRef(false);
-  const strokesRef    = useRef<StrokePoint[]>([]); // keep in sync for save
-  const dataRef         = useRef<Partial<LiveData>>({}); // keep in sync for save
-  const currentCurveRef = useRef<number[]>([]);
-  const allCurvesRef    = useRef<number[][]>([]);
+  const strokesRef    = useRef<StrokePoint[]>([]);       // per-stroke samples for save + post-workout
+  const dataRef       = useRef<Partial<LiveData>>({});   // keep in sync for save
+  const curCurveRef   = useRef<number[]>([]);
+  const allCurvesRef  = useRef<number[][]>([]);
 
   // Every reading taken during the session — averages/extremes are computed from
   // these on save, not from the last frame the PM5 happened to send.
   const splitSamplesRef = useRef<number[]>([]);   // centiseconds / 500 m
-  const wattSamplesRef  = useRef<number[]>([]);   // watts
+  const wattSamplesRef  = useRef<number[]>([]);   // watts (gated 50–1500)
   const spmSamplesRef   = useRef<number[]>([]);   // strokes / minute
   const hrSamplesRef    = useRef<number[]>([]);   // bpm
+  // Running split total so the live "Avg Split" tile costs O(1) per frame.
+  const splitSumRef     = useRef(0);
+  const splitCountRef   = useRef(0);
   // Peak elapsed time / distance seen, so a disconnect frame of zeros can't
   // shrink the saved workout.
   const peakElapsedRef  = useRef(0);
   const peakDistRef     = useRef(0);
   const disconnectSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync strokes & data to refs for callbacks
-  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { dataRef.current = data; }, [data]);
-  useEffect(() => { currentCurveRef.current = currentCurve; }, [currentCurve]);
-  useEffect(() => { allCurvesRef.current = allCurves; }, [allCurves]);
 
   // Track mid-workout disconnect via context ergConnected
   useEffect(() => {
@@ -185,6 +290,15 @@ function LiveErgViewNative() {
       setDisconnected(true);
     }
   }, [ergConnected]);
+
+  // ── Force curve intake (shared by native + web) ──────────────
+  const onForceCurve = useCallback((forces: number[]) => {
+    setForceCurveSupported(true);
+    setCurves(prev => ({ cur: forces, p1: prev.cur, p2: prev.p1 }));
+    curCurveRef.current = forces;
+    allCurvesRef.current = [...allCurvesRef.current, forces];
+    setStrokeCurveCount(allCurvesRef.current.length);
+  }, []);
 
   // Subscribe to PM5 streaming data whenever connected (native or web)
   useEffect(() => {
@@ -209,38 +323,17 @@ function LiveErgViewNative() {
         await tryNotify(C2_ROW_SVC, C2_ADD_STATUS);
         await tryNotify(C2_ROW_SVC, C2_ADD_STATUS2);
 
-        // Force curve subscription — try primary (ce060393) then fallback (ce060035)
-        let forceCurveSubscribed = false;
-        const subscribeForceCurve = async (charUuid: string) => {
-          if (!Capacitor.isNativePlatform()) return false;
-          try {
-            await BleClient.startNotifications(ergDeviceId, C2_ROW_SVC, charUuid, (value) => {
-              if (cancelled) return;
-              const dv = toDataView(value);
-              const parsed = parseCharacteristic(charUuid, dv);
-              const forces = (parsed as any).forceCurve as number[] | undefined;
-              if (forces && forces.length > 0) {
-                setForceCurveSupported(true);
-                setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
-                setCurrentCurve(forces);
-                setAllCurves(prev => [...prev, forces]);
-              }
-            });
-            return true;
-          } catch {
-            return false;
-          }
-        };
-
-        forceCurveSubscribed = await subscribeForceCurve(C2_FORCE_CURVE);
-        if (!forceCurveSubscribed) {
-          forceCurveSubscribed = await subscribeForceCurve(C2_FORCE_CURVE_FALLBACK);
-        }
-        if (!cancelled) {
-          setForceCurveSupported(forceCurveSubscribed);
-        }
-      } else if (!Capacitor.isNativePlatform() && webErgDevice?.gatt?.connected) {
-        await resubscribeErg(webErgDevice.gatt);
+        // ce060393 is unproven on this hardware, so both it and the legacy
+        // ce060035 are subscribed and whichever actually delivers samples wins.
+        const subscribed = await subscribeForceCurve({
+          deviceId: ergDeviceId,
+          isCancelled: () => cancelled,
+          onCurve: (forces) => onForceCurve(forces),
+          onWinner: (uuid) => setForceCurveUuid(uuid),
+        });
+        if (!cancelled) setForceCurveSupported(subscribed.length > 0 ? null : false);
+      } else if (!isNative && webErgDevice?.gatt?.connected) {
+        await resubscribeErg(webErgDevice.gatt, () => cancelled);
       }
     })();
 
@@ -253,21 +346,28 @@ function LiveErgViewNative() {
   const latestSplit = useRef(0);
   const latestSpm   = useRef(0);
   const latestHr    = useRef(0);
+  const latestWatts = useRef(0);
 
   const accumulateStroke = useCallback((d: Partial<LiveData>) => {
-    if (d.distance !== undefined) latestDist.current  = d.distance;
-    if (d.splitPace !== undefined) latestSplit.current = d.splitPace;
-    if (d.strokeRate !== undefined) latestSpm.current = d.strokeRate;
-    if (d.heartRate !== undefined && d.heartRate > 0) latestHr.current = d.heartRate;
+    if (d.distance   !== undefined) latestDist.current  = d.distance;
+    if (d.splitPace  !== undefined) latestSplit.current = d.splitPace;
+    if (d.strokeRate !== undefined) latestSpm.current   = d.strokeRate;
+    if (d.power      !== undefined) latestWatts.current = d.power;
+    if (d.heartRate  !== undefined && d.heartRate > 0) latestHr.current = d.heartRate;
 
     // Session-long sample collection for the auto-save averages. Bounds mirror
     // the sanity ranges in ble.ts so an idle or garbled frame can't skew a mean.
-    if (d.splitPace   && d.splitPace >= 6000 && d.splitPace <= 30000) splitSamplesRef.current.push(d.splitPace);
-    if (d.power       && d.power > 0 && d.power <= 2000)              wattSamplesRef.current.push(d.power);
-    if (d.strokeRate  && d.strokeRate > 0 && d.strokeRate <= 60)      spmSamplesRef.current.push(d.strokeRate);
-    if (d.heartRate   && d.heartRate >= 40 && d.heartRate <= 220)     hrSamplesRef.current.push(d.heartRate);
-    if (d.elapsedTime && d.elapsedTime > peakElapsedRef.current)      peakElapsedRef.current = d.elapsedTime;
-    if (d.distance    && d.distance    > peakDistRef.current)         peakDistRef.current    = d.distance;
+    if (d.splitPace && d.splitPace >= 6000 && d.splitPace <= 30000) {
+      splitSamplesRef.current.push(d.splitPace);
+      splitSumRef.current   += d.splitPace;
+      splitCountRef.current += 1;
+    }
+    // Aggregation gate only — the Watts tile still shows d.power verbatim.
+    if (d.power      && d.power >= WATTS_SAMPLE_MIN && d.power <= WATTS_SAMPLE_MAX) wattSamplesRef.current.push(d.power);
+    if (d.strokeRate && d.strokeRate > 0 && d.strokeRate <= 60)  spmSamplesRef.current.push(d.strokeRate);
+    if (d.heartRate  && d.heartRate >= 40 && d.heartRate <= 220) hrSamplesRef.current.push(d.heartRate);
+    if (d.elapsedTime && d.elapsedTime > peakElapsedRef.current) peakElapsedRef.current = d.elapsedTime;
+    if (d.distance    && d.distance    > peakDistRef.current)    peakDistRef.current    = d.distance;
 
     // Only record when actually rowing and we have a valid split
     setData(prev => {
@@ -281,17 +381,22 @@ function LiveErgViewNative() {
           dist:  Math.round(latestDist.current),
           split: latestSplit.current,
           spm:   latestSpm.current,
-          hr:    latestHr.current,
+          hr:    hrBpmRef.current ?? latestHr.current,
+          watts: latestWatts.current,
+          // Seconds into the piece — PostWorkoutScreen plots against this.
+          t:     Math.round((peakElapsedRef.current ?? 0) / 100),
         };
-        setStrokes(prev => {
-          // Deduplicate: only push if distance changed meaningfully
-          if (prev.length > 0 && prev[prev.length - 1].dist === point.dist) return prev;
-          return [...prev, point];
-        });
+        const arr = strokesRef.current;
+        // Deduplicate: only push if distance changed meaningfully
+        if (!(arr.length > 0 && arr[arr.length - 1].dist === point.dist)) {
+          strokesRef.current = [...arr, point];
+        }
       }
       return next;
     });
   }, []);
+
+  useEffect(() => { hrBpmRef.current = hrBpm; }, [hrBpm]);
 
   // ── Session end ──────────────────────────────────────────────
   // A Bluetooth session is never saved by hand: it saves itself when the PM5
@@ -393,7 +498,7 @@ function LiveErgViewNative() {
         stroke_rate_average: avgSpm != null ? Math.round(avgSpm) : null,
         stroke_rate:         avgSpm != null ? Math.round(avgSpm) : null,
         stroke_count:        allCurvesRef.current.length || d.strokeCount || null,
-        avg_heart_rate:      avgHr != null ? Math.round(avgHr) : (hrBpm ?? null),
+        avg_heart_rate:      avgHr != null ? Math.round(avgHr) : (hrBpmRef.current ?? null),
         heart_rate_average:  avgHr != null ? Math.round(avgHr) : null,
         heart_rate_max:      maxHr,
         heart_rate_min:      minHr,
@@ -406,16 +511,26 @@ function LiveErgViewNative() {
           : null,
       };
 
-      const saved = await insertErgWorkout(row);
+      const savedRow = await insertErgWorkout(row);
       setSaved(true);
 
-      toast({
-        title: "Workout saved",
-        description: "Analyzing performance…",
+      // The analysis now belongs to PostWorkoutScreen — this view hands over the
+      // saved row, the per-stroke samples and the curves, and gets out of the way.
+      setPostPayload({
+        workoutId:   savedRow?.id ?? null,
+        row,
+        strokes:     pts.map(p => ({
+          split: p.split > 0 ? p.split : null,
+          watts: p.watts > 0 ? p.watts : null,
+          hr:    p.hr    > 0 ? p.hr    : null,
+          t:     p.t,
+        })),
+        forceCurves: allCurvesRef.current.slice(-60),
+        userId:      user.id,
       });
+      setPostOpen(true);
 
-      // Fire the AI analysis without blocking the rest of the save.
-      void runAnalysis(saved?.id ?? null, row, user.id);
+      toast({ title: "Workout saved" });
 
       // Save to erg_scores for leaderboard-eligible distances
       const BENCHMARK_DISTANCES: Record<number, string> = {
@@ -487,69 +602,14 @@ function LiveErgViewNative() {
     throw new Error("Could not save workout — schema mismatch");
   };
 
-  /**
-   * FIX 2 — the analysis comes to the athlete. Nobody has to navigate anywhere:
-   * the panel opens by itself as soon as analyze-workout answers.
-   */
-  const runAnalysis = async (
-    workoutId: string | null,
-    row: ErgWorkoutRow,
-    userId: string,
-  ) => {
-    setAnalyzing(true);
-    try {
-      // analyze-workout stringifies the whole workout into the prompt, so send
-      // the metrics only — the per-stroke arrays would be tens of thousands of
-      // tokens of noise. Peak force per stroke carries the same signal.
-      const { stroke_data: _sd, force_curves: curves, ...metrics } = row;
-      const peakForces = Array.isArray(curves)
-        ? (curves as number[][]).map(c => Math.max(...c))
-        : undefined;
-
-      const { data: fbData, error } = await invokeAI("analyze-workout", {
-        body: {
-          workoutType: "erg",
-          // analyze-workout keys its permanent cache off workout.id, so the
-          // saved row id is what makes this analysis stable and re-fetchable.
-          workout: {
-            ...metrics,
-            source: "live_erg_bluetooth",
-            recent_stroke_peak_forces_n: peakForces,
-            id: workoutId,
-            workout_id: workoutId,
-          },
-          user_id: userId,
-        },
-      });
-      if (error) throw error;
-      if (fbData?.feedback) {
-        setFeedback(fbData.feedback as AIFeedback);
-        setFeedbackOpen(true);          // slides up on its own — no navigation
-        toast({ title: "Your AI analysis is ready" });
-      } else {
-        toast({ title: "Analysis unavailable", description: "Your workout was saved." });
-      }
-    } catch (e: any) {
-      console.error("[LiveErg] analyze-workout failed:", e);
-      toast({
-        title: "Analysis unavailable",
-        description: e?.message ? `Your workout was saved. ${e.message}` : "Your workout was saved.",
-      });
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  // ── BT: connect HR ───────────────────────────────────────────
+  // ── BT: connect heart-rate strap (0x180D only) ───────────────
   const connectHR = useCallback(async () => {
-    if (!btSupported) return;
+    if (!btSupported || hrConnecting) return;
+    setHrConnecting(true);
     try {
       if (Capacitor.isNativePlatform()) {
-        // Native: use BleClient for HR
-        const HR_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
-        const HR_CHAR_UUID    = '00002a37-0000-1000-8000-00805f9b34fb';
-        // Filter scan by HR service UUID
-        const device = await BleClient.requestDevice({ services: [HR_SERVICE_UUID] });
+        // Native: scan filtered to the Heart Rate service — nothing else appears.
+        const device = await BleClient.requestDevice({ services: [HR_SERVICE] });
         const deviceId = device.deviceId;
         hrNativeDeviceIdRef.current = deviceId;
         if (!Capacitor.isNativePlatform()) return;
@@ -559,32 +619,36 @@ function LiveErgViewNative() {
           toast({ title: "HR Monitor Disconnected" });
         });
         if (!Capacitor.isNativePlatform()) return;
-        await BleClient.startNotifications(deviceId, HR_SERVICE_UUID, HR_CHAR_UUID, (value) => {
+        await BleClient.startNotifications(deviceId, HR_SERVICE, HR_MEASUREMENT, (value) => {
           const dv = toDataView(value);
           const hr = parseHRMeasurement(dv);
-          if (hr !== null) {
+          if (hr !== null && hr >= 40 && hr <= 220) {
             setHrBpm(hr);
+            hrBpmRef.current = hr;
             latestHr.current = hr;
+            hrSamplesRef.current.push(hr);
           }
         });
         setHrConnected(true);
         toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
       } else {
-        // Web Bluetooth
+        // Web Bluetooth — same 0x180D-only filter.
         const device = await (navigator as any).bluetooth.requestDevice({
-          filters: [{ services: [HR_SVC] }],
+          filters: [{ services: [HR_SERVICE] }],
         });
         const connectAndSubscribe = async () => {
           const server  = await device.gatt!.connect();
-          const service = await server.getPrimaryService(HR_SVC);
-          const char    = await service.getCharacteristic(HR_CHAR);
+          const service = await server.getPrimaryService(HR_SERVICE);
+          const char    = await service.getCharacteristic(HR_MEASUREMENT);
           await char.startNotifications();
           char.addEventListener("characteristicvaluechanged", (e: any) => {
-            const dv = e.target.value as DataView;
-            const isU16 = dv.getUint8(0) & 0x1;
-            const hr = isU16 ? dv.getUint16(1, true) : dv.getUint8(1);
-            setHrBpm(hr);
-            latestHr.current = hr;
+            const hr = parseHRMeasurement(e.target.value as DataView);
+            if (hr !== null && hr >= 40 && hr <= 220) {
+              setHrBpm(hr);
+              hrBpmRef.current = hr;
+              latestHr.current = hr;
+              hrSamplesRef.current.push(hr);
+            }
           });
         };
         device.addEventListener("gattserverdisconnected", async () => {
@@ -604,11 +668,13 @@ function LiveErgViewNative() {
         toast({ title: "HR Connected", description: device.name || "Heart Rate Monitor" });
       }
     } catch (e: any) {
-      if (e.name !== "NotFoundError") {
-        toast({ title: "HR Connect Failed", description: e.message, variant: "destructive" });
+      if (e?.name !== "NotFoundError") {
+        toast({ title: "HR Connect Failed", description: e?.message, variant: "destructive" });
       }
+    } finally {
+      setHrConnecting(false);
     }
-  }, [btSupported, toast]);
+  }, [btSupported, hrConnecting, toast]);
 
   // ── BT: connect Erg (via BleContext for cross-page persistence) ─────────────
   const connectErg = useCallback(async () => {
@@ -616,24 +682,28 @@ function LiveErgViewNative() {
     autoSavedRef.current = false;
     prevStateRef.current = undefined;
     setSaved(false);
-    setFeedback(null);
-    setCurrentCurve([]);
-    setPrevCurve([]);
-    setAllCurves([]);
+    setCurves({ cur: [], p1: [], p2: [] });
+    setStrokeCurveCount(0);
     setForceCurveSupported(null);
+    setForceCurveUuid(null);
     wasConnectedRef.current = false;
     // Fresh session — clear the accumulated readings from the previous one.
     splitSamplesRef.current = [];
     wattSamplesRef.current  = [];
     spmSamplesRef.current   = [];
     hrSamplesRef.current    = [];
+    splitSumRef.current     = 0;
+    splitCountRef.current   = 0;
     peakElapsedRef.current  = 0;
     peakDistRef.current     = 0;
-    setStrokes([]);
+    curCurveRef.current     = [];
+    allCurvesRef.current    = [];
+    strokesRef.current      = [];
+    setData({});
     await connectPM5();
   }, [btSupported, connectPM5]);
 
-  // ── Stop button: end the session, save, analyse, then drop the link ─────────
+  // ── Stop button: end the session, save, then drop the link ─────────
   const stopSession = useCallback(() => {
     endSession("stop");
     disconnectPM5();
@@ -641,61 +711,32 @@ function LiveErgViewNative() {
   }, [endSession, disconnectPM5]);
 
   // ── Web-only: re-subscribe GATT characteristics on an existing server ────────
-  const resubscribeErg = async (server: any) => {
+  const resubscribeErg = async (server: any, isCancelled: () => boolean) => {
     const svc = await server.getPrimaryService(C2_ROW_SVC);
 
-    try {
-      const gc = await svc.getCharacteristic(C2_GEN_STATUS);
-      await gc.startNotifications();
-      gc.addEventListener("characteristicvaluechanged", (e: any) => {
-        const dv = e.target.value as DataView;
-        accumulateStroke(parseCharacteristic(C2_GEN_STATUS, dv) as Partial<LiveData>);
-      });
-    } catch {}
-
-    try {
-      const ac = await svc.getCharacteristic(C2_ADD_STATUS);
-      await ac.startNotifications();
-      ac.addEventListener("characteristicvaluechanged", (e: any) => {
-        const dv = e.target.value as DataView;
-        accumulateStroke(parseCharacteristic(C2_ADD_STATUS, dv) as Partial<LiveData>);
-      });
-    } catch {}
-
-    try {
-      const a2c = await svc.getCharacteristic(C2_ADD_STATUS2);
-      await a2c.startNotifications();
-      a2c.addEventListener("characteristicvaluechanged", (e: any) => {
-        const dv = e.target.value as DataView;
-        accumulateStroke(parseCharacteristic(C2_ADD_STATUS2, dv) as Partial<LiveData>);
-      });
-    } catch {}
-
-    // Force curve — try primary then fallback
-    const subscribeFC = async (charUuid: string) => {
+    const attach = async (charUuid: string) => {
       try {
-        const fcc = await svc.getCharacteristic(charUuid);
-        await fcc.startNotifications();
-        fcc.addEventListener("characteristicvaluechanged", (e: any) => {
+        const c = await svc.getCharacteristic(charUuid);
+        await c.startNotifications();
+        c.addEventListener("characteristicvaluechanged", (e: any) => {
+          if (isCancelled()) return;
           const dv = e.target.value as DataView;
-          const parsed = parseCharacteristic(charUuid, dv);
-          const forces = (parsed as any).forceCurve as number[] | undefined;
-          if (forces && forces.length > 0) {
-            setForceCurveSupported(true);
-            setPrevCurve(currentCurveRef.current.length > 0 ? [...currentCurveRef.current] : []);
-            setCurrentCurve(forces);
-            setAllCurves(prev => [...prev, forces]);
-          }
+          accumulateStroke(parseCharacteristic(charUuid, dv) as Partial<LiveData>);
         });
-        return true;
-      } catch {
-        return false;
-      }
+      } catch {}
     };
 
-    let ok = await subscribeFC(C2_FORCE_CURVE);
-    if (!ok) ok = await subscribeFC(C2_FORCE_CURVE_FALLBACK);
-    setForceCurveSupported(ok);
+    await attach(C2_GEN_STATUS);
+    await attach(C2_ADD_STATUS);
+    await attach(C2_ADD_STATUS2);
+
+    const subscribed = await subscribeForceCurve({
+      gattServer: server,
+      isCancelled,
+      onCurve: (forces) => onForceCurve(forces),
+      onWinner: (uuid) => setForceCurveUuid(uuid),
+    });
+    setForceCurveSupported(subscribed.length > 0 ? null : false);
   };
 
   const disconnectErg = useCallback(() => {
@@ -706,7 +747,7 @@ function LiveErgViewNative() {
     disconnectPM5();
   }, [endSession, disconnectPM5]);
 
-  // ── Target split ─────────────────────────────────────────────
+  // ── Targets ──────────────────────────────────────────────────
   const applyTarget = () => {
     const cs = parseSplitInput(targetInput);
     if (cs) {
@@ -727,299 +768,418 @@ function LiveErgViewNative() {
     }
   };
 
-  // ── Projected finish time ─────────────────────────────────────
-  const projLabel = targetDist != null ? "Proj. Finish" : "Proj. 2000m";
-  const projValue = (() => {
-    const sp = data.splitPace ?? 0;
-    if (!sp || sp <= 0 || sp > 100000) return "--:--";
-    const effectiveDist = targetDist ?? 2000;
-    const totalSecs = (sp / 100) * effectiveDist / 500;
-    const m   = Math.floor(totalSecs / 60);
-    const sec = Math.round(totalSecs % 60);
-    return `${m}:${String(sec).padStart(2, "0")}`;
-  })();
+  // A loaded workout can carry its own target, under any of the names the
+  // builder / coach tables use. Everything is coerced and range-checked.
+  const loadedTargets = useMemo(() => {
+    const w: any = coachWorkout;
+    const num = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    if (!w) return { dist: null as number | null, seconds: null as number | null };
+    return {
+      dist:    num(w.target_distance ?? w.target_distance_m ?? w.distance ?? w.meters),
+      seconds: num(w.target_time_seconds ?? w.duration_seconds ?? w.time_seconds ?? w.target_seconds),
+    };
+  }, [coachWorkout]);
+
+  const effTargetDist    = targetDist ?? loadedTargets.dist;
+  const effTargetSeconds = loadedTargets.seconds;
 
   // ── Derived display values ────────────────────────────────────
-  const state     = data.workoutState ?? 0;
-  const isRowing  = state === 2;
+  const state      = data.workoutState ?? 0;
   const isFinished = state === 4;
-  const hr        = (data.heartRate && data.heartRate > 0) ? data.heartRate : hrBpm;
-  // Something worth saving has been rowed this session.
-  const hasSessionData = (data.distance ?? 0) > 0 && (data.elapsedTime ?? 0) > 0;
+  const elapsedCs  = data.elapsedTime ?? 0;
+  const distM      = data.distance ?? 0;
+  const splitCs    = data.splitPace ?? 0;
 
-  // Y-axis tick formatter for the graph (split in centiseconds → m:ss)
-  const fmtYTick = (v: number) => fmtPace(v);
+  // Strap over PM5: a chest strap talks to us directly, the PM5 figure is a
+  // relayed (and often stale) copy of the same signal.
+  const strapLive  = hrConnected && hrBpm != null && hrBpm > 0;
+  const pm5Hr      = data.heartRate && data.heartRate > 0 ? data.heartRate : null;
+  const hr         = strapLive ? hrBpm : pm5Hr;
+  const hrSource   = strapLive ? "STRAP" : pm5Hr ? "PM5" : "BPM";
 
-  // Graph y-domain: auto with some padding, inverted (lower = faster = top)
-  const splitValues = strokes.map(s => s.split).filter(Boolean);
-  const minSplit = splitValues.length ? Math.min(...splitValues) - 500 : 6000;
-  const maxSplit = splitValues.length ? Math.max(...splitValues) + 500 : 12000;
+  // Session average split, O(1) from the running total.
+  const avgSplitCsLive = splitCountRef.current > 0
+    ? splitSumRef.current / splitCountRef.current
+    : (data.averagePace ?? 0);
 
-  // ── Force curve area chart data (per user spec) ──────────────────────────
-  // X axis: sample index. Y axis: force from 0 N, 800 N floor (grows for bigger
-  // strokes — recharts clamps out-of-domain samples). Line #2272FF, strokeWidth 2.
-  const forceCurveAreaData = buildForceCurveAreaData(currentCurve);
+  // Projected finish. Distance target → a time; time target → a distance;
+  // no target at all → the classic projected 2 000 m. Every branch returns
+  // "—" rather than Infinity/NaN while elapsed ≈ 0 or the split is still 0.
+  const projection = (() => {
+    if (effTargetSeconds != null) {
+      const m = projectedDistanceMeters(effTargetSeconds, distM, elapsedCs);
+      return { label: "Projected", value: m == null ? "—" : String(Math.round(m)), unit: "m" };
+    }
+    const target = effTargetDist ?? 2000;
+    const secs = projectedFinishSeconds(target, distM, splitCs, elapsedCs);
+    return {
+      label: "Projected",
+      value: secs == null ? "—" : fmtClock(secs),
+      unit: `${target}m finish`,
+    };
+  })();
 
-  const statBlocks = [
-    { label: "Split /500m",   value: fmtPace(data.splitPace ?? 0),                               big: true  },
-    { label: "Stroke Rate",   value: fmtStrokeRate(data.strokeRate),                              big: false },
-    { label: "Distance",      value: fmtDistance(data.distance),                                  big: false },
-    { label: "Elapsed",       value: data.elapsedTime ? fmtTime(data.elapsedTime) : "--:--.0",     big: false },
-    { label: "Calories",      value: data.calories   ? `${data.calories} cal` : "-- cal",          big: false },
-    { label: "Power",         value: fmtWatts(data.power),                                        big: false },
-    { label: "Heart Rate",    value: hr ? `${hr} bpm` : "-- bpm",                                  big: false },
-    { label: "Drive Length",  value: data.driveLength ? fmtDriveLength(data.driveLength) : "--m",  big: false },
-    { label: "Drive Time",    value: data.driveTime ? fmtDriveTime(data.driveTime) : "--",          big: false },
-    { label: "Recovery Time", value: data.recoveryTime ? fmtDriveTime(data.recoveryTime) : "--",   big: false },
-    { label: projLabel,       value: projValue,                                                     big: false },
-  ];
+  // Progress toward the loaded target (distance or time). Hidden without one.
+  const progress = (() => {
+    if (effTargetDist != null && effTargetDist > 0) {
+      return Math.max(0, Math.min(1, distM / effTargetDist));
+    }
+    if (effTargetSeconds != null && effTargetSeconds > 0) {
+      return Math.max(0, Math.min(1, (elapsedCs / 100) / effTargetSeconds));
+    }
+    return null;
+  })();
+
+  // ── Force curve chart ────────────────────────────────────────
+  const { cur, p1, p2 } = curves;
+  const curveData = useMemo(() => {
+    const len = Math.max(cur.length, p1.length, p2.length, 20);
+    return Array.from({ length: len }, (_, i) => ({
+      idx: i,
+      cur: i < cur.length ? cur[i] : null,
+      p1:  i < p1.length  ? p1[i]  : null,
+      p2:  i < p2.length  ? p2[i]  : null,
+    }));
+  }, [cur, p1, p2]);
+
+  const peak = cur.length ? Math.max(...cur) : 0;
+  const peakIdx = cur.length ? cur.indexOf(peak) : 0;
+  const axisMax = forceCurveAxisMax(Math.max(
+    peak,
+    p1.length ? Math.max(...p1) : 0,
+    p2.length ? Math.max(...p2) : 0,
+  ));
+
+  const efficiency = driveEfficiencyScore(cur);
+  const slipRatio  = catchSlipRatio(cur);
+  const slipping   = slipRatio != null && slipRatio > CATCH_SLIP_THRESHOLD;
+
+  const hasSessionData = distM > 0 && elapsedCs > 0;
+  const canBuild = !ergConnected || !hasSessionData;
+
+  const splitColor = targetCs && splitCs > 0
+    ? (splitCs <= targetCs ? SUCCESS : DANGER)
+    : WHITE;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col overflow-x-hidden">
-      {/* ── AI analysis — slides up by itself once analyze-workout answers ── */}
-      <Dialog open={feedbackOpen && !!feedback} onOpenChange={setFeedbackOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto p-0 border-0 bg-transparent shadow-none">
-          {feedback && (
-            <WorkoutFeedback feedback={feedback} onDismiss={() => setFeedbackOpen(false)} />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Header bar ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <div className="flex items-center gap-3">
-          <div className={`w-2.5 h-2.5 rounded-full ${ergConnected ? "bg-green-400 animate-pulse" : disconnected ? "bg-yellow-400 animate-pulse" : "bg-gray-600"}`} />
-          <span className="text-sm font-medium text-gray-300">
-            {ergConnected
-              ? `PM5 — ${STATE_LABELS[state] ?? "--"}`
-              : disconnected
-              ? "Reconnecting…"
-              : "Not connected"}
-          </span>
-          {hrConnected && (
-            <span className="flex items-center gap-1 text-red-400 text-xs font-medium">
-              <Heart className="h-3 w-3" />
-              {hr ? `${hr} bpm` : "--"}
+    // Landscape shell. Fixed + overflow-hidden: everything is on screen at once,
+    // nothing scrolls. On web the same flex row simply follows the viewport, so
+    // a wide browser window gets the identical layout with no orientation API.
+    <div
+      className={
+        immersive
+          ? "fixed inset-0 z-50 flex flex-col overflow-hidden"
+          : "relative w-full flex flex-col overflow-hidden rounded-md border"
+      }
+      style={{
+        background: INK,
+        color: WHITE,
+        fontFamily: "var(--font-body)",
+        borderColor: immersive ? undefined : BORDER,
+        height: immersive ? undefined : "80vh",
+      }}
+    >
+      {/* ── Top bar ── */}
+      <div
+        className="flex items-center justify-between gap-2 px-3 border-b shrink-0"
+        style={{ borderColor: BORDER, height: 44 }}
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <span className="flex items-center gap-2">
+            <StatusDot on={ergConnected} warn={disconnected} />
+            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+              {ergConnected ? `PM5 ${STATE_LABELS[state] ?? "--"}` : disconnected ? "Reconnecting" : "PM5 offline"}
             </span>
+          </span>
+          <span className="flex items-center gap-2">
+            <StatusDot on={hrConnected} />
+            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+              {hrConnected ? "Strap" : "No strap"}
+            </span>
+          </span>
+          {forceCurveUuid && (
+            <span className="hidden md:inline uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+              FC {forceCurveUuid.slice(0, 8)}
+            </span>
+          )}
+          {saved && (
+            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: SUCCESS }}>Saved</span>
+          )}
+          {!saved && isFinished && (
+            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Saving…</span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          {coachWorkout && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3"
+              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              onClick={() => setBuilderOpen(true)}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" /> Send to PM5
+            </Button>
+          )}
+          {canBuild && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3"
+              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              onClick={() => setBuilderOpen(true)}
+            >
+              <ListPlus className="h-3.5 w-3.5 mr-1.5" /> Build Workout
+            </Button>
+          )}
           {!hrConnected && btSupported && (
-            <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-xs h-7 px-2" onClick={connectHR}>
-              <Heart className="h-3 w-3 mr-1" /> HR
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3"
+              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              onClick={connectHR}
+              disabled={hrConnecting}
+            >
+              {hrConnecting
+                ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                : <Heart className="h-3.5 w-3.5 mr-1.5" />}
+              Connect Heart Rate Monitor
             </Button>
           )}
           {ergConnected ? (
             hasSessionData ? (
-              <Button size="sm" variant="destructive" className="h-10 text-sm px-3 min-w-[44px]" onClick={stopSession}>
+              <Button size="sm" variant="destructive" className="h-8 px-3" style={{ fontSize: 12 }} onClick={stopSession}>
                 <Square className="h-3.5 w-3.5 mr-1.5" /> Stop &amp; save
               </Button>
             ) : (
-              <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white text-sm h-10 px-3 min-w-[44px]" onClick={disconnectErg}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3"
+                style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: MUTED }}
+                onClick={disconnectErg}
+              >
                 Disconnect
               </Button>
             )
           ) : (
-            <Button size="sm" className="h-10 text-sm px-4 min-w-[44px]" onClick={connectErg} disabled={ergConnecting || !btSupported}>
+            <Button
+              size="sm"
+              className="h-8 px-3"
+              style={{ fontSize: 12, background: CURVE, color: WHITE }}
+              onClick={connectErg}
+              disabled={ergConnecting || !btSupported}
+            >
               {ergConnecting
-                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Connecting…</>
-                : <><Bluetooth className="h-4 w-4 mr-1.5" />Connect PM5</>}
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Connecting…</>
+                : <><Bluetooth className="h-3.5 w-3.5 mr-1.5" />Connect PM5</>}
             </Button>
           )}
+          {/* Collapsing releases the landscape lock and hands the dashboard
+              navigation back — the immersive view covers it completely. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2"
+            style={{ background: "transparent", borderColor: BORDER, color: MUTED }}
+            onClick={() => setImmersive(v => !v)}
+            aria-label={immersive ? "Exit full screen" : "Full screen"}
+          >
+            {immersive ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
         </div>
       </div>
 
-      {/* ── Target split + reconnect notices ── */}
-      {!ergConnected && !disconnected && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 bg-gray-900 border-b border-gray-800">
-          <span className="text-xs text-gray-400 shrink-0">Target split:</span>
+      {/* ── Pre-session setup strip (targets). Gone once the piece is running. ── */}
+      {canBuild && (
+        <div
+          className="flex items-center gap-2 px-3 border-b shrink-0"
+          style={{ borderColor: BORDER, height: 40 }}
+        >
+          <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Target split</span>
           <TimeInput
             value={targetInput}
             onChange={setTargetInput}
-            className="h-7 bg-gray-800 border-gray-700 text-white"
+            className="h-8"
           />
-          <Button size="sm" variant="outline" className="h-7 text-xs border-gray-700 text-gray-300 hover:text-white" onClick={applyTarget}>
-            Set
-          </Button>
+          <Button
+            size="sm" variant="outline" className="h-7 px-2"
+            style={{ fontSize: 11, background: "transparent", borderColor: BORDER, color: WHITE }}
+            onClick={applyTarget}
+          >Set</Button>
           {targetCs && (
-            <span className="text-xs text-green-400 font-mono">→ {fmtPace(targetCs)}/500m</span>
+            <span className="tabular-nums" style={{ fontSize: 12, color: SUCCESS }}>{fmtPace(targetCs)}/500m</span>
           )}
-          <span className="text-xs text-gray-600">|</span>
-          <span className="text-xs text-gray-400 shrink-0">Target dist:</span>
+          <span style={{ color: BORDER }}>|</span>
+          <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Target distance</span>
           <Input
             value={targetDistInput}
             onChange={e => setTargetDistInput(e.target.value)}
-            placeholder="e.g. 2000"
-            className="h-7 w-20 bg-gray-800 border-gray-700 text-white text-xs font-mono"
+            placeholder="2000"
+            className="h-7 w-20 tabular-nums"
+            style={{ fontSize: 12 }}
           />
-          <Button size="sm" variant="outline" className="h-7 text-xs border-gray-700 text-gray-300 hover:text-white" onClick={applyTargetDist}>
-            Set
-          </Button>
-          {targetDist && (
-            <span className="text-xs text-blue-400 font-mono">→ {targetDist}m</span>
+          <Button
+            size="sm" variant="outline" className="h-7 px-2"
+            style={{ fontSize: 11, background: "transparent", borderColor: BORDER, color: WHITE }}
+            onClick={applyTargetDist}
+          >Set</Button>
+          {effTargetDist && (
+            <span className="tabular-nums" style={{ fontSize: 12, color: CURVE }}>{effTargetDist}m</span>
+          )}
+          {disconnected && (
+            <span className="ml-auto flex items-center gap-2" style={{ fontSize: 12, color: "#f59e0b" }}>
+              <AlertTriangle className="h-3.5 w-3.5" /> Connection lost — data preserved, reconnecting…
+            </span>
           )}
         </div>
       )}
 
-      {disconnected && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-900/30 border-b border-yellow-700/40">
-          <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />
-          <span className="text-xs text-yellow-300">Connection lost — data preserved. Auto-reconnecting…</span>
-          <Button size="sm" variant="outline" className="ml-auto h-6 text-xs border-yellow-600 text-yellow-300" onClick={connectErg} disabled={ergConnecting}>
-            {ergConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reconnect"}
-          </Button>
-        </div>
-      )}
-
-      {/* ── Big stat grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-gray-800 border-b border-gray-800 flex-shrink-0">
-        {statBlocks.map(({ label, value, big }) => (
-          <div key={label} className={`flex flex-col items-center justify-center py-5 px-2 ${big ? "bg-gray-900 col-span-2 sm:col-span-1" : "bg-gray-950"}`}>
-            <span className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">{label}</span>
-            <span className={`font-mono font-bold tabular-nums leading-none ${big ? "text-4xl sm:text-5xl text-green-400" : "text-2xl sm:text-3xl text-white"}`}>
-              {value}
+      {/* ── Landscape body: 40% force curve · 60% metrics ── */}
+      <div className="flex-1 min-h-0 flex gap-2 p-2">
+        {/* LEFT — force curve */}
+        <div
+          className="flex flex-col min-h-0 rounded-md border p-2"
+          style={{ width: "40%", background: NAVY, borderColor: BORDER }}
+        >
+          <div className="flex items-center justify-between shrink-0" style={{ marginBottom: 4 }}>
+            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Force curve</span>
+            <span className="tabular-nums" style={{ fontSize: 11, color: MUTED }}>
+              {strokeCurveCount ? `${strokeCurveCount} strokes` : "waiting"}
             </span>
           </div>
-        ))}
-      </div>
 
-      {/* ── Stroke graph ── */}
-      <div className="flex-1 min-h-0 p-4 flex flex-col">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-gray-500 uppercase tracking-widest">Split over distance</span>
-          {/* Bluetooth sessions save themselves — this is status, not a control. */}
-          {analyzing && (
-            <span className="flex items-center gap-1.5 text-xs text-blue-400">
-              <Loader2 className="h-3 w-3 animate-spin" /> Analyzing performance…
-            </span>
-          )}
-          {!analyzing && saved && feedback && (
-            <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-400 hover:text-blue-300" onClick={() => setFeedbackOpen(true)}>
-              <Sparkles className="h-3 w-3 mr-1" /> View AI analysis
-            </Button>
-          )}
-          {!analyzing && saved && !feedback && (
-            <span className="text-xs text-green-400">Saved automatically</span>
-          )}
-          {!saved && isFinished && (
-            <span className="text-xs text-gray-500">Saving…</span>
-          )}
-        </div>
-
-        {strokes.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-700 text-sm">
-            {ergConnected ? "Start rowing to see graph" : "Connect to PM5 to begin"}
-          </div>
-        ) : (
-          <div className="flex-1 min-h-[200px]">
+          <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={strokes} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis
-                  dataKey="dist"
-                  type="number"
-                  domain={["dataMin", "dataMax"]}
-                  tickFormatter={v => `${v}m`}
-                  tick={{ fill: "#6b7280", fontSize: 10 }}
-                  axisLine={{ stroke: "#374151" }}
-                  tickLine={false}
-                />
+              <AreaChart data={curveData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
+                <XAxis dataKey="idx" type="number" domain={[0, "dataMax"]} hide />
                 <YAxis
-                  reversed
-                  domain={[minSplit, maxSplit]}
-                  tickFormatter={fmtYTick}
-                  tick={{ fill: "#6b7280", fontSize: 10 }}
-                  axisLine={{ stroke: "#374151" }}
+                  domain={[0, axisMax]}
+                  width={36}
+                  tick={{ fill: MUTED, fontSize: 10 }}
+                  axisLine={{ stroke: BORDER }}
                   tickLine={false}
-                  width={48}
                 />
-                <Tooltip
-                  contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={v => `${v}m`}
-                  formatter={(value: any, name: string) => {
-                    if (name === "split") return [fmtPace(value), "Split /500m"];
-                    if (name === "spm")   return [value + " spm", "Stroke Rate"];
-                    if (name === "hr")    return [value + " bpm", "Heart Rate"];
-                    return [value, name];
-                  }}
+                {/* Two strokes ago — faintest */}
+                <Area
+                  type="monotone" dataKey="p2" stroke={CURVE} strokeOpacity={0.2}
+                  fill={CURVE} fillOpacity={0.05} strokeWidth={2}
+                  dot={false} isAnimationActive={false} connectNulls={false}
                 />
-                {/* Target split pacer line */}
-                {targetCs && (
-                  <ReferenceLine y={targetCs} stroke="#f59e0b" strokeDasharray="6 3" strokeWidth={1.5}
-                    label={{ value: `Target ${fmtPace(targetCs)}`, fill: "#f59e0b", fontSize: 10, position: "insideTopRight" }}
+                {/* Previous stroke */}
+                <Area
+                  type="monotone" dataKey="p1" stroke={CURVE} strokeOpacity={0.4}
+                  fill={CURVE} fillOpacity={0.1} strokeWidth={2}
+                  dot={false} isAnimationActive={false} connectNulls={false}
+                />
+                {/* Current stroke — solid */}
+                <Area
+                  type="monotone" dataKey="cur" stroke={CURVE}
+                  fill={CURVE} fillOpacity={0.22} strokeWidth={2}
+                  dot={false} isAnimationActive={false} connectNulls={false}
+                />
+                {peak > 0 && (
+                  <ReferenceDot
+                    x={peakIdx} y={peak} r={3} fill={CURVE} stroke="none"
+                    isFront
+                    label={{ value: `${Math.round(peak)} N`, position: "top", fill: WHITE, fontSize: 12 }}
                   />
                 )}
-                <Line
-                  type="monotone"
-                  dataKey="split"
-                  stroke="#4ade80"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#4ade80" }}
-                  isAnimationActive={false}
-                />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
-        )}
-      </div>
 
-      {/* ── Force Curve Area Chart (per user spec) ── */}
-      <div className="px-4 pb-2">
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Force Curve</div>
-        <div className="h-32 bg-gray-900 rounded-lg overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={forceCurveAreaData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-              <YAxis domain={[0, forceCurveAxisMax]} hide />
-              <XAxis dataKey="idx" hide />
-              <Area
-                type="monotone"
-                dataKey="force"
-                stroke="#2272FF"
-                strokeWidth={2}
-                fill="#2272FF"
-                fillOpacity={0.2}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {/* Drive quality read-outs */}
+          <div className="flex items-center justify-between shrink-0" style={{ marginTop: 4 }}>
+            <span className="flex items-baseline gap-2">
+              <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Drive efficiency</span>
+              <span className="font-bold tabular-nums" style={{ fontSize: 20, color: WHITE }}>
+                {efficiency == null ? "—" : efficiency}
+              </span>
+              <span style={{ fontSize: 11, color: MUTED }}>/100</span>
+            </span>
+            <span
+              className="uppercase tracking-widest rounded-sm px-2 py-1"
+              style={{
+                fontSize: 11,
+                color: slipRatio == null ? MUTED : slipping ? DANGER : SUCCESS,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              {slipRatio == null ? "Catch —" : slipping ? "Catch slip" : "Clean catch"}
+            </span>
+          </div>
+
+          {forceCurveSupported === false && (
+            <p className="text-center shrink-0" style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>
+              Force curve not available on this PM5 firmware.
+            </p>
+          )}
+        </div>
+
+        {/* RIGHT — 3×3 metric grid */}
+        <div className="flex flex-col min-h-0 gap-2" style={{ width: "60%" }}>
+          <div className="grid flex-1 min-h-0 gap-2" style={{ gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(3, 1fr)" }}>
+            {/* Row 1 */}
+            <Tile label="Split"       value={fmtPace(splitCs)}                                    unit="/500m" color={splitColor} />
+            <Tile label="Watts"       value={data.power ? String(Math.round(data.power)) : "—"}   unit="W" />
+            <Tile label="Stroke rate" value={data.strokeRate ? String(Math.round(data.strokeRate)) : "—"} unit="spm" />
+            {/* Row 2 */}
+            <Tile label="Distance"    value={distM > 0 ? distM.toFixed(1) : "—"}                  unit="m" />
+            <Tile label="Elapsed"     value={elapsedCs > 0 ? fmtClock(elapsedCs / 100) : "—"}     unit="mm:ss" />
+            <Tile label="Heart rate"  value={hr ? String(Math.round(hr)) : "—"}                   unit={hrSource} />
+            {/* Row 3 */}
+            <Tile label="Avg split"   value={fmtPace(avgSplitCsLive)}                             unit="/500m" />
+            <Tile label={projection.label} value={projection.value}                               unit={projection.unit} />
+            <Tile label="Calories"    value={data.calories ? String(Math.round(data.calories)) : "—"} unit="cal" />
+          </div>
+
+          {/* Progress toward the target — 4px, hidden when there is no target */}
+          {progress != null && (
+            <div className="shrink-0 w-full overflow-hidden rounded-sm" style={{ height: 4, background: NAVY }}>
+              <div style={{ height: 4, width: `${progress * 100}%`, background: CURVE, transition: "width 300ms cubic-bezier(.4,0,.2,1)" }} />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Force Curve (Canvas) — detailed view ── */}
-      {forceCurveSupported !== false && currentCurve.length > 0 && (
-        <div className="px-4 pb-4">
-          <ForceCurveCanvas
-            currentCurve={currentCurve}
-            prevCurve={prevCurve}
-            allCurves={allCurves}
-            driveTime={data.driveTime}
-            recoveryTime={data.recoveryTime}
-            strokeCount={allCurves.length}
-          />
-        </div>
-      )}
-
-      {/* ── Force curve not supported note ── */}
-      {forceCurveSupported === false && currentCurve.length === 0 && (
-        <div className="px-4 pb-3">
-          <p className="text-xs text-gray-600 text-center">
-            Force curve data not available for this PM5 firmware version.
-          </p>
-        </div>
-      )}
-
-      {/* ── Not supported (web browsers without Web Bluetooth) ── */}
+      {/* ── Bluetooth unavailable ── */}
       {!btSupported && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-950/95">
+        <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.95)" }}>
           <div className="text-center p-8">
-            <AlertTriangle className="h-12 w-12 text-yellow-400 mx-auto mb-4" />
-            <p className="text-lg font-semibold mb-2">Web Bluetooth not supported</p>
-            <p className="text-sm text-gray-400">Use Chrome or Edge on desktop, or the CrewSync iOS app to connect your PM5.</p>
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4" style={{ color: "#f59e0b" }} />
+            <p className="text-lg font-semibold mb-2">Bluetooth unavailable</p>
+            <p style={{ fontSize: 14, color: MUTED }}>
+              Use Chrome or Edge on desktop, or the CrewSync iOS app, to connect your PM5.
+            </p>
           </div>
         </div>
+      )}
+
+      {/* ── Workout builder (owned by another module) ── */}
+      <WorkoutBuilderModal
+        open={builderOpen}
+        onOpenChange={setBuilderOpen}
+        deviceId={ergDeviceId ?? null}
+        coachWorkout={coachWorkout}
+      />
+
+      {/* ── Post-workout: owns the analyze-workout call now ── */}
+      {postPayload && (
+        <PostWorkoutScreen
+          open={postOpen}
+          onOpenChange={setPostOpen}
+          workoutId={postPayload.workoutId}
+          row={postPayload.row}
+          strokes={postPayload.strokes}
+          forceCurves={postPayload.forceCurves}
+          userId={postPayload.userId}
+        />
       )}
     </div>
   );

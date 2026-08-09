@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -26,8 +26,10 @@ serve(async (req) => {
     const { coach_id, athlete_ids } = await req.json();
     if (!coach_id) return new Response(JSON.stringify({ error: "Missing coach_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Cache by coach + sorted athlete_ids (48h TTL)
-    const cacheKey = `recruit_score_${coach_id}_${hashKey(athlete_ids || [])}`;
+    // Cache by coach + athlete_ids as a SET (48h TTL). hashKey preserves array
+    // order, and the order the client sends ids in is not meaningful here —
+    // sort so the same roster reuses one cache entry.
+    const cacheKey = `recruit_score_${coach_id}_${hashKey([...(athlete_ids ?? [])].sort())}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
       await logUsage(supabase, { user_id: coach_id, function_name: "score-recruits", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
@@ -106,7 +108,15 @@ serve(async (req) => {
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 150, messages: [{ role: "user", content: prompt }] }),
+      // One output row per athlete (~55 tokens: uuid + score + one sentence),
+      // and the pool is unbounded when athlete_ids is omitted — a flat 500
+      // covers only ~9 recruits and the raw text is JSON.parse'd with no
+      // fallback, so truncation is a hard 500. Scale the ceiling to the pool.
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: Math.min(4096, 200 + athleteSummaries.length * 60),
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
 
     if (!aiRes.ok) {
@@ -129,9 +139,10 @@ serve(async (req) => {
     }
 
     const responseBody = { scores };
-    await setCached(supabase, cacheKey, responseBody, TTL.TWO_DAYS, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: coach_id, function_name: "score-recruits", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, responseBody, TTL.TWO_DAYS, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id: coach_id, function_name: "score-recruits", model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, coach_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(responseBody), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { generateWorkoutStream } from "@/lib/api";
@@ -38,25 +38,10 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Calculate total batches when months changes
+  // generate-workout streams one chunk per 4 weeks, so batches must match that
+  // stride or the progress bar finishes early and then stalls.
   const totalWeeks = parseInt(months) * 4;
-  const totalBatches = Math.ceil(totalWeeks / 2);
-
-  // Simulate progress updates during generation
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (generationProgress.totalBatches > 0 && generationProgress.currentBatch < generationProgress.totalBatches) {
-      interval = setInterval(() => {
-        setGenerationProgress(prev => {
-          if (prev.currentBatch < prev.totalBatches) {
-            return { ...prev, currentBatch: prev.currentBatch + 1 };
-          }
-          return prev;
-        });
-      }, 15000);
-    }
-    return () => clearInterval(interval);
-  }, [generationProgress.totalBatches, generationProgress.currentBatch]);
+  const totalBatches = Math.ceil(totalWeeks / 4);
 
   const toggleAllWeeks = (planId: string, weeks: any[]) => {
     const weekIds = weeks.map((_, idx) => `week-${idx}`);
@@ -97,13 +82,22 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
       // Initialize progress tracking
       setGenerationProgress({ currentBatch: 1, totalBatches });
 
+      // generate-workout requires a top-level user_id and a `preferences`
+      // wrapper — a flat payload fails its missing-user_id check outright.
+      const user = await getSessionUser();
+      if (!user) throw new Error("You must be signed in to generate a plan");
+
       const data = await generateWorkoutStream(
         {
-          months: parseInt(months),
-          weight: profile.weight,
-          height: profile.height,
-          experience: profile.experience_level || "intermediate",
-          goals: profile.goals || "general fitness",
+          user_id: user.id,
+          preferences: {
+            months: parseInt(months),
+            training_goal: profile.goals || "general_fitness",
+            intensity: "moderate",
+            include_lifting: true,
+            lifting_days_per_week: 2,
+            include_two_a_days: true,
+          },
         },
         {
           onChunk: (c) =>

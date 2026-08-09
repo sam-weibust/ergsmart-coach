@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -44,19 +44,19 @@ serve(async (req) => {
       .order("week_start", { ascending: false })
       .limit(100);
 
-    const prompt = `You are an expert rowing periodization coach.
+    const prompt = `Expert rowing periodization coach.
 
 Season phase: ${season_phase || "general preparation"}
 Weeks until major race: ${weeks_until_race || "unknown"}
 
-Team weekly load data (last 8 weeks):
-${JSON.stringify(loadData || [], null, 2)}
+Team weekly load data:
+${JSON.stringify(loadData || [])}
 
-Analyze load patterns and provide recommendations. Consider:
-- Safe weekly volume: on-water max 80km/week, erg max 100km/week
-- Fatigue scores 7+ are high risk
-- Taper should begin 2-3 weeks before race
-- Volume should increase no more than 10% per week
+Constraints:
+- Safe weekly volume: on-water max 80km, erg max 100km
+- Fatigue score 7+ = high risk
+- Taper begins 2-3 weeks before race
+- Volume increase max 10% per week
 
 Respond with ONLY valid JSON:
 {
@@ -76,7 +76,13 @@ Respond with ONLY valid JSON:
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
+        // 1024, not 500: `alerts` and `volume_adjustments` are per-athlete arrays over
+        // the whole squad (~12 athletes in 100 rows of weekly logs) — worst case ~700
+        // output tokens. 500 would truncate mid-array and the JSON.parse below would throw.
         max_tokens: 1024,
+        // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the max_tokens
+        // budget and would leave an empty/truncated JSON body.
+        thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -89,14 +95,14 @@ Respond with ONLY valid JSON:
     await recordApiSuccess(supabase, "analyze-load-management");
 
     const result = await resp.json();
-    const usage = result?.usage ?? {};
+    const usage = tokensFrom(result?.usage);
     const text = result?.content?.[0]?.text ?? "{}";
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     const analysis = JSON.parse(text.slice(start, end + 1));
 
     await setCached(supabase, cacheKey, analysis, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: "analyze-load-management", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await logUsage(supabase, { user_id: null, function_name: "analyze-load-management", model: MODEL, ...usage, cache_hit: false });
 
     return new Response(JSON.stringify(analysis), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {

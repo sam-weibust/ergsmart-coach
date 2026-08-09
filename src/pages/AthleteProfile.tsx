@@ -376,7 +376,7 @@ export default function AthleteProfile() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
       {/* Header */}
-      <header className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
+      <header className="border-b border-border bg-background sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={crewsyncLogo} alt="CrewSync" className="h-8 w-8 rounded-lg cursor-pointer" onClick={() => navigate("/")} />
@@ -412,16 +412,16 @@ export default function AthleteProfile() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 {profileRole === "coxswain" && (
-                  <Badge className="bg-amber-500 text-white">COX</Badge>
+                  <Badge className="bg-[hsl(var(--warning))] text-white">COX</Badge>
                 )}
                 {profileRole === "coach" && (
-                  <Badge className="bg-blue-600 text-white">COACH</Badge>
+                  <Badge>COACH</Badge>
                 )}
                 {profileRole === "athlete" && (
                   <Badge className="bg-primary/10 text-primary border border-primary/20">ATHLETE</Badge>
                 )}
                 {ap.is_recruiting && profileRole !== "coach" && (
-                  <Badge className="bg-green-500 text-white"><GraduationCap className="h-3 w-3 mr-1" />Actively Recruiting</Badge>
+                  <Badge className="bg-[hsl(var(--success))] text-white"><GraduationCap className="h-3 w-3 mr-1" />Actively Recruiting</Badge>
                 )}
                 {ap.grad_year && profileRole !== "coach" && <Badge variant="outline">Class of {ap.grad_year}</Badge>}
                 {!isOwnProfile && (
@@ -681,7 +681,7 @@ export default function AthleteProfile() {
 
             {/* Calendar Heatmap — athletes only */}
             {profileRole === "athlete" && (
-              <Card className="bg-gradient-to-br from-[#0a1628] to-[#112240] border-white/10">
+              <Card className="bg-primary border-0">
                 <CardContent className="p-5">
                   <CalendarHeatmap userId={base.id} />
                 </CardContent>

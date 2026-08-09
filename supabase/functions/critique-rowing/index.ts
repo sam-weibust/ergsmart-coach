@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -49,10 +49,9 @@ Athlete: ${profile?.full_name || "Unknown"} | Level: ${profile?.experience_level
 2K: ${goals?.current_2k_time || "?"} → ${goals?.goal_2k_time || "?"}
 `.trim();
 
-  const systemPrompt = `You are a warm, experienced rowing coach. Always lead with genuine strengths. Frame every correction as an opportunity — use phrases like 'to take this further' and 'a small tweak here will make a big difference'. Be specific and actionable but keep the tone enthusiastic and confidence-building throughout.
+  const systemPrompt = `Warm, experienced rowing coach. Lead with genuine strengths; frame corrections as opportunities. Specific and actionable, never negative.
 
-Cover these 6 categories with a rating (1-10) each:
-1. Catch Timing, 2. Body Sequencing, 3. Drive Phase, 4. Finish Position, 5. Recovery, 6. Stroke Efficiency
+Rate all 6 categories 1-10: 1. Catch Timing, 2. Body Sequencing, 3. Drive Phase, 4. Finish Position, 5. Recovery, 6. Stroke Efficiency
 
 Return ONLY valid JSON:
 {
@@ -66,9 +65,10 @@ Return ONLY valid JSON:
   "priorityFix": "<single most important fix>"
 }
 
-Score generously — a rower clearly trying deserves 7 or above. Reserve below 6 for safety concerns only.
-Provide at least 3 strengths.
-Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experiment with — never negative language.`;
+Constraints:
+- Score generously: a rower clearly trying deserves 7+. Below 6 only for safety concerns.
+- At least 3 strengths.
+- At most 3 issues. Every "fix" must start with Try, Focus on, or Experiment with.`;
 
   // Failsafe 2: cache before the API call (image input is deterministic).
   const cacheKey = `${FN}_${hashKey({ frames, notes, video_path })}`;
@@ -114,9 +114,12 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
     },
     body: JSON.stringify({
       model: MODEL,
-      // Sonnet 5's default adaptive thinking ate the 800-token budget, truncating
-      // the critique JSON. Disable thinking and give the JSON room.
-      max_tokens: 2500,
+      // 1000, not 500: the critique JSON is 6 rated categories with notes, >=3
+      // strengths, up to 3 issues (area/problem/fix), drills and a priorityFix —
+      // ~700 output tokens worst case. A truncated body fails JSON.parse below.
+      max_tokens: 1000,
+      // Sonnet 5's default adaptive thinking ate the budget, truncating the
+      // critique JSON. Disable thinking and give the JSON room.
       thinking: { type: "disabled" },
       system: systemPrompt,
       messages: [{ role: "user", content: messageContent }],
@@ -133,7 +136,7 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
 
   const claudeData = await claudeRes.json();
   const rawText = claudeData?.content?.[0]?.text ?? "";
-  const usage = claudeData?.usage ?? {};
+  const usage = tokensFrom(claudeData?.usage);
 
   let critique: any;
   try {
@@ -154,8 +157,8 @@ Cap issues at 3 maximum. Each fix field must start with Try, Focus on, or Experi
 
   const result = { critique };
   await setCached(supabase, cacheKey, result, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-  await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-  await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+  await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...usage, cache_hit: false });
+  await recordUsage(supabase, user_id, usage.input_tokens + usage.output_tokens);
 
   return new Response(JSON.stringify(result), {
     headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

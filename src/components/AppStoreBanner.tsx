@@ -55,13 +55,13 @@ export function AppStoreBanner() {
         left: 0,
         right: 0,
         zIndex: 9999,
-        backgroundColor: "#0a1628",
-        borderBottom: "1px solid rgba(255,255,255,0.12)",
+        backgroundColor: "#FFFFFF",
+        borderBottom: "1px solid #E2E1E9",
         display: "flex",
         alignItems: "center",
         gap: "10px",
         padding: "10px 12px",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+        boxShadow: "0 4px 20px 0 hsla(0,0%,87%,.2)",
       }}
     >
       {/* Logo */}
@@ -73,10 +73,10 @@ export function AppStoreBanner() {
 
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: "#ffffff", fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>
+        <div style={{ color: "#1A1A2E", fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>
           Get the full CrewSync experience
         </div>
-        <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, lineHeight: 1.3, marginTop: 1 }}>
+        <div style={{ color: "#6B6B7D", fontSize: 11, lineHeight: 1.3, marginTop: 1 }}>
           Live PM5 tracking, Bluetooth, and more
         </div>
       </div>
@@ -88,7 +88,7 @@ export function AppStoreBanner() {
         rel="noopener noreferrer"
         onClick={dismiss}
         style={{
-          backgroundColor: "#2d6be4",
+          backgroundColor: "#1A1A2E",
           color: "#ffffff",
           fontSize: 12,
           fontWeight: 600,
@@ -110,7 +110,7 @@ export function AppStoreBanner() {
           border: "none",
           cursor: "pointer",
           padding: 4,
-          color: "rgba(255,255,255,0.5)",
+          color: "#6B6B7D",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",

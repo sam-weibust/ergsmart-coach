@@ -230,7 +230,7 @@ export default function CoachAIAssistant({ teamId, teamName, profile, isCoach }:
               className={cn(
                 "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                 msg.role === "user"
-                  ? "bg-[#0a1628] text-white rounded-br-sm"
+                  ? "bg-primary text-white rounded-br-sm"
                   : "bg-muted text-foreground rounded-bl-sm"
               )}
             >

@@ -13,6 +13,7 @@ import GenerateTeamPlan from "./GenerateTeamPlan";
 import TeamPlans from "./TeamPlans";
 import TeamOptimizationDashboard from "@/components/dashboard/team-optimization/TeamOptimizationDashboard";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
+import { Button } from "@/components/ui/button";
 import { Home, Grid3X3, Settings } from "lucide-react";
 import { format } from "date-fns";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
@@ -129,6 +130,37 @@ const CoachApp = ({ profile }: Props) => {
     }
 
     if (activeTab === "more") {
+      // No team yet: every grid item except Team Settings needs one. Previously
+      // `if (moreSection && coachTeam)` silently rendered the grid again, so a
+      // team-less coach could never reach the Create Team form the Today tab
+      // tells them to use. Team Settings is now always reachable.
+      if (moreSection && !coachTeam) {
+        if (teamLoading) {
+          return (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          );
+        }
+        if (moreSection === "settings") {
+          return <CoachSettings profile={profile} coachTeam={null} />;
+        }
+        return (
+          <div className="flex flex-col items-center justify-center py-12 gap-4 text-center px-6">
+            <p className="text-sm text-muted-foreground">
+              You need a team before you can use this.
+            </p>
+            <Button onClick={() => setMoreSection("settings")}>
+              <Settings className="h-4 w-4 mr-2" />
+              Create your team
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setMoreSection(null)}>
+              Back to More
+            </Button>
+          </div>
+        );
+      }
+
       if (moreSection && coachTeam) {
         if (moreSection === "import_team_plan") {
           return <ImportTeamPlan teamId={coachTeam.id} coachId={profile.id} />;
@@ -171,8 +203,17 @@ const CoachApp = ({ profile }: Props) => {
         <div className="flex flex-col items-center justify-center py-12 gap-4 text-center px-6">
           <p className="text-muted-foreground text-sm">You don't have a team yet.</p>
           <p className="text-xs text-muted-foreground">
-            Go to <strong>More → Team Settings</strong> to create your team.
+            Create one to start building lineups, plans and practices.
           </p>
+          <Button
+            onClick={() => {
+              setMoreSection("settings");
+              setActiveTab("more");
+            }}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Create your team
+          </Button>
         </div>
       );
     }

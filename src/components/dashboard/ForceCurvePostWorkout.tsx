@@ -78,7 +78,7 @@ function drawGridOnCanvas(ctx: CanvasRenderingContext2D, W: number, H: number, m
     ctx.textAlign = "center";
     ctx.fillText(`${pct}%`, x, PAD.top + iH + 16);
   }
-  ctx.fillStyle = "#6b7a99";
+  ctx.fillStyle = "#6B6B7D";
   ctx.font = "10px 'Inter', system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Drive Phase", PAD.left + iW / 2, H - 4);
@@ -138,16 +138,16 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.scale(dpr, dpr);
-    ctx.fillStyle = "#050d18";
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, W, H);
 
     drawGridOnCanvas(ctx, W, H, Math.round(maxN));
 
     // Ideal (gray dashed)
-    drawCurveOnCanvas(ctx, W, H, idealCurve, maxN, "#334155", 1.5, 0.6, true, [4, 4]);
+    drawCurveOnCanvas(ctx, W, H, idealCurve, maxN, "#C9C9D4", 1.5, 0.6, true, [4, 4]);
 
     // Average (white dashed)
-    drawCurveOnCanvas(ctx, W, H, avgCurve, maxN, "#e2e8f0", 2, 0.7, true, [6, 3]);
+    drawCurveOnCanvas(ctx, W, H, avgCurve, maxN, "#8B8B9E", 2, 0.7, true, [6, 3]);
 
     // Worst stroke (red)
     if (normalized[worstIdx]) {
@@ -163,7 +163,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
     const isBest = scrubIdx === bestIdx;
     const isWorst = scrubIdx === worstIdx;
     if (!isBest && !isWorst && normalized[scrubIdx]) {
-      drawCurveOnCanvas(ctx, W, H, normalized[scrubIdx], maxN, "#60a5fa", 2.5, 1);
+      drawCurveOnCanvas(ctx, W, H, normalized[scrubIdx], maxN, "#1A1A2E", 2.5, 1);
     } else if (normalized[scrubIdx]) {
       // Draw selection indicator as thicker outline
       const color = isBest ? "#f59e0b" : "#ef4444";
@@ -172,10 +172,10 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
 
     // Legend
     const legendItems = [
-      { color: "#60a5fa", dash: false, label: "Selected" },
+      { color: "#1A1A2E", dash: false, label: "Selected" },
       { color: "#f59e0b", dash: false, label: "Best" },
       { color: "#ef4444", dash: false, label: "Worst" },
-      { color: "#e2e8f0", dash: true, label: "Avg" },
+      { color: "#8B8B9E", dash: true, label: "Avg" },
     ];
     ctx.font = "9px 'Inter', system-ui, sans-serif";
     ctx.textAlign = "left";
@@ -191,7 +191,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
       ctx.lineTo(lx + 16, PAD.top + 8);
       ctx.stroke();
       ctx.restore();
-      ctx.fillStyle = "#6b7a99";
+      ctx.fillStyle = "#6B6B7D";
       ctx.fillText(item.label, lx + 20, PAD.top + 12);
       lx += 58;
     }
@@ -259,7 +259,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
 
     // Line
     ctx.beginPath();
-    ctx.strokeStyle = "#3b82f6";
+    ctx.strokeStyle = "#1A1A2E";
     ctx.lineWidth = 1.5;
     ctx.lineJoin = "round";
     peaks.forEach((p, i) => {
@@ -305,7 +305,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         Force Curve Analysis — {forceCurves.length} strokes
       </p>
-      <div className="rounded-xl border border-gray-800 overflow-hidden" style={{ background: "#050d18" }}>
+      <div className="rounded-lg border border-border overflow-hidden" style={{ background: "#FFFFFF" }}>
         {/* Main chart */}
         <canvas
           ref={canvasRef}
@@ -315,26 +315,26 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
 
         {/* Stroke stats */}
         {selectedStats && (
-          <div className="grid grid-cols-4 gap-px" style={{ background: "#0f1929" }}>
-            <div className="px-3 py-2 text-center" style={{ background: "#050d18" }}>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Stroke</p>
+          <div className="grid grid-cols-4 gap-px" style={{ background: "#E2E1E9" }}>
+            <div className="px-3 py-2 text-center" style={{ background: "#FFFFFF" }}>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Stroke</p>
               <p className="text-sm font-bold font-mono" style={{
                 color: selectedStats.tag === "Best" ? "#f59e0b" : selectedStats.tag === "Worst" ? "#ef4444" : "#ffffff"
               }}>
                 {scrubIdx + 1}{selectedStats.tag ? ` · ${selectedStats.tag}` : ""}
               </p>
             </div>
-            <div className="px-3 py-2 text-center" style={{ background: "#050d18" }}>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Peak Force</p>
-              <p className="text-sm font-bold text-white font-mono">{selectedStats.peak}N</p>
+            <div className="px-3 py-2 text-center" style={{ background: "#FFFFFF" }}>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Peak Force</p>
+              <p className="text-sm font-bold text-foreground font-mono">{selectedStats.peak}N</p>
             </div>
-            <div className="px-3 py-2 text-center" style={{ background: "#050d18" }}>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Efficiency</p>
-              <p className="text-sm font-bold text-white font-mono">{selectedStats.eff}%</p>
+            <div className="px-3 py-2 text-center" style={{ background: "#FFFFFF" }}>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Efficiency</p>
+              <p className="text-sm font-bold text-foreground font-mono">{selectedStats.eff}%</p>
             </div>
-            <div className="px-3 py-2 text-center" style={{ background: "#050d18" }}>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-0.5">Smoothness</p>
-              <p className={`text-sm font-bold font-mono ${selectedStats.smooth >= 7 ? "text-green-400" : selectedStats.smooth >= 5 ? "text-yellow-400" : "text-red-400"}`}>
+            <div className="px-3 py-2 text-center" style={{ background: "#FFFFFF" }}>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoothness</p>
+              <p className={`text-sm font-bold font-mono ${selectedStats.smooth >= 7 ? "text-[hsl(var(--success))]" : selectedStats.smooth >= 5 ? "text-[hsl(var(--warning))]" : "text-destructive"}`}>
                 {selectedStats.smooth}/10
               </p>
             </div>
@@ -342,8 +342,8 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
         )}
 
         {/* Sparkline + scrubber */}
-        <div className="px-4 pb-4 pt-3" style={{ background: "#050d18" }}>
-          <p className="text-[9px] text-gray-500 uppercase tracking-widest mb-2">
+        <div className="px-4 pb-4 pt-3" style={{ background: "#FFFFFF" }}>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-2">
             Peak Force Per Stroke — drag to scrub
           </p>
           <canvas
@@ -355,7 +355,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
           />
           {forceCurves.length > 1 && (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400 font-mono shrink-0 w-24">
+              <span className="text-xs text-muted-foreground font-mono shrink-0 w-24">
                 Stroke {scrubIdx + 1} / {forceCurves.length}
               </span>
               <input
@@ -370,13 +370,13 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setScrubIdx(bestIdx)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-yellow-700/40 text-yellow-400 hover:bg-yellow-900/30 transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded border border-yellow-700/40 text-[hsl(var(--warning))] hover:bg-yellow-900/30 transition-colors"
                 >
                   Best
                 </button>
                 <button
                   onClick={() => setScrubIdx(worstIdx)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-red-700/40 text-red-400 hover:bg-red-900/30 transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
                 >
                   Worst
                 </button>

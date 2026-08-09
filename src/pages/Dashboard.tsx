@@ -3,124 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  LogOut,
-  Sparkles,
-  MoreHorizontal,
-  ChevronDown,
-  ChevronRight,
-  LayoutDashboard,
-  Dumbbell,
-  BarChart3,
-  Users,
-  GraduationCap,
-  Trophy,
-  Gauge,
-  MessagesSquare,
-  Settings,
-  Calendar,
-  History,
-  Activity,
-  Utensils,
-  Weight,
-  Moon,
-  BookOpen,
-  TrendingUp,
-  Star,
-  Zap,
-  Target,
-  Video,
-  Ship,
-  ArrowLeftRight,
-  MessageCircle,
-  Medal,
-  GitCompare,
-  Link2,
-  User,
-  Bell,
-  MessageSquare,
-  Bluetooth,
-  Globe,
-  School,
-  Award,
-  Users2,
-  Radio,
-  HeartPulse,
-  Wifi,
-  MessageCircleMore,
-  UserPlus,
-  Share2,
-  Calculator,
-  Swords,
-  Kanban,
-  Heart,
-  Search,
-  Mail,
-  Check,
-  X,
-  ChevronUp,
-  Shield,
-  Building2,
-} from "lucide-react";
+import { LogOut, Sparkles, Users, User, Zap, Trophy, Settings, X } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
-import { WorkoutPlanSection } from "@/components/dashboard/WorkoutPlanSection";
-import FriendsSection from "@/components/dashboard/FriendsSection";
-import DeviceSection from "@/components/dashboard/DeviceSection";
-import HistorySection from "@/components/dashboard/HistorySection";
-import TeamsSection from "@/components/dashboard/TeamsSection";
-import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
-import MultiSetStrengthForm from "@/components/dashboard/MultiSetStrengthForm";
-import PerformanceSection from "@/components/dashboard/PerformanceSection";
-import ComparisonSection from "@/components/dashboard/ComparisonSection";
-import AwardsSection from "@/components/dashboard/AwardsSection";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
-import { NotificationSettings } from "@/components/dashboard/NotificationSettings";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
-import MealPlanTab from "@/components/dashboard/MealPlanTab";
-import AskSection from "@/components/dashboard/AskSection";
-import CritiqueSection from "@/components/dashboard/CritiqueSection";
-import { DashboardHome } from "@/components/dashboard/DashboardHome";
-import { AccountSection } from "@/components/dashboard/AccountSection";
-import TodaysWorkouts from "@/components/dashboard/TodaysWorkouts";
-import RecruitmentSection from "@/components/dashboard/RecruitmentSection";
-import ForumSection from "@/components/dashboard/forum/ForumSection";
-import { LeaderboardSection } from "@/components/dashboard/LeaderboardSection";
-import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
-import { SplitCalculator } from "@/components/dashboard/SplitCalculator";
-import RecoverySection from "@/components/dashboard/RecoverySection";
-import RecoveryDashboard from "@/components/dashboard/RecoveryDashboard";
-import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
-import LiveErgView from "@/components/dashboard/LiveErgView";
-import RaceSection from "@/components/dashboard/RaceSection";
-import { PublicProfileSection } from "@/components/dashboard/PublicProfileSection";
-import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
-import { CollegeTargetsSection } from "@/components/dashboard/CollegeTargetsSection";
-import CombineSection from "@/components/dashboard/CombineSection";
-import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
-import AlumniNetworkSection from "@/components/dashboard/AlumniNetworkSection";
-import { ReferralSection } from "@/components/dashboard/ReferralSection";
-import DirectorySection from "@/components/dashboard/DirectorySection";
-import Concept2Section from "@/components/dashboard/Concept2Section";
-import WhoopConnectSection from "@/components/dashboard/WhoopConnectSection";
-import HealthKitConnect from "@/components/dashboard/HealthKitConnect";
-import { CoachesHub } from "@/components/dashboard/coaches-hub/CoachesHub";
-import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
-import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 import { getSessionUser } from '@/lib/getUser';
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getLocalDate } from "@/lib/dateUtils";
 import { AppStoreBanner } from "@/components/AppStoreBanner";
-import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
-import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
-import OrganizationSection from "@/components/dashboard/OrganizationSection";
-import AthleticDirectorDashboard from "@/components/dashboard/AthleticDirectorDashboard";
-import { ProfileSection } from "@/components/dashboard/ProfileSection";
-import { ApiCostDashboard } from "@/components/dashboard/ApiCostDashboard";
 import { TourProvider } from "@/components/tour/TourContext";
 import { TourOverlay } from "@/components/tour/TourOverlay";
 import { WelcomeModal } from "@/components/tour/WelcomeModal";
@@ -161,326 +54,37 @@ const teamAbbrev = (name: string | null): string => {
   return letters || "Team";
 };
 
-// ─── NAV CONFIG ──────────────────────────────────────────────────────────────
-
-interface SubSection {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  coachOnly?: boolean;
-}
-
-interface NavSection {
-  id: string;
-  label: string;
-  orgOnly?: boolean;
-  icon: React.ElementType;
-  subs: SubSection[];
-  coachOnly?: boolean;
-}
-
-const NAV_CONFIG: NavSection[] = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    subs: [],
-  },
-  {
-    id: "training",
-    label: "Training",
-    icon: Dumbbell,
-    subs: [
-      { id: "plan", label: "Plan", description: "View and manage your training plan", icon: Calendar },
-      { id: "history", label: "History", description: "Review your past workouts", icon: History },
-      { id: "erg", label: "Erg Workout", description: "Log an erg session", icon: Activity },
-      { id: "strength", label: "Strength", description: "Log strength training sets", icon: Weight },
-      { id: "strength-program", label: "Strength Program", description: "View and follow the rowing strength program", icon: Dumbbell },
-      { id: "cross-training", label: "Cross Training", description: "Log runs, rides, and swims", icon: Activity },
-      { id: "nutrition", label: "Nutrition", description: "Track meals and macros", icon: Utensils },
-      { id: "recovery", label: "Recovery", description: "Track recovery metrics", icon: Moon },
-    ],
-  },
-  {
-    id: "performance",
-    label: "Performance",
-    icon: BarChart3,
-    subs: [
-      { id: "analytics", label: "Analytics", description: "Deep-dive performance analytics", icon: BarChart3 },
-      { id: "trends", label: "Trends", description: "Compare and track trends over time", icon: TrendingUp },
-      { id: "predictions", label: "Predictions", description: "Predict race times and splits", icon: Zap },
-      { id: "technique", label: "Technique", description: "Video critique and analysis", icon: Video },
-      { id: "ask", label: "AI Coach", description: "Chat with your AI rowing coach", icon: Sparkles },
-    ],
-  },
-  {
-    id: "calculators",
-    label: "Calculators",
-    icon: Calculator,
-    subs: [
-      { id: "stroke-watch", label: "Stroke Watch", description: "Tap to measure real-time stroke rate on the water", icon: Radio },
-      { id: "split", label: "Split Calculator", description: "Two-way split ↔ total time for any distance", icon: Calculator },
-      { id: "predictor-2k", label: "2K Predictor", description: "AI-powered conservative 2K prediction", icon: Zap },
-      { id: "weight-adj", label: "Weight Adjustment", description: "Predict 2K time at target body weight", icon: Weight },
-      { id: "pace-watts", label: "Pace & Watts", description: "Convert split to watts and back", icon: Gauge },
-      { id: "zones", label: "Training Zones", description: "UT2, UT1, AT, TR, AN, SP zones from 2K", icon: Target },
-      { id: "stroke-rate", label: "Stroke Rate", description: "Analyze efficiency at your rate and pace", icon: Activity },
-      { id: "race-plan", label: "Race Splits Planner", description: "Plan your 2K race 500m by 500m", icon: Trophy },
-      { id: "equivalency", label: "Erg Equivalency", description: "Compare RowErg, SkiErg, BikeErg efforts", icon: ArrowLeftRight },
-      { id: "wkg", label: "W/kg Ratio", description: "Power-to-weight and performance benchmarks", icon: BarChart3 },
-      { id: "timeline", label: "Improvement Timeline", description: "AI roadmap to your goal 2K time", icon: TrendingUp },
-    ],
-  },
-  {
-    id: "friends",
-    label: "Friends",
-    icon: UserPlus,
-    subs: [
-      { id: "feed", label: "Feed", description: "Social activity feed from friends", icon: Activity },
-      { id: "messages", label: "Messages", description: "Direct messages with friends", icon: MessageCircle },
-      { id: "find", label: "Find Friends", description: "Search for and add friends", icon: Search },
-      { id: "requests", label: "Requests", description: "Pending friend requests", icon: UserPlus },
-    ],
-  },
-  {
-    id: "teams",
-    label: "Teams",
-    icon: Users,
-    subs: [
-      { id: "messages", label: "Messages", description: "Team message board", icon: MessageCircle },
-      { id: "lineups", label: "Lineups", description: "View boat lineups", icon: Ship },
-      { id: "roster", label: "Roster", description: "View and manage team roster", icon: Users, coachOnly: true },
-      { id: "seat-racing", label: "Seat Racing", description: "Analyze seat racing results", icon: ArrowLeftRight, coachOnly: true },
-      { id: "race-optimizer", label: "Race Optimizer", description: "Optimize race lineups", icon: Target, coachOnly: true },
-      { id: "leaderboard", label: "Leaderboard", description: "Team erg leaderboard", icon: Medal, coachOnly: true },
-      { id: "comparison", label: "Athlete Compare", description: "Compare athletes side by side", icon: GitCompare, coachOnly: true },
-      { id: "plan-gen", label: "Plan Generator", description: "Generate team training plans", icon: Calendar, coachOnly: true },
-      { id: "load-mgmt", label: "Load Management", description: "Manage athlete training loads", icon: Activity, coachOnly: true },
-      { id: "recruiting-gaps", label: "Recruiting Gaps", description: "Identify recruiting needs", icon: GraduationCap, coachOnly: true },
-    ],
-  },
-  {
-    id: "coaches-hub",
-    label: "Coaches Hub",
-    icon: Kanban,
-    coachOnly: true,
-    subs: [
-      { id: "discover", label: "Discover", description: "Find and score recruiting prospects", icon: Search },
-      { id: "board", label: "Recruiting Board", description: "Kanban board to track recruits", icon: Kanban },
-      { id: "following", label: "Following", description: "Athletes you are following", icon: Heart },
-      { id: "recommended", label: "Recommended", description: "AI-powered roster gap recommendations", icon: Sparkles },
-      { id: "contacts", label: "Contact History", description: "Log of outreach to recruits", icon: Mail },
-      { id: "program", label: "My Program", description: "Your program profile and recruiting targets", icon: School },
-    ],
-  },
-  {
-    id: "organization",
-    label: "Organization",
-    icon: Building2,
-    coachOnly: true,
-    subs: [],
-  },
-  {
-    id: "recruiting",
-    label: "Recruiting",
-    icon: GraduationCap,
-    subs: [
-      { id: "public-profile", label: "Profile", description: "View and edit your public-facing profile", icon: User },
-      { id: "recruiting-profile", label: "Recruiting Profile", description: "Manage your recruiting information", icon: Target },
-      { id: "college-targets", label: "College Targets", description: "Track target schools and coaches", icon: School },
-      { id: "combine", label: "Virtual Combine", description: "Participate in virtual combines", icon: Award },
-      { id: "alumni", label: "Alumni Network", description: "Connect with alumni athletes", icon: GraduationCap },
-    ],
-  },
-  {
-    id: "regattas",
-    label: "Regattas",
-    icon: Trophy,
-    subs: [
-      { id: "search", label: "Search", description: "Find regattas and view results", icon: Search },
-      { id: "upcoming", label: "Upcoming", description: "Upcoming regattas in the next 90 days", icon: Calendar },
-      { id: "my", label: "My Regattas", description: "Your claimed results and racing history", icon: Trophy },
-      { id: "clubs", label: "Clubs", description: "Find rowing clubs", icon: Users },
-      { id: "team", label: "Team Regattas", description: "Your team's regatta results", icon: Users2, coachOnly: true },
-    ],
-  },
-  {
-    id: "competition",
-    label: "Competition",
-    icon: Medal,
-    subs: [
-      { id: "leaderboard", label: "Leaderboard", description: "Global erg rankings", icon: Medal },
-      { id: "h2h", label: "Head-to-Head", description: "Race against other athletes", icon: Swords },
-      { id: "challenges", label: "Challenges", description: "Weekly community challenges", icon: Zap },
-      { id: "achievements", label: "Achievements", description: "View your awards and badges", icon: Trophy },
-    ],
-  },
-  {
-    id: "live",
-    label: "Live",
-    icon: Gauge,
-    subs: [
-      { id: "erg", label: "Live Erg", description: "Real-time erg session monitor", icon: Gauge },
-      { id: "hr", label: "Heart Rate", description: "Live heart rate monitoring", icon: HeartPulse },
-      { id: "devices", label: "Devices", description: "Connect and manage BLE devices", icon: Bluetooth },
-    ],
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    subs: [
-      { id: "account", label: "Account", description: "Email, password, and account management", icon: User },
-      { id: "notifications", label: "Notifications", description: "Manage notification preferences", icon: Bell },
-      { id: "connected-apps", label: "Connected Apps", description: "Concept2, Garmin, and integrations", icon: Link2 },
-      { id: "billing", label: "Billing", description: "Plan and usage", icon: Star },
-    ],
-  },
-  {
-    id: "admin-costs",
-    label: "API Costs",
-    icon: BarChart3,
-    coachOnly: false,
-    subs: [],
-  },
-];
-
-
-// ─── BILLING TAB ─────────────────────────────────────────────────────────────
-
-function BillingTab() {
-  const navigate = useNavigate();
-  const [annual, setAnnual] = useState(false);
-
-  const plans = [
-    {
-      name: "Free",
-      price: 0,
-      annualPrice: 0,
-      betaPrice: 0,
-      betaAnnual: 0,
-      color: "border-border",
-      badge: null,
-      features: ["Workout logging", "Basic analytics", "Community access", "3 AI queries/month"],
-    },
-    {
-      name: "Pro",
-      price: 8,
-      annualPrice: 6.40,
-      betaPrice: 6.40,
-      betaAnnual: 6.40,
-      color: "border-blue-500",
-      badge: "Most Popular",
-      features: ["Everything in Free", "Unlimited AI Coach", "Advanced analytics", "Training zones", "Split calculator"],
-    },
-    {
-      name: "Elite",
-      price: 14,
-      annualPrice: 11.20,
-      betaPrice: 11.20,
-      betaAnnual: 11.20,
-      color: "border-purple-500",
-      badge: "Best Value",
-      features: ["Everything in Pro", "Unlimited AI requests", "Dedicated AI coaching assistant", "Advanced recovery modeling", "Multi-season tracking", "API access", "Early feature access"],
-    },
-  ];
-
-  return (
-    <div className="space-y-6 max-w-3xl">
-      {/* Beta banner */}
-      <div className="rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white">
-        <div className="flex items-center gap-2 mb-1">
-          <Zap className="h-4 w-4" />
-          <span className="font-bold text-sm">Beta Pricing — 20% Off For Life</span>
-        </div>
-        <p className="text-xs text-white/80">
-          Lock in your rate now. Early backers keep this discount forever — even after we raise prices.
-          No coupon needed.
-        </p>
-      </div>
-
-      {/* Billing toggle */}
-      <div className="flex items-center gap-3">
-        <span className={`text-sm font-medium ${!annual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
-        <button
-          onClick={() => setAnnual(!annual)}
-          className={`relative w-11 h-6 rounded-full transition-colors ${annual ? "bg-primary" : "bg-muted"}`}
-        >
-          <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${annual ? "translate-x-5" : ""}`} />
-        </button>
-        <span className={`text-sm font-medium ${annual ? "text-foreground" : "text-muted-foreground"}`}>
-          Annual <span className="text-green-600 font-semibold text-xs">Save 20%</span>
-        </span>
-      </div>
-
-      {/* Plan cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {plans.map((plan) => {
-          const display = annual ? plan.betaAnnual : plan.betaPrice;
-          const original = annual ? plan.annualPrice : plan.price;
-          const isFree = plan.price === 0;
-
-          return (
-            <div key={plan.name} className={`rounded-xl border-2 ${plan.color} bg-card p-5 space-y-4 relative`}>
-              {plan.badge && (
-                <div className="absolute -top-3 left-4">
-                  <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                    {plan.badge}
-                  </span>
-                </div>
-              )}
-              <div>
-                <h3 className="font-bold text-lg">{plan.name}</h3>
-                {isFree ? (
-                  <p className="text-2xl font-bold mt-1">Free</p>
-                ) : (
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-primary">${display.toFixed(display % 1 === 0 ? 0 : 2)}/mo</span>
-                    {original !== display && (
-                      <span className="text-sm text-muted-foreground line-through">${original}/mo</span>
-                    )}
-                  </div>
-                )}
-                {!isFree && (
-                  <div className="mt-1 flex items-center gap-1">
-                    <Shield className="h-3 w-3 text-green-600" />
-                    <span className="text-xs text-green-600 font-medium">Early Backer — 20% off for life</span>
-                  </div>
-                )}
-              </div>
-              <ul className="space-y-2">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Button
-                variant={plan.name === "Pro" ? "default" : "outline"}
-                className="w-full"
-                size="sm"
-                onClick={() => navigate("/pricing")}
-              >
-                {isFree ? "Current Plan" : "Get Started"}
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="text-center">
-        <button
-          onClick={() => navigate("/pricing")}
-          className="text-sm text-primary hover:underline font-medium"
-        >
-          View full pricing, team plans & feature comparison →
-        </button>
-      </div>
-    </div>
-  );
-}
+/**
+ * ─── LEGACY NAV → 5-TAB MAP ──────────────────────────────────────────────────
+ *
+ * The old sidebar/section navigation (NAV_CONFIG, SectionLanding, BillingTab,
+ * hiddenForRole and renderContent) has been deleted: renderContent() was never
+ * called — the shell renders renderActiveTab() only — so every section it
+ * routed to was unreachable dead code.
+ *
+ * A few callers still speak the old vocabulary (the product tour's
+ * `navTo: { section }` steps, and the `navigate_to_live_erg` event). This map
+ * translates those legacy section ids onto the five real tabs so they keep
+ * working.
+ */
+const SECTION_TO_TAB: Record<string, AthleteTabId> = {
+  dashboard: "me",
+  training: "performance",
+  performance: "performance",
+  calculators: "performance",
+  live: "performance",
+  plan: "performance",
+  teams: "team",
+  friends: "team",
+  community: "team",
+  "coaches-hub": "team",
+  organization: "team",
+  recruiting: "me",
+  regattas: "competition",
+  competition: "competition",
+  settings: "settings",
+  "admin-costs": "settings",
+};
 
 // ─── ROLE CONSTANTS & VISIBILITY ─────────────────────────────────────────────
 
@@ -491,72 +95,6 @@ const ROLES = [
   { value: "organizer", label: "Organizer", description: "I manage regattas and clubs",   icon: "🏆" },
 ] as const;
 
-/** Returns true when the section/sub should be hidden for the given role. */
-const hiddenForRole = (sectionId: string, subId: string | null, role: string | null): boolean => {
-  if (!role || role === "rower") return false;
-
-  if (role === "organizer") {
-    if (!["dashboard", "organization", "teams", "competition", "performance", "settings"].includes(sectionId)) return true;
-    if (sectionId === "performance" && subId && subId !== "ask") return true;
-    if (sectionId === "competition" && subId && subId !== "leaderboard") return true;
-    return false;
-  }
-
-  if (role === "coxswain") {
-    if (["recruiting", "live", "calculators", "coaches-hub"].includes(sectionId)) return true;
-    if (sectionId === "training" && subId && ["erg", "nutrition", "cross-training"].includes(subId)) return true;
-    if (sectionId === "performance" && subId === "technique") return true;
-    if (sectionId === "competition" && subId && !["leaderboard", "achievements"].includes(subId)) return true;
-    return false;
-  }
-
-  return false;
-};
-
-// ─── SECTION LANDING PAGE ─────────────────────────────────────────────────────
-
-function SectionLanding({
-  section,
-  navTo,
-  isCoach,
-  userRole,
-}: {
-  section: NavSection;
-  navTo: (s: string, sub?: string) => void;
-  isCoach: boolean;
-  userRole: string | null;
-}) {
-  const visibleSubs = section.subs.filter(
-    (s) => (!s.coachOnly || isCoach) && !hiddenForRole(section.id, s.id, userRole)
-  );
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">{section.label}</h1>
-        <p className="text-muted-foreground mt-1">Select a section to get started</p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {visibleSubs.map((sub) => (
-          <button
-            key={sub.id}
-            onClick={() => navTo(section.id, sub.id)}
-            className="flex items-start gap-4 p-4 rounded-xl border border-border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all text-left group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-              <sub.icon className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground text-sm">{sub.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{sub.description}</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
 
 const Dashboard = () => {
@@ -564,9 +102,6 @@ const Dashboard = () => {
   const queryClient = useQueryClient();
   const { logoUrl: teamLogo, primaryColor: teamColor, teamName, teamId: branding_teamId } = useTeamBranding();
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState("dashboard");
-  const [activeSub, setActiveSub] = useState<string | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
   // ── New athlete/coxswain 5-tab shell state ────────────────────────────────
   const [activeTab, setActiveTab] = useState<AthleteTabId>("team");
   const [tabInitialized, setTabInitialized] = useState(false);
@@ -582,11 +117,17 @@ const Dashboard = () => {
     goals: string | null;
   } | null>(null);
 
-  const navTo = (s: string, sub?: string) => {
-    setActiveSection(s);
-    setActiveSub(sub ?? null);
-    setMoreOpen(false);
-  };
+  /**
+   * Legacy section navigation, mapped onto the 5-tab shell.
+   *
+   * Kept because TourProvider steps and the `navigate_to_live_erg` event still
+   * address the app by old section id. Unknown ids fall back to the Me tab
+   * rather than silently doing nothing (which is what the removed
+   * renderContent() path did).
+   */
+  const navTo = useCallback((section: string, _sub?: string) => {
+    setActiveTab(SECTION_TO_TAB[section] ?? "me");
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     await queryClient.invalidateQueries();
@@ -698,27 +239,7 @@ const Dashboard = () => {
     navigate("/auth");
   };
 
-  const { data: coachTeams } = useQuery({
-    queryKey: ["coach-teams"],
-    queryFn: async () => {
-      const user = await getSessionUser();
-      if (!user) return [];
-      const { data } = await supabase.from("teams").select("id").eq("coach_id", user.id);
-      return data || [];
-    },
-    enabled: !loading,
-  });
-
   const userRole: string | null = (profile as any)?.user_type ?? null;
-
-  // Coach = role/user_type is "coach" OR they have created a team
-  const isCoach =
-    profile != null &&
-    (
-      (profile as any)?.role === "coach" ||
-      userRole === "coach" ||
-      (Array.isArray(coachTeams) && coachTeams.length > 0)
-    );
 
   const isCox =
     profile != null &&
@@ -727,10 +248,6 @@ const Dashboard = () => {
       userRole === "coxswain" ||
       (profile as any)?.is_coxswain === true
     );
-
-  const isOrganizer =
-    profile != null &&
-    ((profile as any)?.role === "organizer" || userRole === "organizer");
 
   // Redirect coaches to the dedicated coach experience
   useEffect(() => {
@@ -843,9 +360,6 @@ const Dashboard = () => {
     enabled: !loading,
   });
 
-  // kept for reference, teams now always visible
-  const _isOnTeam = isCoach || (userTeams && userTeams.length > 0);
-
   // ── Athlete 5-tab shell: team membership + onboarding ─────────────────────
   // userTeams is undefined while loading; treat membership as "unknown" then.
   const teamsLoaded = userTeams !== undefined;
@@ -955,226 +469,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  const renderContent = () => {
-    const section = NAV_CONFIG.find((s) => s.id === activeSection);
-
-    // Dashboard always shows home
-    if (activeSection === "dashboard") {
-      return <DashboardHome profile={profile} navTo={navTo} />;
-    }
-
-    // Calculators — manages its own internal tabs
-    if (activeSection === "calculators") {
-      return <CalculatorsSection initialTab={activeSub ?? undefined} profile={profile} />;
-    }
-
-    // Coaches Hub — manages its own internal tabs
-    if (activeSection === "coaches-hub") {
-      if (!isCoach) return null;
-      return <CoachesHub initialTab={activeSub ?? undefined} />;
-    }
-
-    // Organization dashboard
-    if (activeSection === "organization") {
-      if (!isCoach && !isOrganizer) return null;
-      if (isOrganizer) return <AthleticDirectorDashboard profile={profile} />;
-      return <OrganizationSection profile={profile} />;
-    }
-
-    // Admin cost dashboard
-    if (activeSection === "admin-costs") {
-      if (!(profile as any)?.is_admin) return null;
-      return <ApiCostDashboard />;
-    }
-
-    // Regattas — manages its own internal tabs
-    if (activeSection === "regattas") {
-      return <RegattasSection profile={profile} isCoach={isCoach} initialTab={activeSub ?? undefined} />;
-    }
-
-    // Teams — always render TeamsSection; it manages its own internal navigation
-    if (activeSection === "teams") {
-      return <TeamsSection profile={profile} isCoach={isCoach} />;
-    }
-
-    // Section with no sub selected → landing grid
-    if (!activeSub && section && section.subs.length > 0) {
-      return <SectionLanding section={section} navTo={navTo} isCoach={isCoach} userRole={userRole} />;
-    }
-
-    // ── Training ──────────────────────────────────────────────────────────────
-    if (activeSection === "training") {
-      switch (activeSub) {
-        case "plan":
-          return (
-            <div className="space-y-4">
-              <TodaysWorkouts profile={profile} />
-              <WorkoutPlanSection />
-            </div>
-          );
-        case "history":
-          return <HistorySection profile={profile} />;
-        case "erg":
-          return (
-            <div className="space-y-6">
-              <ErgWorkoutSection profile={profile} />
-              <MultiPieceSession profile={profile} />
-            </div>
-          );
-        case "strength":
-          return <MultiSetStrengthForm profile={profile} />;
-        case "strength-program":
-          return <StrengthProgramSection profile={profile} />;
-        case "cross-training":
-          return <CrossTrainingSection profile={profile} />;
-        case "nutrition":
-          return <MealPlanTab profile={profile} />;
-        case "recovery":
-          return <RecoveryDashboard profile={profile} />;
-        case "schedule":
-          return <TodaysWorkouts profile={profile} />;
-        case "library":
-          return <WorkoutPlanSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Friends ───────────────────────────────────────────────────────────────
-    if (activeSection === "friends") {
-      return <FriendsSection profile={profile} />;
-    }
-
-    // ── Performance ───────────────────────────────────────────────────────────
-    if (activeSection === "performance") {
-      switch (activeSub) {
-        case "analytics":
-          return <PerformanceSection profile={profile} />;
-        case "trends":
-          return <ComparisonSection profile={profile} />;
-        case "predictions":
-          return (
-            <div className="space-y-6">
-              <ErgPredictor />
-              <SplitCalculator />
-            </div>
-          );
-        case "pacing":
-          return <SplitCalculator />;
-        case "technique":
-          return <CritiqueSection />;
-        case "ask":
-          return <AskSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Recruiting ────────────────────────────────────────────────────────────
-    if (activeSection === "recruiting") {
-      switch (activeSub) {
-        case "my-profile":
-          return <PublicProfileSection />;
-        case "public-profile":
-          return <PublicProfileSection />;
-        case "recruiting-profile":
-          return <RecruitingProfileSection />;
-        case "college-targets":
-          return <CollegeTargetsSection />;
-        case "combine":
-          return <CombineSection />;
-        case "alumni":
-          return <AlumniNetworkSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Competition ───────────────────────────────────────────────────────────
-    if (activeSection === "competition") {
-      switch (activeSub) {
-        case "leaderboard":
-          return <LeaderboardSection />;
-        case "h2h":
-          return <RaceSection />;
-        case "challenges":
-          return <WeeklyChallengeSection />;
-        case "achievements":
-          return <AwardsSection profile={profile} />;
-        case "rankings":
-          return <LeaderboardSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Live ──────────────────────────────────────────────────────────────────
-    if (activeSection === "live") {
-      switch (activeSub) {
-        case "erg":
-          return <LiveErgView />;
-        case "hr":
-          return <DeviceSection />;
-        case "devices":
-          return <DeviceSection />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Community ─────────────────────────────────────────────────────────────
-    if (activeSection === "community") {
-      switch (activeSub) {
-        case "forum":
-          return <ForumSection />;
-        case "directory":
-          return <DirectorySection />;
-        case "friends":
-          return <FriendsSection profile={profile} />;
-        case "referrals":
-          return <ReferralSection profile={profile} />;
-        default:
-          return null;
-      }
-    }
-
-    // ── Settings ──────────────────────────────────────────────────────────────
-    if (activeSection === "settings") {
-      switch (activeSub) {
-        case "profile":
-          return <ProfileSection />;
-        case "account":
-          return <AccountSection />;
-        case "notifications":
-          return <NotificationSettings />;
-        case "connected-apps":
-          return (
-            <div className="space-y-6 max-w-2xl">
-              <div>
-                <h2 className="text-xl font-semibold">Connected Apps</h2>
-                <p className="text-sm text-muted-foreground mt-1">Manage your third-party integrations.</p>
-              </div>
-              <Concept2Section />
-              <WhoopConnectSection />
-              <HealthKitConnect />
-            </div>
-          );
-        case "billing":
-          return <BillingTab />;
-        default:
-          return null;
-      }
-    }
-
-    return null;
-  };
-
-  const isAdmin = !!(profile as any)?.is_admin;
-  const navVisible = (s: NavSection) =>
-    (!s.coachOnly || isCoach || isOrganizer) &&
-    !hiddenForRole(s.id, null, userRole) &&
-    (s.id !== "admin-costs" || isAdmin);
 
   // ── New athlete/coxswain 5-tab bar ────────────────────────────────────────
   const athleteTabs: { id: AthleteTabId; label: string; icon: React.ElementType }[] = [
@@ -1369,7 +663,6 @@ const Dashboard = () => {
             </span>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <ThemeToggle />
             <NotificationBell />
             <Button
               onClick={handleLogout}
@@ -1386,85 +679,6 @@ const Dashboard = () => {
 
       {/* ── Below Header: Sidebar + Content ────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar (desktop only) ────────────────────────────────────────── */}
-        <aside
-          className="hidden flex-col w-60 shrink-0 border-r border-white/10 overflow-y-auto"
-          style={{ background: teamColor }}
-        >
-          <nav className="flex-1 px-3 py-4 space-y-0.5">
-            {NAV_CONFIG.filter(navVisible).map((section) => (
-              <div key={section.id}>
-                <button
-                  onClick={() => navTo(section.id)}
-                  data-tour-id={`tour-nav-${section.id}`}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
-                    ${activeSection === section.id
-                      ? "text-white"
-                      : "text-white/70 hover:bg-white/10 hover:text-white"}`}
-                  style={activeSection === section.id ? { background: "rgba(255,255,255,0.2)" } : undefined}
-                >
-                  <section.icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 text-left">{section.label}</span>
-                  {section.subs.length > 0 && (
-                    activeSection === section.id
-                      ? <ChevronDown className="h-3.5 w-3.5" />
-                      : <ChevronRight className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                {activeSection === section.id && section.subs.length > 0 && (
-                  <div className="ml-4 mt-1 space-y-0.5">
-                    {section.subs
-                      .filter((s) => (!s.coachOnly || isCoach || isOrganizer) && !hiddenForRole(section.id, s.id, userRole))
-                      .map((sub) => (
-                      <button
-                        key={sub.id}
-                        onClick={() => navTo(section.id, sub.id)}
-                        data-tour-id={`tour-nav-${section.id}-${sub.id}`}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors
-                          ${activeSub === sub.id
-                            ? "bg-white/15 text-white font-semibold"
-                            : "text-white/55 hover:bg-white/10 hover:text-white/90"}`}
-                      >
-                        <div
-                          className="w-1 h-1 rounded-full"
-                          style={{ background: activeSub === sub.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)" }}
-                        />
-                        {sub.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </nav>
-
-          {/* User info + logout at bottom */}
-          <div className="px-3 py-4 border-t border-white/10 space-y-2">
-            {profile && (
-              <div className="flex items-center gap-2 px-3 py-2">
-                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                  <User className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white truncate">
-                    {(profile as any)?.full_name || (profile as any)?.username || "Athlete"}
-                  </p>
-                  <p className="text-[10px] text-white/50 capitalize">
-                    {(profile as any)?.user_type || "athlete"}
-                  </p>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign out
-            </button>
-          </div>
-        </aside>
-
         {/* ── Content Area ────────────────────────────────────────────────── */}
         <div
           ref={containerRef}

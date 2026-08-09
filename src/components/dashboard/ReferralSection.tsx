@@ -81,10 +81,10 @@ export function ReferralSection({ profile }: ReferralSectionProps) {
   return (
     <div className="space-y-6">
       {/* Your referral link */}
-      <Card className="bg-gradient-to-br from-[#0a1628] to-[#112240] border-[#2d6be4]/30 text-white">
+      <Card className="bg-primary border-primary/30 text-white">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-white">
-            <Gift className="h-5 w-5 text-[#2d6be4]" />
+            <Gift className="h-5 w-5 text-primary" />
             Your Referral Link
           </CardTitle>
         </CardHeader>
@@ -99,7 +99,7 @@ export function ReferralSection({ profile }: ReferralSectionProps) {
             </div>
             <Button
               onClick={handleCopy}
-              className="bg-[#2d6be4] hover:bg-[#1e55c4] text-white gap-2 shrink-0"
+              className="bg-primary hover:bg-primary/90 text-white gap-2 shrink-0"
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copied!" : "Copy"}
@@ -114,7 +114,7 @@ export function ReferralSection({ profile }: ReferralSectionProps) {
               { label: "Rewards Earned", value: rewards, icon: Trophy },
             ].map(stat => (
               <div key={stat.label} className="bg-white/10 rounded-xl p-3 text-center">
-                <stat.icon className="h-4 w-4 mx-auto mb-1 text-[#2d6be4]" />
+                <stat.icon className="h-4 w-4 mx-auto mb-1 text-primary" />
                 <p className="text-2xl font-bold text-white">{stat.value}</p>
                 <p className="text-xs text-white/50 mt-0.5">{stat.label}</p>
               </div>
@@ -148,7 +148,7 @@ export function ReferralSection({ profile }: ReferralSectionProps) {
                       <Badge variant="outline" className="text-xs">Pending</Badge>
                     )}
                     {r.rewarded_at && (
-                      <Badge className="bg-[#2d6be4]/10 text-[#2d6be4] border-none text-xs">Rewarded</Badge>
+                      <Badge className="bg-primary/10 text-primary border-none text-xs">Rewarded</Badge>
                     )}
                   </div>
                 </div>

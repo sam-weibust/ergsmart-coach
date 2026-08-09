@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -103,10 +103,10 @@ Recent strength sessions: ${strengths.length}
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 512,
+        max_tokens: 500,
         messages: [{
           role: "user",
-          content: `Write a 3-4 sentence athlete summary for a college rowing recruiting profile. Be specific, highlight their strongest attributes, and make it compelling for college coaches. Use third person. Do not use the athlete's name in the first sentence. Focus on performance metrics, athletic profile, and potential.\n\nAthlete data:\n${ctx}\n\nWrite only the summary paragraph, no preamble.`,
+          content: `Write a 3-4 sentence athlete summary for a college rowing recruiting profile, compelling to college coaches. Third person. Do not use the athlete's name in the first sentence. Focus on performance metrics, athletic profile, and potential.\n\nAthlete data:\n${ctx}\n\nOutput only the summary paragraph, no preamble.`,
         }],
       }),
     });
@@ -120,7 +120,7 @@ Recent strength sessions: ${strengths.length}
 
     const result = await response.json();
     const summary = result?.content?.[0]?.text?.trim() || "";
-    const usage = result?.usage ?? {};
+    const usage = tokensFrom(result?.usage);
 
     await supabase.from("athlete_profiles").upsert({
       user_id,
@@ -130,8 +130,8 @@ Recent strength sessions: ${strengths.length}
 
     const payload = { summary };
     await setCached(supabase, cacheKey, payload, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...usage, cache_hit: false });
+    await recordUsage(supabase, user_id, usage.input_tokens + usage.output_tokens);
 
     return new Response(JSON.stringify(payload), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

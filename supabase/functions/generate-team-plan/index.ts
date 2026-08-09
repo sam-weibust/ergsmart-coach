@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logUsage } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -11,26 +11,37 @@ const corsHeaders = {
 const MODEL = "claude-sonnet-5";
 const FN = "generate-team-plan";
 
-const DEFAULT_SYSTEM_PROMPT = `You are an expert rowing coach. Generate a structured training plan following competitive rowing best practices.
+const DEFAULT_SYSTEM_PROMPT = `Expert rowing coach. Generate a structured training plan.
 
-ZONE SYSTEM (paces relative to athlete 2k time per 500m):
-UT2: 2k+20-25s, rate 16-20. Pure aerobic base.
-UT1: 2k+15-20s, rate 18-24. Moderate aerobic, rate ladders.
-AT: 2k+4-9s, rate 26-28. Anaerobic threshold.
-TR1: 2k+0-4s, rate 26-32. Threshold, hard pieces.
-TR2: below 2k pace, rate 32+. Race specific, peak phase only within 6 weeks of race.
+ZONES (pace = offset from athlete 2k split, per 500m):
+UT2: 2k+20-25s, rate 16-20 — aerobic base
+UT1: 2k+15-20s, rate 18-24 — moderate aerobic, rate ladders
+AT: 2k+4-9s, rate 26-28 — anaerobic threshold
+TR1: 2k+0-4s, rate 26-32 — threshold, hard pieces
+TR2: below 2k pace, rate 32+ — race specific, peak phase only, within 6 weeks of race
 
-CORRECT WEEKLY STRUCTURE — CRITICAL RULES:
-- Each day has EXACTLY ONE required session.
-- Lifting is ALWAYS optional — NEVER a standalone required session Monday through Friday.
+WEEKLY STRUCTURE — CRITICAL:
+- Exactly ONE required session per day.
+- Lifting is ALWAYS optional; never a standalone required session Mon-Fri.
 - Saturday may have lifting as the required session when erg is the optional.
-- Sunday is ALWAYS OFF — no required or optional sessions.
+- Sunday is ALWAYS OFF: no required and no optional session.
 
-3-WEEK LOADING CYCLE: Week 1 easy, Week 2 medium, Week 3 hard, Week 4 recovery (50% volume).
+3-WEEK LOADING CYCLE: wk1 easy, wk2 medium, wk3 hard, wk4 recovery at 50% volume.
 
-Always specify piece duration/distance, rest interval, stroke rate, warmup, cooldown. Express paces as 2k +/- seconds, never absolute splits.
+Every session must specify piece duration/distance, rest interval, stroke rate, warmup, cooldown. Express paces as 2k +/- seconds, never absolute splits.
 
-Return ONLY valid JSON with no explanation or markdown.`;
+Return ONLY valid JSON. No explanation, no markdown.`;
+
+/**
+ * True when the plan actually contains weeks. Mirrors the shapes
+ * personalizePlanData accepts. Used as the cache guard on both sides so a
+ * degenerate parse (`{}`, or a model reply with no JSON) is never written to
+ * the cache and never served from it.
+ */
+function hasPlanWeeks(p: any): boolean {
+  const weeks = Array.isArray(p?.plan) ? p.plan : Array.isArray(p?.weeks) ? p.weeks : Array.isArray(p) ? p : [];
+  return weeks.length > 0;
+}
 
 function formatPace(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -138,10 +149,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Failsafe 9 + 1: circuit breaker + per-user daily limits.
-    const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
-    if (blocked) return blocked;
-
     // Fetch team name
     const { data: team } = await supabase
       .from("teams")
@@ -211,43 +218,88 @@ Return valid JSON matching this schema exactly:
 
 Express all pace targets as 2K±Xs/500m format. Generate all ${weeks} weeks.`;
 
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+    // Cache the MODEL OUTPUT (the plan JSON), not the HTTP response.
+    // The response carries a freshly-inserted team_plan_id and an athlete count;
+    // replaying those would hand back a row that may have been deleted and would
+    // skip assigning the plan to athletes who joined since. Key is the exact
+    // model input (system + user message), so it is deterministic by construction
+    // and picks up team-name and philosophy edits without a separate key field.
+    // coach_id is deliberately excluded: it does not shape the plan, so two
+    // coaches on the same team share the entry.
+    const cacheKey = `generate-team-plan_${hashKey({ system: systemPrompt, user: userMessage })}`;
+    const cachedPlan = await getCached(supabase, cacheKey);
+    let planData: any = hasPlanWeeks(cachedPlan) ? cachedPlan : null;
+    const cacheHit = planData !== null;
+
+    if (cacheHit) {
+      await logUsage(supabase, {
+        user_id: coach_id ?? null,
+        function_name: FN,
         model: MODEL,
-        // Disable adaptive thinking (Sonnet 5 default) so the full token budget
-        // goes to the plan JSON; 8000 with thinking on was truncating it.
-        max_tokens: 16000,
-        thinking: { type: "disabled" },
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-      }),
-    });
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_hit: true,
+      });
+    } else {
+      // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+      const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
+      if (blocked) return blocked;
 
-    if (!claudeResponse.ok) {
-      console.error("Anthropic error:", await claudeResponse.text());
-      await recordApiError(supabase, FN);
-      return jsonError(corsHeaders, 503, "AI service unavailable");
-    }
-    await recordApiSuccess(supabase, FN);
+      const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          // Disable adaptive thinking (Sonnet 5 default) so the full token budget
+          // goes to the plan JSON; 8000 with thinking on was truncating it.
+          max_tokens: 16000,
+          thinking: { type: "disabled" },
+          system: systemPrompt,
+          messages: [{ role: "user", content: userMessage }],
+        }),
+      });
 
-    const claudeData = await claudeResponse.json();
-    const rawText = claudeData.content?.[0]?.text || "";
-    const usage = claudeData?.usage ?? {};
-    await logUsage(supabase, { user_id: coach_id ?? null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+      if (!claudeResponse.ok) {
+        console.error("Anthropic error:", await claudeResponse.text());
+        await recordApiError(supabase, FN);
+        return jsonError(corsHeaders, 503, "AI service unavailable");
+      }
+      await recordApiSuccess(supabase, FN);
 
-    let planData: any;
-    try {
-      const cleaned = rawText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-      planData = JSON.parse(cleaned);
-    } catch {
-      throw new Error("Failed to parse Claude response as JSON");
+      const claudeData = await claudeResponse.json();
+      const rawText = claudeData.content?.[0]?.text || "";
+      const tok = tokensFrom(claudeData?.usage);
+      await logUsage(supabase, {
+        user_id: coach_id ?? null,
+        function_name: FN,
+        model: MODEL,
+        input_tokens: tok.input_tokens,
+        output_tokens: tok.output_tokens,
+        cache_creation_input_tokens: tok.cache_creation_input_tokens,
+        cache_read_input_tokens: tok.cache_read_input_tokens,
+        cache_hit: false,
+      });
+      await recordUsage(supabase, coach_id, tok.input_tokens + tok.output_tokens);
+
+      try {
+        const cleaned = rawText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        planData = JSON.parse(cleaned);
+      } catch {
+        throw new Error("Failed to parse Claude response as JSON");
+      }
+
+      // Six hours: long enough to absorb retries and duplicate clicks, short
+      // enough that a coach who edits the team philosophy and regenerates the
+      // same week is not served a plan built on the old one for long.
+      if (hasPlanWeeks(planData)) {
+        await setCached(supabase, cacheKey, planData, TTL.SIX_HOURS, MODEL, tok.input_tokens, tok.output_tokens);
+      }
     }
 
     const planTitle = `${weeks}-Week ${goal} Plan (${intensity})`;
@@ -286,7 +338,7 @@ Express all pace targets as 2K±Xs/500m format. Generate all ${weeks} weeks.`;
         athletes_updated: athletesUpdated,
         total_weeks: totalWeeks,
       }),
-      { headers: { ...corsHeaders, "content-type": "application/json" } },
+      { headers: { ...corsHeaders, "content-type": "application/json", "X-Cache": cacheHit ? "HIT" : "MISS" } },
     );
   } catch (err: any) {
     return new Response(

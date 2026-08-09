@@ -158,7 +158,7 @@ const EmbeddedAIChat = ({ greeting, collapsible = false }: EmbeddedAIChatProps) 
         AI-generated advice only. Consult a qualified coach. Not responsible for injuries.
       </div>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-[#0a1628] shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-primary shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
             <Sparkles className="h-3.5 w-3.5 text-primary" />

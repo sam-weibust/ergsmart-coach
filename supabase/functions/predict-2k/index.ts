@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -84,7 +84,10 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        // 200 truncates: the declared JSON carries confidence_explanation,
+        // two factor arrays and to_hit_best_case (predict), or a milestones
+        // array plus key_requirements (timeline) — ~250-350 output tokens.
+        max_tokens: 400,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
@@ -105,9 +108,10 @@ serve(async (req) => {
     if (!jsonMatch) throw new Error("AI returned an unexpected response format. Please try again.");
 
     const parsed = JSON.parse(jsonMatch[0]);
-    await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "predict-2k", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id ?? null, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id, function_name: "predict-2k", model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, user_id ?? null, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

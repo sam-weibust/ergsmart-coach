@@ -172,7 +172,7 @@ export function DashboardCommunityFeed({ navTo }: Props) {
       {/* Section header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-6 rounded-full bg-[#2d6be4]" />
+          <div className="w-1 h-6 rounded-full bg-primary" />
           <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Community</h2>
         </div>
         <button

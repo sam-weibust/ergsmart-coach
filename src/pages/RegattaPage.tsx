@@ -175,18 +175,18 @@ export default function RegattaPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-[#0a1628] text-white px-4 py-4">
+      <header className="bg-primary text-primary-foreground px-4 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="font-bold text-lg">CrewSync</Link>
           {currentUser ? (
             <Link to="/dashboard">
-              <Button size="sm" variant="outline" className="text-white border-white/30 hover:bg-white/10">
+              <Button size="sm" variant="outline" className="text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10">
                 Dashboard
               </Button>
             </Link>
           ) : (
             <Link to="/auth">
-              <Button size="sm" variant="outline" className="text-white border-white/30 hover:bg-white/10">
+              <Button size="sm" variant="outline" className="text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10">
                 Sign In to Claim Results
               </Button>
             </Link>

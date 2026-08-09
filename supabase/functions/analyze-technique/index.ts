@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -107,9 +107,12 @@ Return ONLY valid JSON:
 
   const claudeRequestBody = {
     model: MODEL,
-    // Sonnet 5 runs adaptive thinking unless disabled, which ate the 800-token
-    // budget and truncated the critique JSON. Disable it and give room for the JSON.
-    max_tokens: 2500,
+    // 1000, not 500: the critique JSON is 6 rated categories with notes, >=3
+    // strengths, up to 3 issues (area/problem/fix), drills and a priorityFix —
+    // ~700 output tokens worst case. A truncated body fails JSON.parse below.
+    max_tokens: 1000,
+    // Sonnet 5 runs adaptive thinking unless disabled, which ate the budget and
+    // truncated the critique JSON. Disable it and give room for the JSON.
     thinking: { type: "disabled" },
     system: systemPrompt,
     messages: [{
@@ -146,7 +149,7 @@ Return ONLY valid JSON:
     return jsonErr(`Network error calling Anthropic API: ${e?.message}`, 502);
   }
 
-  const usage = claudeData?.usage ?? {};
+  const usage = tokensFrom(claudeData?.usage);
   const rawText = claudeData?.content?.[0]?.text ?? "";
   if (!rawText) return jsonErr("Claude returned an empty response", 502);
 
@@ -171,8 +174,8 @@ Return ONLY valid JSON:
   const result = { critique };
   // Cache permanently — same video always gets same analysis
   await setCached(supabase, cacheKey, result, TTL.PERMANENT, MODEL, usage.input_tokens, usage.output_tokens);
-  await logUsage(supabase, { user_id, function_name: "analyze-technique", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-  await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+  await logUsage(supabase, { user_id, function_name: "analyze-technique", model: MODEL, ...usage, cache_hit: false });
+  await recordUsage(supabase, user_id, usage.input_tokens + usage.output_tokens);
 
   return jsonOk(result);
 });

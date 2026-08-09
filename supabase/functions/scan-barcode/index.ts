@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -58,26 +58,24 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
-        system: `You are a food barcode and nutrition label scanner.
+        // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+        // thinking + text together, so with it on the whole budget goes to
+        // thinking and text is empty.
+        thinking: { type: "disabled" },
+        // One small single-object result in every branch (~60 output tokens).
+        max_tokens: 500,
+        system: `Food barcode and nutrition label scanner. Return ONLY JSON, no commentary.
 
-Given an image, do one of the following:
-1. If you can see a barcode (UPC, EAN, QR, etc.), extract the barcode number.
-2. If you can see a nutrition label (Nutrition Facts), extract the nutrition data directly.
-3. If you can identify the food product by name/brand from the packaging, provide the product name.
+Prefer a barcode (UPC/EAN/QR) if one is visible; else read the Nutrition Facts panel; else identify the product by name/brand on the packaging.
 
-Return ONLY valid JSON in one of these formats:
-
-If barcode found:
+Barcode found:
 {"type":"barcode","barcode":"012345678901"}
 
-If nutrition label found (no barcode or barcode unreadable):
+Nutrition label found (no barcode, or barcode unreadable):
 {"type":"nutrition","name":"Product name","serving_size":"1 cup (240g)","calories":150,"protein":5,"carbs":25,"fat":3}
 
-If nothing useful found:
-{"type":"error","message":"Could not extract barcode or nutrition data from image"}
-
-Return only JSON, no commentary.`,
+Nothing useful found:
+{"type":"error","message":"Could not extract barcode or nutrition data from image"}`,
         messages: [{
           role: "user",
           content: [
@@ -100,8 +98,8 @@ Return only JSON, no commentary.`,
     await recordApiSuccess(supabase, FN);
 
     const claudeData = await response.json();
-    const usage = claudeData?.usage ?? {};
-    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    const tokens = tokensFrom(claudeData?.usage);
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
     const text = claudeData.content?.[0]?.text?.trim();
     if (!text) throw new Error("No response from Claude");
 
@@ -131,7 +129,7 @@ Return only JSON, no commentary.`,
           fat: Math.round((n.fat_serving ?? n.fat_100g ?? 0) * 10) / 10,
           barcode,
         };
-        await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+        await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
         return new Response(JSON.stringify(food), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
       }
 
@@ -156,7 +154,7 @@ Return only JSON, no commentary.`,
         fat: result.fat || 0,
         barcode: null,
       };
-      await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
+      await setCached(supabase, cacheKey, food, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
       return new Response(JSON.stringify(food), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
     }
 

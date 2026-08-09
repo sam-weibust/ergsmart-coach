@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-sonnet-5";
+const MODEL = "claude-haiku-4-5";
 const FN = "score-college-targets";
 
 serve(async (req) => {
@@ -81,18 +81,17 @@ Target School: ${target.school_name}
 Division: ${target.division}
 `.trim();
 
-    const prompt = `You are a college rowing recruiting expert. Based on this athlete's data and the target school/division, provide a fit assessment.
+    const prompt = `College rowing recruiting expert. Assess this athlete's fit for the target school/division.
 
 ${ctx}
 
-Typical recruiting benchmarks by division (men's 2K split):
-- D1 top programs (Ivy, Pac-12): sub 6:15
-- D1 mid-tier: 6:15-6:30
+Men's 2K benchmarks by division:
+- D1 top (Ivy, Pac-12): sub 6:15
+- D1 mid: 6:15-6:30
 - D2: 6:30-6:50
 - D3 competitive: 6:30-7:00
 - NAIA/Club: 7:00+
-
-For women's (roughly 40-45 seconds slower per division tier).
+Women's: ~40-45s slower per tier.
 
 Respond ONLY with valid JSON:
 {
@@ -110,7 +109,8 @@ Respond ONLY with valid JSON:
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 512,
+        // Fixed 3-field schema (enum + 2-3 sentences + 1-2 sentences) ~150 tokens.
+        max_tokens: 500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -139,9 +139,10 @@ Respond ONLY with valid JSON:
       updated_at: new Date().toISOString(),
     }).eq("id", target_id);
 
-    await setCached(supabase, cacheKey, parsed, TTL.TWO_DAYS, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, parsed, TTL.TWO_DAYS, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
+    await recordUsage(supabase, user_id, tokens.input_tokens + tokens.output_tokens);
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

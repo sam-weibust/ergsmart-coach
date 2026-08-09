@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -69,7 +69,9 @@ Include 5-8 exercises for the requested muscle group and equipment. Weights in k
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1000, system: systemPrompt, messages: [{ role: "user", content: userMsg }] }),
+      // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the
+      // max_tokens budget and would truncate the 5-8 exercise JSON.
+      body: JSON.stringify({ model: MODEL, max_tokens: 1000, thinking: { type: "disabled" }, system: systemPrompt, messages: [{ role: "user", content: userMsg }] }),
     });
 
     if (!anthropicResponse.ok) {
@@ -80,7 +82,7 @@ Include 5-8 exercises for the requested muscle group and equipment. Weights in k
     await recordApiSuccess(supabase, "generate-strength");
 
     const aiResult = await anthropicResponse.json();
-    const usage = aiResult?.usage ?? {};
+    const usage = tokensFrom(aiResult?.usage);
     const rawText = aiResult?.content?.[0]?.text ?? "";
     const start = rawText.indexOf("{");
     const end = rawText.lastIndexOf("}");
@@ -90,8 +92,8 @@ Include 5-8 exercises for the requested muscle group and equipment. Weights in k
     }
 
     await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id, function_name: "generate-strength", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, user_id ?? null, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    await logUsage(supabase, { user_id, function_name: "generate-strength", model: MODEL, ...usage, cache_hit: false });
+    await recordUsage(supabase, user_id ?? null, usage.input_tokens + usage.output_tokens);
 
     return new Response(JSON.stringify(parsed), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

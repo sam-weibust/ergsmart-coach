@@ -56,8 +56,8 @@ function formatSplitSec(sec: number): string {
 const SplitTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#0f1f3d] border border-white/20 rounded-lg p-2 text-xs">
-      <p className="text-white/60 mb-1">{label}</p>
+    <div className="bg-popover border border-border rounded-lg p-2 text-xs">
+      <p className="text-foreground/60 mb-1">{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} style={{ color: p.color }}>
           {p.name}: {formatSplitSec(p.value)}
@@ -381,15 +381,15 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Workout Comparison</h2>
-            <p className="text-sm text-white/50 mt-0.5">
+            <h2 className="text-xl font-bold text-foreground">Workout Comparison</h2>
+            <p className="text-sm text-foreground/50 mt-0.5">
               Select 2–6 sessions to compare performance side by side
             </p>
           </div>
           {selectedIds.size >= 2 && (
             <Button
               onClick={() => setComparing(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2"
+              className="bg-primary hover:bg-primary/90 text-foreground gap-2"
             >
               <GitCompare className="h-4 w-4" />
               Compare {selectedIds.size} Sessions
@@ -399,13 +399,13 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
 
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-white/40" />
+            <Loader2 className="h-6 w-6 animate-spin text-foreground/40" />
           </div>
         ) : sessions.length === 0 ? (
-          <Card className="bg-white/5 border-white/10">
+          <Card className="bg-card border-border">
             <CardContent className="py-12 text-center">
-              <p className="text-white/40">No logged on-water sessions found for this season.</p>
-              <p className="text-white/30 text-sm mt-1">Log sessions from the Practice Detail tab.</p>
+              <p className="text-foreground/40">No logged on-water sessions found for this season.</p>
+              <p className="text-foreground/30 text-sm mt-1">Log sessions from the Practice Detail tab.</p>
             </CardContent>
           </Card>
         ) : (
@@ -419,47 +419,47 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
                   onClick={() => !isDisabled && toggleSelect(s.id)}
                   className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
                     isSelected
-                      ? "bg-indigo-600/20 border-indigo-500/50"
+                      ? "bg-primary/10 border-primary/40"
                       : isDisabled
                       ? "opacity-40 border-white/5 cursor-not-allowed"
-                      : "bg-white/5 border-white/10 hover:bg-white/10"
+                      : "bg-card border-border hover:bg-accent"
                   }`}
                 >
                   <Checkbox
                     checked={isSelected}
                     disabled={isDisabled}
                     onCheckedChange={() => !isDisabled && toggleSelect(s.id)}
-                    className="border-white/30 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                    className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                   />
                   <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-x-4 gap-y-0.5">
                     <div>
-                      <p className="text-white text-sm font-medium">
+                      <p className="text-foreground text-sm font-medium">
                         {new Date(s.date + "T00:00:00").toLocaleDateString("en-US", {
                           month: "short", day: "numeric", year: "numeric",
                         })}
                       </p>
                     </div>
                     <div>
-                      <p className="text-white/70 text-sm truncate">{s.boatName}</p>
-                      <p className="text-white/40 text-xs">{s.boatClass}</p>
+                      <p className="text-foreground/70 text-sm truncate">{s.boatName}</p>
+                      <p className="text-foreground/40 text-xs">{s.boatClass}</p>
                     </div>
                     <div>
-                      <p className="text-white/50 text-xs">Avg Split</p>
-                      <p className="text-white text-sm font-mono">
+                      <p className="text-foreground/50 text-xs">Avg Split</p>
+                      <p className="text-foreground text-sm font-mono">
                         {s.avgSplit ? formatSplitSec(s.avgSplit) : "—"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-white/50 text-xs">Distance</p>
-                      <p className="text-white text-sm">{s.totalDistance ? `${(s.totalDistance / 1000).toFixed(1)}k` : "—"}</p>
+                      <p className="text-foreground/50 text-xs">Distance</p>
+                      <p className="text-foreground text-sm">{s.totalDistance ? `${(s.totalDistance / 1000).toFixed(1)}k` : "—"}</p>
                     </div>
                     <div>
-                      <p className="text-white/50 text-xs">Pieces</p>
-                      <p className="text-white text-sm">{s.pieceCount}</p>
+                      <p className="text-foreground/50 text-xs">Pieces</p>
+                      <p className="text-foreground text-sm">{s.pieceCount}</p>
                     </div>
                     <div>
-                      <p className="text-white/50 text-xs">Attendance</p>
-                      <p className="text-white text-sm">{s.attendance}/{s.totalRoster}</p>
+                      <p className="text-foreground/50 text-xs">Attendance</p>
+                      <p className="text-foreground text-sm">{s.attendance}/{s.totalRoster}</p>
                     </div>
                   </div>
                   {isSelected && (
@@ -479,7 +479,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
         )}
 
         {selectedIds.size === 1 && (
-          <p className="text-white/40 text-sm text-center">Select at least one more session to compare</p>
+          <p className="text-foreground/40 text-sm text-center">Select at least one more session to compare</p>
         )}
       </div>
     );
@@ -498,13 +498,13 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
           variant="ghost"
           size="sm"
           onClick={() => { setComparing(false); setAiAnalysis(null); }}
-          className="text-white/60 hover:text-white gap-1.5 px-2"
+          className="text-foreground/60 hover:text-foreground gap-1.5 px-2"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
         </Button>
         <div className="flex-1">
-          <h2 className="text-xl font-bold text-white">Comparing {selectedSessions.length} Sessions</h2>
+          <h2 className="text-xl font-bold text-foreground">Comparing {selectedSessions.length} Sessions</h2>
         </div>
       </div>
 
@@ -513,7 +513,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
         {selectedSessions.map((s, i) => (
           <div key={s.id} className="flex items-center gap-1.5">
             <div className="h-3 w-3 rounded-full" style={{ backgroundColor: colorFor(i) }} />
-            <span className="text-xs text-white/70">{labelFor(s)}</span>
+            <span className="text-xs text-foreground/70">{labelFor(s)}</span>
           </div>
         ))}
       </div>
@@ -521,23 +521,23 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
       {/* Stat cards — Distance + Time + Attendance */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {selectedSessions.map((s, i) => (
-          <Card key={s.id} className="bg-white/5 border-white/10">
+          <Card key={s.id} className="bg-card border-border">
             <CardContent className="p-3">
               <div className="h-1.5 rounded-full mb-2" style={{ backgroundColor: colorFor(i) }} />
-              <p className="text-white/50 text-xs truncate">{labelFor(s)}</p>
-              <p className="text-white font-bold mt-1">{s.totalDistance ? `${(s.totalDistance / 1000).toFixed(1)}k` : "—"}</p>
-              <p className="text-white/60 text-xs">{s.totalTime ? formatTime(s.totalTime) : "—"}</p>
-              <p className="text-white/50 text-xs mt-1">{s.attendance}/{s.totalRoster} athletes</p>
+              <p className="text-foreground/50 text-xs truncate">{labelFor(s)}</p>
+              <p className="text-foreground font-bold mt-1">{s.totalDistance ? `${(s.totalDistance / 1000).toFixed(1)}k` : "—"}</p>
+              <p className="text-foreground/60 text-xs">{s.totalTime ? formatTime(s.totalTime) : "—"}</p>
+              <p className="text-foreground/50 text-xs mt-1">{s.attendance}/{s.totalRoster} athletes</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* Avg split bar */}
-      <Card className="bg-white/5 border-white/10">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Average Split per Session</CardTitle>
-          <p className="text-white/40 text-xs">Lower (faster) is better — fastest session highlighted</p>
+          <CardTitle className="text-foreground text-base">Average Split per Session</CardTitle>
+          <p className="text-foreground/40 text-xs">Lower (faster) is better — fastest session highlighted</p>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={220}>
@@ -570,9 +570,9 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
       </Card>
 
       {/* Stroke rate bar */}
-      <Card className="bg-white/5 border-white/10">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Average Stroke Rate per Session</CardTitle>
+          <CardTitle className="text-foreground text-base">Average Stroke Rate per Session</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={200}>
@@ -588,7 +588,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
               />
               <YAxis tick={{ fill: "#94a3b8", fontSize: 10 }} />
               <Tooltip
-                contentStyle={{ backgroundColor: "#0f1f3d", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
+                contentStyle={{ backgroundColor: "#ffffff", border: "1px solid #E2E1E9", borderRadius: 6, color: "#1A1A2E" }}
                 labelStyle={{ color: "#94a3b8" }}
                 itemStyle={{ color: "#fff" }}
               />
@@ -604,9 +604,9 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
 
       {/* Split per 500m line */}
       {hasSplit500Data && (
-        <Card className="bg-white/5 border-white/10">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Split per 500m — Pacing Strategy</CardTitle>
+            <CardTitle className="text-foreground text-base">Split per 500m — Pacing Strategy</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
@@ -640,9 +640,9 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
 
       {/* Split trend by piece */}
       {hasPieceData && (
-        <Card className="bg-white/5 border-white/10">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Split Trend by Piece</CardTitle>
+            <CardTitle className="text-foreground text-base">Split Trend by Piece</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
@@ -673,15 +673,15 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
       )}
 
       {/* Session details table */}
-      <Card className="bg-white/5 border-white/10">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Session Details</CardTitle>
+          <CardTitle className="text-foreground text-base">Session Details</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
             <thead>
-              <tr className="border-b border-white/10">
-                <th className="text-white/40 text-xs font-medium text-left py-2 pr-4">Field</th>
+              <tr className="border-b border-border">
+                <th className="text-foreground/40 text-xs font-medium text-left py-2 pr-4">Field</th>
                 {selectedSessions.map((s, i) => (
                   <th key={s.id} className="text-left py-2 px-2">
                     <span className="text-xs font-semibold" style={{ color: colorFor(i) }}>
@@ -704,9 +704,9 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
                 { label: "Attendance", value: (s: SessionData) => `${s.attendance}/${s.totalRoster}` },
               ].map((row) => (
                 <tr key={row.label}>
-                  <td className="text-white/40 text-xs py-2 pr-4 font-medium">{row.label}</td>
+                  <td className="text-foreground/40 text-xs py-2 pr-4 font-medium">{row.label}</td>
                   {selectedSessions.map((s) => (
-                    <td key={s.id} className="text-white/80 text-xs py-2 px-2 max-w-[200px] truncate">
+                    <td key={s.id} className="text-foreground/80 text-xs py-2 px-2 max-w-[200px] truncate">
                       {row.value(s)}
                     </td>
                   ))}
@@ -719,10 +719,10 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
 
       {/* Lineup diff */}
       {hasLineupDiffs && (
-        <Card className="bg-white/5 border-white/10">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Lineup Changes</CardTitle>
-            <p className="text-white/40 text-xs">Seats that changed vs. the first selected session</p>
+            <CardTitle className="text-foreground text-base">Lineup Changes</CardTitle>
+            <p className="text-foreground/40 text-xs">Seats that changed vs. the first selected session</p>
           </CardHeader>
           <CardContent className="space-y-4">
             {lineupDiff!.map((diff) =>
@@ -738,13 +738,13 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {diff.changes.map((change) => (
-                      <div key={change.seat} className="flex items-center gap-2 bg-white/5 rounded px-2 py-1.5 text-xs">
-                        <Badge variant="outline" className="border-white/20 text-white/60 text-[10px] shrink-0">
+                      <div key={change.seat} className="flex items-center gap-2 bg-card rounded px-2 py-1.5 text-xs">
+                        <Badge variant="outline" className="border-border text-foreground/60 text-[10px] shrink-0">
                           {change.seat}
                         </Badge>
-                        <span className="text-white/50 truncate">{change.from}</span>
-                        <span className="text-white/30">→</span>
-                        <span className="text-white truncate">{change.to}</span>
+                        <span className="text-foreground/50 truncate">{change.from}</span>
+                        <span className="text-foreground/30">→</span>
+                        <span className="text-foreground truncate">{change.to}</span>
                       </div>
                     ))}
                   </div>
@@ -756,18 +756,18 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
       )}
 
       {/* AI Analysis */}
-      <Card className="bg-white/5 border-white/10">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-base flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-400" />
+            <CardTitle className="text-foreground text-base flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
               AI Coaching Analysis
             </CardTitle>
             {!aiAnalysis && (
               <Button
                 onClick={runAiAnalysis}
                 disabled={aiLoading}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 h-8 text-xs"
+                className="bg-primary hover:bg-primary/90 text-foreground gap-2 h-8 text-xs"
               >
                 {aiLoading ? (
                   <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing…</>
@@ -786,7 +786,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
             </div>
           )}
           {aiLoading && !aiAnalysis && (
-            <div className="flex items-center justify-center py-8 gap-3 text-white/40">
+            <div className="flex items-center justify-center py-8 gap-3 text-foreground/40">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span className="text-sm">Generating coaching analysis…</span>
             </div>
@@ -796,7 +796,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
               {[
                 { key: "STRONGEST SESSION", label: "Strongest Session", color: "text-green-400" },
                 { key: "PACING PATTERNS", label: "Pacing Patterns", color: "text-blue-400" },
-                { key: "PERFORMANCE TREND", label: "Performance Trend", color: "text-indigo-400" },
+                { key: "PERFORMANCE TREND", label: "Performance Trend", color: "text-primary" },
                 { key: "CONDITIONS CORRELATION", label: "Conditions Correlation", color: "text-yellow-400" },
                 { key: "NEXT PRACTICE FOCUS", label: "Next Practice Focus", color: "text-cyan-400" },
                 { key: "ANOMALIES", label: "Anomalies", color: "text-orange-400" },
@@ -806,7 +806,7 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
                 return (
                   <div key={key}>
                     <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${color}`}>{label}</p>
-                    <p className="text-white/80 text-sm leading-relaxed">{text}</p>
+                    <p className="text-foreground/80 text-sm leading-relaxed">{text}</p>
                   </div>
                 );
               })}
@@ -814,14 +814,14 @@ const WorkoutComparison = ({ teamId, isCoach, profile, seasonId, boats = [] }: P
                 variant="ghost"
                 size="sm"
                 onClick={() => { setAiAnalysis(null); analysisCache.current.delete(Array.from(selectedIds).sort().join(",")); }}
-                className="text-white/30 hover:text-white/60 text-xs mt-2"
+                className="text-foreground/30 hover:text-foreground/60 text-xs mt-2"
               >
                 Regenerate analysis
               </Button>
             </div>
           )}
           {!aiAnalysis && !aiLoading && !aiError && (
-            <p className="text-white/40 text-sm">
+            <p className="text-foreground/40 text-sm">
               Tap "Analyze with AI" to get a detailed coaching report covering performance trends, pacing strategy, and recommendations.
             </p>
           )}

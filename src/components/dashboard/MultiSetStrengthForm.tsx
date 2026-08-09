@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeAI } from "@/lib/aiInvoke";
+import { useDebouncedAction } from "@/hooks/useDebouncedAction";
+import { csToInterval } from "@/lib/ergFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +25,23 @@ interface MultiSetStrengthFormProps {
 
 // Convert lbs to kg for storage
 const lbsToKg = (lbs: number) => lbs / 2.20462;
+
+/**
+ * strength_workouts.rest_between_sets is an INTERVAL column. Postgres reads a
+ * bare "2:00" as 2 HOURS, so the typed value must be normalised to HH:MM:SS.ss.
+ */
+const restToInterval = (text: string): string | null => {
+  const t = text.trim();
+  if (!t) return null;
+  const parts = t.split(":").map((p) => parseFloat(p));
+  if (parts.some((n) => !isFinite(n))) return null;
+  const secs =
+    parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+    : parts.length === 2 ? parts[0] * 60 + parts[1]
+    : parts[0];
+  if (!isFinite(secs) || secs <= 0) return null;
+  return csToInterval(Math.round(secs * 100));
+};
 
 const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
   const { toast } = useToast();
@@ -59,7 +78,8 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
     setExercises(updated);
   };
 
-  const getSuggestions = async () => {
+  // Debounced below — an AI call must never be fired twice by one double-tap.
+  const getSuggestionsImpl = async () => {
     setLoadingSuggestions(true);
     try {
       const { data, error } = await invokeAI("generate-strength", {
@@ -84,6 +104,7 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
       setLoadingSuggestions(false);
     }
   };
+  const getSuggestions = useDebouncedAction(getSuggestionsImpl);
 
   const applySuggestions = () => {
     if (suggestions.length === 0) return;
@@ -129,9 +150,10 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
     }
   };
 
-  const handleSave = async () => {
+  // Debounced below — this both writes rows and triggers an AI analysis.
+  const handleSaveImpl = async () => {
     if (!profile) return;
-    
+
     const validExercises = exercises.filter(e => e.exercise && e.sets && e.reps && e.weight);
     if (validExercises.length === 0) {
       toast({
@@ -155,7 +177,8 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
         notes: workoutMeta.notes || null,
         warmup_notes: workoutMeta.warmup_notes || null,
         cooldown_notes: workoutMeta.cooldown_notes || null,
-        rest_between_sets: workoutMeta.rest_between_sets || null,
+        // INTERVAL column — normalise, never pass the raw "2:00".
+        rest_between_sets: restToInterval(workoutMeta.rest_between_sets),
       }));
 
       const { data, error } = await supabase
@@ -192,6 +215,7 @@ const MultiSetStrengthForm = ({ profile }: MultiSetStrengthFormProps) => {
       setLoading(false);
     }
   };
+  const handleSave = useDebouncedAction(handleSaveImpl);
 
   const validExerciseCount = exercises.filter(e => e.exercise && e.sets && e.reps && e.weight).length;
 

@@ -71,7 +71,7 @@ function dateLabel(dateStr: string): string {
 }
 
 const CHART_COLORS = {
-  primary: "#2d6be4",
+  primary: "#1A1A2E",
   green: "#10b981",
   amber: "#f59e0b",
   red: "#ef4444",
@@ -90,7 +90,7 @@ function RecoveryScoreCard({
   onLogSleep: () => void;
 }) {
   if (loading) return (
-    <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+    <Card className="border-0 bg-primary">
       <CardContent className="p-6 flex items-center justify-center min-h-[140px]">
         <Loader2 className="h-6 w-6 text-white/40 animate-spin" />
       </CardContent>
@@ -98,7 +98,7 @@ function RecoveryScoreCard({
   );
 
   if (score === null) return (
-    <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+    <Card className="border-0 bg-primary">
       <CardContent className="p-5 text-center">
         <AlertCircle className="h-8 w-8 mx-auto mb-2 text-amber-400" />
         <p className="text-white font-semibold text-sm mb-1">Log today's recovery check-in</p>
@@ -116,7 +116,7 @@ function RecoveryScoreCard({
   const label = s >= 75 ? "Good" : s >= 50 ? "Moderate" : "Low";
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+    <Card className="border-0 bg-primary">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -774,7 +774,7 @@ function InsightsTab({ profile }: { profile: any }) {
 
   return (
     <div className="space-y-4">
-      <Card className="border-0 bg-gradient-to-br from-[#0a1628] to-[#112240]">
+      <Card className="border-0 bg-primary">
         <CardContent className="p-5">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">

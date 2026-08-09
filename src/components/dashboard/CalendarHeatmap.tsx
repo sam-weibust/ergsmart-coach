@@ -49,14 +49,14 @@ export function CalendarHeatmap({ userId }: CalendarHeatmapProps) {
   }, [dayMap]);
 
   const getColor = (info?: { distance: number; type: string }) => {
-    if (!info || info.distance === 0) return "bg-white/5";
+    if (!info || info.distance === 0) return "bg-muted";
     const dist = info.distance;
     const type = info.type?.toLowerCase() || "";
     if (type.includes("easy") || type.includes("light")) return "bg-blue-400/40";
-    if (dist >= 10000) return "bg-[#2d6be4]";
-    if (dist >= 6000) return "bg-[#2d6be4]/70";
-    if (dist >= 3000) return "bg-[#2d6be4]/45";
-    return "bg-[#2d6be4]/25";
+    if (dist >= 10000) return "bg-primary";
+    if (dist >= 6000) return "bg-primary/70";
+    if (dist >= 3000) return "bg-primary/45";
+    return "bg-primary/25";
   };
 
   const weeks: typeof cells[] = [];
@@ -92,7 +92,7 @@ export function CalendarHeatmap({ userId }: CalendarHeatmapProps) {
         <p className="text-xs font-semibold text-white/60 uppercase tracking-wider">Training Consistency (90 days)</p>
         <div className="flex items-center gap-1.5 text-xs text-white/40">
           <span>Less</span>
-          {["bg-white/5", "bg-[#2d6be4]/25", "bg-[#2d6be4]/45", "bg-[#2d6be4]/70", "bg-[#2d6be4]"].map(c => (
+          {["bg-muted", "bg-primary/25", "bg-primary/45", "bg-primary/70", "bg-primary"].map(c => (
             <div key={c} className={`w-3 h-3 rounded-sm ${c}`} />
           ))}
           <span>More</span>

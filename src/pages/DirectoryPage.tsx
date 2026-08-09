@@ -72,17 +72,17 @@ export default function DirectoryPage() {
         <meta name="robots" content="index, follow" />
       </head>
 
-      <div className="min-h-screen bg-[#0a1628]">
+      <div className="min-h-screen bg-background">
         {/* Header */}
-        <header className="border-b border-white/10 bg-[#0a1628] sticky top-0 z-20">
+        <header className="border-b border-border bg-background sticky top-0 z-20">
           <div className="container mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-              <img src={crewsyncLogo} alt="CrewSync" className="h-9 w-9 rounded-xl border border-white/20" />
-              <span className="font-bold text-white text-lg">CrewSync</span>
+              <img src={crewsyncLogo} alt="CrewSync" className="h-9 w-9 rounded-lg border border-border" />
+              <span className="font-display text-foreground text-xl">CrewSync</span>
             </div>
             <Button
               onClick={() => navigate("/auth")}
-              className="bg-[#2d6be4] hover:bg-[#1e55c4] text-white"
+              className=""
               size="sm"
             >
               Sign In
@@ -91,28 +91,28 @@ export default function DirectoryPage() {
         </header>
 
         {/* Hero */}
-        <div className="bg-gradient-to-b from-[#112240] to-[#0a1628] py-16 px-4">
+        <div className="border-b border-border py-16 px-4">
           <div className="container mx-auto max-w-4xl text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h1 className="text-4xl md:text-5xl text-foreground mb-4">
               Rowing Club Directory
             </h1>
-            <p className="text-white/60 text-lg mb-10 max-w-xl mx-auto">
+            <p className="text-muted-foreground text-lg mb-10 max-w-xl mx-auto">
               Browse rowing programs and clubs using CrewSync across the country
             </p>
 
             {/* Search + Filters */}
             <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search programs, locations, coaches..."
-                  className="pl-9 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-[#2d6be4]"
+                  className="pl-9"
                 />
               </div>
               <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white/10 border-white/20 text-white">
+                <SelectTrigger className="w-full sm:w-40">
                   <SelectValue placeholder="Division" />
                 </SelectTrigger>
                 <SelectContent>
@@ -121,7 +121,7 @@ export default function DirectoryPage() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-44 bg-white/10 border-white/20 text-white">
+                <SelectTrigger className="w-full sm:w-44">
                   <SelectValue placeholder="Program Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -136,10 +136,10 @@ export default function DirectoryPage() {
         <div className="container mx-auto max-w-5xl px-4 py-12">
           {isLoading ? (
             <div className="flex justify-center py-20">
-              <div className="w-8 h-8 border-2 border-[#2d6be4] border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-20 text-white/40">
+            <div className="text-center py-20 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-40" />
               <p className="text-lg">No programs found</p>
               <p className="text-sm mt-2">Try adjusting your search or filters</p>
@@ -150,8 +150,8 @@ export default function DirectoryPage() {
               {featured.length > 0 && (
                 <section>
                   <div className="flex items-center gap-2 mb-5">
-                    <Star className="h-5 w-5 text-[#f59e0b]" fill="currentColor" />
-                    <h2 className="text-xl font-bold text-white">Featured Programs</h2>
+                    <Star className="h-5 w-5 text-[hsl(var(--warning))]" fill="currentColor" />
+                    <h2 className="text-xl text-foreground">Featured Programs</h2>
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {featured.map((program: any) => (
@@ -163,9 +163,9 @@ export default function DirectoryPage() {
 
               {/* All programs */}
               <section>
-                <h2 className="text-xl font-bold text-white mb-5">
+                <h2 className="text-xl text-foreground mb-5">
                   All Programs
-                  <span className="ml-3 text-sm font-normal text-white/50">({rest.length} listings)</span>
+                  <span className="ml-3 text-sm font-normal text-muted-foreground">({rest.length} listings)</span>
                 </h2>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {rest.map((program: any) => (
@@ -177,16 +177,16 @@ export default function DirectoryPage() {
           )}
 
           {/* CTA */}
-          <div className="mt-16 rounded-2xl bg-gradient-to-r from-[#2d6be4] to-[#1e55c4] p-8 text-center">
-            <h3 className="text-2xl font-bold text-white mb-2">List Your Program</h3>
-            <p className="text-white/70 mb-6">Join CrewSync and opt in to the directory from your team settings.</p>
-            <Button onClick={() => navigate("/auth")} className="bg-white text-[#2d6be4] hover:bg-white/90 font-semibold">
+          <div className="mt-16 rounded-lg bg-primary p-8 text-center">
+            <h3 className="text-2xl text-primary-foreground mb-2">List Your Program</h3>
+            <p className="text-primary-foreground/70 mb-6">Join CrewSync and opt in to the directory from your team settings.</p>
+            <Button onClick={() => navigate("/auth")} className="bg-background text-foreground hover:bg-background/90 font-semibold">
               Get Started Free <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        <footer className="border-t border-white/10 py-8 text-center text-white/30 text-sm">
+        <footer className="border-t border-border py-8 text-center text-muted-foreground text-sm">
           © {new Date().getFullYear()} CrewSync. All rights reserved.
         </footer>
       </div>
@@ -196,21 +196,21 @@ export default function DirectoryPage() {
 
 function ProgramCard({ program, featured }: { program: any; featured?: boolean }) {
   return (
-    <div className={`relative rounded-2xl border p-5 transition-all hover:scale-[1.02] cursor-pointer group ${
+    <div className={`relative rounded-lg border p-5 transition-all hover:shadow-floating cursor-pointer group ${
       featured
-        ? "bg-gradient-to-br from-[#2d6be4]/20 to-[#112240] border-[#2d6be4]/40"
-        : "bg-white/5 border-white/10 hover:border-white/20"
+        ? "bg-primary/5 border-primary/40"
+        : "bg-card border-border hover:border-primary/30"
     }`}>
       {featured && (
         <div className="absolute top-3 right-3">
-          <Star className="h-4 w-4 text-[#f59e0b]" fill="currentColor" />
+          <Star className="h-4 w-4 text-[hsl(var(--warning))]" fill="currentColor" />
         </div>
       )}
       <div className="space-y-3">
         <div>
-          <h3 className="font-bold text-white text-lg leading-tight">{program.name}</h3>
+          <h3 className="font-display text-foreground text-lg leading-tight">{program.name}</h3>
           {program.location && (
-            <div className="flex items-center gap-1 mt-1 text-white/50 text-sm">
+            <div className="flex items-center gap-1 mt-1 text-muted-foreground text-sm">
               <MapPin className="h-3.5 w-3.5" />
               {program.location}
             </div>
@@ -218,25 +218,25 @@ function ProgramCard({ program, featured }: { program: any; featured?: boolean }
         </div>
 
         {program.description && (
-          <p className="text-white/60 text-sm line-clamp-2">{program.description}</p>
+          <p className="text-muted-foreground text-sm line-clamp-2">{program.description}</p>
         )}
 
         <div className="flex flex-wrap gap-2">
           {program.division && (
-            <Badge className="bg-white/10 text-white/70 border-none text-xs">{program.division}</Badge>
+            <Badge variant="secondary" className="text-xs">{program.division}</Badge>
           )}
           {program.program_type && (
-            <Badge className="bg-[#2d6be4]/20 text-[#2d6be4] border-none text-xs">{program.program_type}</Badge>
+            <Badge className="bg-primary/10 text-primary border-none text-xs">{program.program_type}</Badge>
           )}
         </div>
 
         <div className="flex items-center justify-between pt-1">
           <div className="space-y-0.5">
-            <p className="text-white/40 text-xs">Coach</p>
-            <p className="text-white text-sm font-medium">{program.coachName}</p>
+            <p className="text-muted-foreground text-xs uppercase tracking-wider">Coach</p>
+            <p className="text-foreground text-sm font-medium">{program.coachName}</p>
           </div>
           {program.athlete_count > 0 && (
-            <div className="flex items-center gap-1.5 text-white/50 text-sm">
+            <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
               <Users className="h-4 w-4" />
               {program.athlete_count} athletes
             </div>

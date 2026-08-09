@@ -2,36 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Navy blue and white design system */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design system: whoop (skillui-whoop/whoop-design/DESIGN.md)
+   Overrides applied: white background, navy #1A1A2E text + accent,
+   Arial Black headings, light mode only.
+   4px spacing grid · radius from the documented scale · system shadow tokens.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Body/UI typeface from the design system. Headings use Arial Black.
+   Registered globally so every route can use it, not just the landing page. */
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('/fonts/proxima-nova-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('/fonts/proxima-nova-500.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('/fonts/proxima-nova-600.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('/fonts/proxima-nova-700.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
 
 @layer base {
   :root {
     /* Team branding — overridden dynamically by TeamBrandingProvider */
-    --team-color: #0a1628;
-    --team-color-rgb: 10, 22, 40;
+    --team-color: #1a1a2e;
+    --team-color-rgb: 26, 26, 46;
+
+    /* Typography */
+    --font-display: 'Arial Black', 'Arial Bold', Gadget, Arial, sans-serif;
+    --font-body: 'Proxima Nova', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
     /* Page and surface backgrounds */
-    --background: 220 20% 98%;       /* #f8f9fb light gray page bg */
-    --foreground: 216 60% 10%;       /* #0a1628 navy */
+    --background: 0 0% 100%;         /* #ffffff */
+    --foreground: 240 28% 14%;       /* #1a1a2e navy */
 
-    --card: 0 0% 100%;               /* #ffffff white cards */
-    --card-foreground: 216 60% 10%;  /* #0a1628 navy */
+    --card: 0 0% 100%;               /* white cards, separated by border + shadow */
+    --card-foreground: 240 28% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 216 60% 10%;
+    --popover-foreground: 240 28% 14%;
 
-    --primary: 220 77% 54%;          /* #2d6be4 accent blue */
+    /* Brand accent — navy per the override. Single accent, used for CTAs,
+       links, focus rings and active states. */
+    --primary: 240 28% 14%;          /* #1a1a2e */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 216 30% 94%;        /* light blue-gray for secondary surfaces */
-    --secondary-foreground: 216 60% 10%;
+    --secondary: 240 20% 94%;        /* light navy-tinted surface */
+    --secondary-foreground: 240 28% 14%;
 
-    --muted: 220 20% 95%;
-    --muted-foreground: 216 15% 52%; /* #718096 */
+    --muted: 240 20% 96%;
+    --muted-foreground: 240 10% 46%; /* navy at reduced weight, 5.8:1 on white */
 
-    --accent: 220 77% 54%;           /* same as primary blue */
-    --accent-foreground: 0 0% 100%;
+    /* NOTE: in shadcn, --accent is the subtle hover/active *surface*, not the
+       brand accent (that is --primary). Keeping it a light tint preserves
+       usable hover states; solid navy here would turn every menu hover into a
+       filled block. */
+    --accent: 240 20% 94%;
+    --accent-foreground: 240 28% 14%;
 
+    /* Status colors kept at their existing accessible values — the extracted
+       palette's #41ff31 / #ff0026 are unreadable on white. */
     --destructive: 1 73% 59%;        /* #e24b4a */
     --destructive-foreground: 0 0% 100%;
 
@@ -41,101 +85,82 @@
     --warning: 38 92% 50%;           /* #f59e0b */
     --warning-foreground: 0 0% 100%;
 
-    --border: 216 20% 90%;
-    --input: 216 20% 90%;
-    --ring: 220 77% 54%;
+    --border: 240 14% 90%;
+    --input: 240 14% 90%;
+    --ring: 240 28% 14%;
 
-    --radius: 0.75rem;
+    /* .375rem so the derived ladder all lands on the documented radius scale:
+       rounded-lg 6px · rounded-md 4px · rounded-sm 2px (the system default). */
+    --radius: 0.375rem;
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, #2d6be4, #1e55c4);
-    --gradient-hero: linear-gradient(135deg, #0a1628, #112240, #1a3a6b);
-    --gradient-card: linear-gradient(145deg, #ffffff, #f8f9fb);
-    --gradient-subtle: linear-gradient(180deg, #f8f9fb, #f0f4ff);
-    --gradient-warm: linear-gradient(135deg, #2d6be4, #10b981);
-    --gradient-energetic: linear-gradient(135deg, #0a1628, #2d6be4);
+    /* Gradients — "for emphasis, not decoration". Collapsed to flat navy or
+       near-white; the old multi-hue dark gradients are gone. */
+    --gradient-primary: linear-gradient(135deg, #1a1a2e, #1a1a2e);
+    --gradient-hero: linear-gradient(135deg, #1a1a2e, #1a1a2e);
+    --gradient-card: linear-gradient(145deg, #ffffff, #ffffff);
+    --gradient-subtle: linear-gradient(180deg, #ffffff, #f7f7fa);
+    --gradient-warm: linear-gradient(135deg, #1a1a2e, #1a1a2e);
+    --gradient-energetic: linear-gradient(135deg, #1a1a2e, #1a1a2e);
 
-    /* Shadows */
-    --shadow-glow: 0 0 40px rgba(45,107,228,0.3);
-    --shadow-glow-secondary: 0 0 40px rgba(45,107,228,0.2);
-    --shadow-soft: 0 4px 20px rgba(10,22,40,0.06);
-    --shadow-medium: 0 8px 30px rgba(10,22,40,0.10);
-    --shadow-card: 0 2px 8px rgba(10,22,40,0.05), 0 1px 2px rgba(10,22,40,0.03);
-    --shadow-card-hover: 0 12px 28px rgba(10,22,40,0.10), 0 4px 8px rgba(10,22,40,0.06);
+    /* Shadows — system tokens from DESIGN.md §6 only */
+    --shadow-raised: 0 .25rem 1.25rem 0 rgba(0,0,0,.2);
+    --shadow-floating: 0 4px 20px 0 hsla(0,0%,87%,.2);
+    --shadow-floating-strong: 0 0 20px 0 hsla(0,0%,78%,.25);
+    --shadow-overlay: 0 4.75px 23.75px 0 hsla(0,0%,85%,.1);
 
-    /* Transitions */
+    /* Legacy aliases mapped onto the system tokens above */
+    --shadow-glow: var(--shadow-raised);
+    --shadow-glow-secondary: var(--shadow-floating-strong);
+    --shadow-soft: var(--shadow-floating);
+    --shadow-medium: var(--shadow-floating-strong);
+    --shadow-card: var(--shadow-floating);
+    --shadow-card-hover: var(--shadow-raised);
+
+    /* Transitions — default easing from the motion tokens */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    --transition-fast: all 0.15s ease-out;
+    --transition-bounce: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 
-    /* Sidebar — dark navy */
-    --sidebar-background: 216 60% 10%;      /* #0a1628 */
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 220 77% 54%;          /* #2d6be4 */
+    /* Sidebar — light surface, navy ink */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 28% 14%;
+    --sidebar-primary: 240 28% 14%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 219 58% 16%;           /* #112240 */
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 216 60% 16%;
-    --sidebar-ring: 220 77% 54%;
+    --sidebar-accent: 240 20% 96%;
+    --sidebar-accent-foreground: 240 28% 14%;
+    --sidebar-border: 240 14% 90%;
+    --sidebar-ring: 240 28% 14%;
   }
 
+  /* Light mode only. `.dark` is never applied (no theme toggle exists in the
+     app), and this block deliberately mirrors the light tokens so that adding
+     the class cannot resurrect the old dark theme. Any remaining `dark:`
+     utility variants in components are inert for the same reason. */
   .dark {
-    --background: 216 60% 10%;
-    --foreground: 0 0% 100%;
+    --background: 0 0% 100%;
+    --foreground: 240 28% 14%;
 
-    --card: 219 58% 16%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 28% 14%;
 
-    --popover: 219 58% 16%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 28% 14%;
 
-    --primary: 220 77% 60%;
+    --primary: 240 28% 14%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 216 40% 20%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 240 20% 94%;
+    --secondary-foreground: 240 28% 14%;
 
-    --muted: 216 40% 18%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 240 20% 96%;
+    --muted-foreground: 240 10% 46%;
 
-    --accent: 220 77% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 240 20% 94%;
+    --accent-foreground: 240 28% 14%;
 
-    --destructive: 1 73% 59%;
-    --destructive-foreground: 0 0% 100%;
-
-    --success: 160 84% 39%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-
-    --border: 216 40% 22%;
-    --input: 216 40% 22%;
-    --ring: 220 77% 60%;
-
-    --gradient-primary: linear-gradient(135deg, #2d6be4, #1e55c4);
-    --gradient-hero: linear-gradient(135deg, #0a1628, #112240);
-    --gradient-card: linear-gradient(145deg, #112240, #0a1628);
-    --gradient-subtle: linear-gradient(180deg, #0a1628, #112240);
-    --gradient-warm: linear-gradient(135deg, #2d6be4, #10b981);
-    --gradient-energetic: linear-gradient(135deg, #0a1628, #2d6be4);
-
-    --shadow-glow: 0 0 40px rgba(45,107,228,0.4);
-    --shadow-glow-secondary: 0 0 40px rgba(45,107,228,0.3);
-    --shadow-soft: 0 4px 20px rgba(0,0,0,0.3);
-    --shadow-medium: 0 8px 30px rgba(0,0,0,0.4);
-    --shadow-card: 0 2px 8px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
-    --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.35), 0 4px 8px rgba(0,0,0,0.2);
-
-    --sidebar-background: 216 60% 10%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 220 77% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 219 58% 16%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 216 40% 22%;
-    --sidebar-ring: 220 77% 60%;
+    --border: 240 14% 90%;
+    --input: 240 14% 90%;
+    --ring: 240 28% 14%;
   }
 }
 
@@ -155,6 +180,17 @@
     @apply bg-background text-foreground antialiased;
     overflow-x: hidden;
     max-width: 100vw;
+    font-family: var(--font-body);
+  }
+
+  /* Headings use Arial Black per the override. It runs much wider than a
+     normal bold, so tighten tracking and keep the heading line-height at 1.2
+     from the type rules. */
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
 }
 
@@ -209,19 +245,27 @@
     box-shadow: var(--shadow-card-hover);
   }
 
-  /* Text gradient — navy to blue */
+  /* Single accent — no two-tone gradient text */
   .text-gradient {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #2d6be4, #0a1628);
+    color: hsl(var(--primary));
   }
 
-  /* Glass effect */
+  /* Was frosted glass. The design system lists blur/backdrop-blur as an
+     anti-pattern, so these are solid surfaces with a border now. */
   .glass {
-    @apply backdrop-blur-md bg-card/80 border border-border/50;
+    @apply bg-card border border-border;
   }
 
   .glass-strong {
-    @apply backdrop-blur-xl bg-card/90 border border-border/60;
+    @apply bg-card border border-border;
+    box-shadow: var(--shadow-floating);
+  }
+
+  /* Display type utility for non-heading elements (card titles, stat values) */
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 900;
+    letter-spacing: -0.02em;
   }
 
   /* Animations */
@@ -299,7 +343,7 @@
   }
 
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent, rgba(45,107,228,0.15), transparent);
+    background: linear-gradient(90deg, transparent, rgba(26,26,46,0.10), transparent);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
   }

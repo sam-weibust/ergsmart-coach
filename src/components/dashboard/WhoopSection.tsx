@@ -300,7 +300,7 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
                   orientation="right"
                   domain={[0, 21]}
                   ticks={[0, 10, 21]}
-                  tick={{ fontSize: 10, fill: "#2d6be4" }}
+                  tick={{ fontSize: 10, fill: "#6B6B7D" }}
                   tickLine={false}
                   axisLine={false}
                   width={28}
@@ -316,7 +316,7 @@ export function WhoopSection({ userId }: WhoopSectionProps) {
                 />
                 <Line
                   yAxisId="strain" type="monotone" dataKey="strain" name="Strain"
-                  stroke="#2d6be4" strokeWidth={2.5} dot={{ r: 3, fill: "#2d6be4", strokeWidth: 0 }} connectNulls
+                  stroke="#1A1A2E" strokeWidth={2.5} dot={{ r: 3, fill: "#1A1A2E", strokeWidth: 0 }} connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>

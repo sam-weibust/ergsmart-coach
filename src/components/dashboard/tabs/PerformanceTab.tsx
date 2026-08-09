@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,9 +12,11 @@ import { cn } from "@/lib/utils";
 import {
   Bluetooth, ChevronLeft, ChevronRight, MessageSquare, CalendarClock,
   Zap, Video, GitCompareArrows, History, Dumbbell, Bot, Sparkles,
-  SplitSquareVertical, Target, Trophy, Radio, Gauge, Weight, GraduationCap, type LucideIcon,
+  SplitSquareVertical, Target, Trophy, Radio, Gauge, Weight, GraduationCap,
+  Activity, Layers, PersonStanding, type LucideIcon,
 } from "lucide-react";
 import type { AthleteTabProps } from "./types";
+import { planCurrentWeekIndex } from "@/lib/planDates";
 
 // Reused existing sections (opened inside a full-screen sheet sub-view).
 import LiveErgView from "@/components/dashboard/LiveErgView";
@@ -27,6 +29,13 @@ import HistorySection from "@/components/dashboard/HistorySection";
 import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
 import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
+// Manual logging. These were orphaned before: Dashboard.renderContent() (their
+// only mount point) was never called by the 5-tab shell, so there was no
+// reachable UI for manual erg / multi-piece / strength / cross-training logging.
+import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
+import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
+import MultiSetStrengthForm from "@/components/dashboard/MultiSetStrengthForm";
+import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Tool registry. Each tool id maps to a label, icon and the existing
@@ -35,15 +44,30 @@ import { CalculatorsSection } from "@/components/dashboard/calculators/Calculato
  * ──────────────────────────────────────────────────────────────────────── */
 type ToolId =
   | "live-erg" | "plan" | "ask"
+  | "log-erg" | "log-multipiece" | "log-strength" | "log-cross"
   | "predictor" | "critique" | "comparison" | "history" | "strength" | "recruiting"
   | "calc-split" | "calc-zones" | "calc-race" | "calc-stroke" | "calc-watts" | "calc-weight";
+
+/**
+ * Manual logging. Lives on the Performance tab rather than Me because
+ * Performance is the "do a session" surface (Live Erg, training plan, AI coach,
+ * training tools) while Me is the read-only "who am I / how am I doing"
+ * summary. Logging a workout is an action, so it belongs next to the other
+ * training actions.
+ */
+const LOG_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
+  { id: "log-erg",        label: "Log Erg Workout",  desc: "Enter a session by hand",       icon: Activity },
+  { id: "log-multipiece", label: "Multi-Piece",      desc: "Log a session of pieces",        icon: Layers },
+  { id: "log-strength",   label: "Log Strength",     desc: "Sets, reps and weight",          icon: Weight },
+  { id: "log-cross",      label: "Cross Training",   desc: "Runs, rides and swims",          icon: PersonStanding },
+];
 
 const TRAINING_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
   { id: "predictor",  label: "2K Predictor",        desc: "AI conservative 2K prediction",   icon: Zap },
   { id: "critique",   label: "Technique Critique",  desc: "Upload a video for AI feedback",  icon: Video },
   { id: "comparison", label: "Workout Comparison",  desc: "Compare your sessions & trends",  icon: GitCompareArrows },
   { id: "history",    label: "Erg History",         desc: "Browse & export past workouts",   icon: History },
-  { id: "strength",   label: "Strength Logging",    desc: "Log lifts & strength programs",    icon: Dumbbell },
+  { id: "strength",   label: "Strength Program",    desc: "Follow the rowing lift program",  icon: Dumbbell },
   { id: "recruiting", label: "Recruiting Profile",   desc: "College recruiting details",       icon: GraduationCap },
 ];
 
@@ -70,6 +94,10 @@ const TOOL_TITLES: Record<ToolId, string> = {
   "live-erg": "Live Erg",
   plan: "AI Training Plan",
   ask: "AI Coach",
+  "log-erg": "Log Erg Workout",
+  "log-multipiece": "Multi-Piece Session",
+  "log-strength": "Log Strength Workout",
+  "log-cross": "Cross Training",
   predictor: "2K Predictor",
   critique: "Technique Critique",
   comparison: "Workout Comparison",
@@ -93,29 +121,34 @@ const extractWeeks = (workout_data: any): any[] => {
   return [];
 };
 
-// Best-effort "current week": elapsed weeks since the plan was created,
-// clamped to the plan length. Plans carry no explicit start_date.
-function currentWeekIndex(createdAt: string | undefined, weekCount: number): number {
-  if (!createdAt || weekCount === 0) return 0;
-  const created = new Date(createdAt).getTime();
-  if (Number.isNaN(created)) return 0;
-  const elapsedWeeks = Math.floor((Date.now() - created) / (7 * 24 * 60 * 60 * 1000));
-  return Math.min(Math.max(elapsedWeeks, 0), weekCount - 1);
-}
-
-// Pick today's day from a week's `days[]` by matching day name, else by index.
-function todaysSession(week: any): { label: string; summary: string } | null {
+// Pick today's day from a week's `days[]`.
+//
+// Plans are anchored to workout_plans.start_date (always a Monday), so day 0 of
+// every week IS Monday. Index by days-since-Monday first and only fall back to
+// name matching for plans whose JSON is ordered differently.
+function todaysSession(week: any): {
+  label: string;
+  summary: string;
+  zone: string | null;
+  pieces: string | null;
+  targetSplit: string | null;
+  optionalLabel: string | null;
+} | null {
   const days: any[] = Array.isArray(week?.days) ? week.days : [];
   if (days.length === 0) return null;
-  const dow = new Date().getDay(); // 0=Sun
+
+  const dow = new Date().getDay(); // 0=Sun … 6=Sat
   const NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   const todayName = NAMES[dow];
+  const mondayIndex = (dow + 6) % 7; // Mon=0 … Sun=6
 
-  let day =
+  const day =
+    (mondayIndex < days.length ? days[mondayIndex] : undefined) ??
     days.find((d) => {
       const n = (typeof d?.day_name === "string" ? d.day_name : typeof d?.day === "string" ? d.day : "").toLowerCase();
       return n.includes(todayName);
-    }) ?? days[Math.min(dow, days.length - 1)];
+    }) ??
+    days[days.length - 1];
 
   if (!day) return null;
   const label =
@@ -123,15 +156,31 @@ function todaysSession(week: any): { label: string; summary: string } | null {
     typeof day?.day === "string" ? day.day :
     todayName.charAt(0).toUpperCase() + todayName.slice(1);
 
-  if (day?.is_rest === true) return { label, summary: "Rest day — recovery." };
+  const optionalLabel = day?.optional?.title || day?.optional?.description || null;
+
+  if (day?.is_rest === true) {
+    return { label, summary: "Rest day — recovery.", zone: null, pieces: null, targetSplit: null, optionalLabel };
+  }
 
   const session = day?.required ?? day?.ergWorkout ?? null;
   const summary =
     (typeof day?.workout === "string" && day.workout) ||
     session?.title || session?.description ||
-    day?.optional?.title || day?.optional?.description ||
+    optionalLabel ||
     "Rest / no session today.";
-  return { label, summary };
+
+  const pieceBits: string[] = [];
+  if (session?.duration) pieceBits.push(String(session.duration));
+  if (session?.distance) pieceBits.push(`${session.distance}m`);
+
+  return {
+    label,
+    summary,
+    zone: session?.zone ? String(session.zone) : null,
+    pieces: pieceBits.length ? pieceBits.join(" · ") : null,
+    targetSplit: session?.targetSplit ? String(session.targetSplit) : null,
+    optionalLabel,
+  };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -149,16 +198,19 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
     queryFn: async () => {
       const user = await getSessionUser();
       if (!user) return null;
-      const { data } = await supabase
-        .from("workout_plans")
-        .select("title, workout_data, created_at")
+      // `as any`: start_date was added by migration 20260802000000 and is not
+      // yet in the generated Supabase types.
+      const { data } = await (supabase.from("workout_plans") as any)
+        .select("title, workout_data, created_at, start_date")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (!data) return null;
       const weeks = extractWeeks((data as any).workout_data);
-      const weekIdx = currentWeekIndex((data as any).created_at, weeks.length);
+      // Anchored to start_date (Monday of week 1), not created_at — see
+      // src/lib/planDates.ts and migration 20260802000000.
+      const weekIdx = planCurrentWeekIndex(data as any, weeks.length);
       const week = weeks[weekIdx];
       return {
         title: (data as any).title as string,
@@ -189,7 +241,7 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
     staleTime: 60 * 1000,
   });
 
-  const accent = teamColor || "#0a1628";
+  const accent = teamColor || "#1A1A2E";
 
   const lastChatPreview = useMemo(() => {
     if (!lastChat?.content) return null;
@@ -198,11 +250,23 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
     return `${who}: ${text.length > 90 ? text.slice(0, 90) + "…" : text}`;
   }, [lastChat]);
 
+  // "Log with PM5" elsewhere in the app dispatches navigate_to_live_erg; the
+  // shell switches to this tab and we open the Live Erg sub-view here.
+  useEffect(() => {
+    const open = () => setOpenTool("live-erg");
+    window.addEventListener("navigate_to_live_erg", open);
+    return () => window.removeEventListener("navigate_to_live_erg", open);
+  }, []);
+
   function renderTool(id: ToolId) {
     switch (id) {
       case "live-erg":   return <LiveErgView />;
       case "plan":       return <WorkoutPlanSection />;
       case "ask":        return <AskSection />;
+      case "log-erg":        return <div className="p-4"><ErgWorkoutSection profile={profile} /></div>;
+      case "log-multipiece": return <div className="p-4"><MultiPieceSession profile={profile} /></div>;
+      case "log-strength":   return <div className="p-4"><MultiSetStrengthForm profile={profile} /></div>;
+      case "log-cross":      return <div className="p-4"><CrossTrainingSection profile={profile} /></div>;
       case "predictor":  return <ErgPredictor />;
       case "critique":   return <CritiqueSection />;
       case "comparison": return <ComparisonSection profile={profile} />;
@@ -282,6 +346,24 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
                       {planInfo.today ? `${planInfo.today.label} — ${planInfo.today.summary}` : "No session scheduled"}
                     </span>
                   </div>
+                  {planInfo.today && (planInfo.today.zone || planInfo.today.pieces || planInfo.today.targetSplit || planInfo.today.optionalLabel) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      {planInfo.today.zone && (
+                        <Badge variant="outline" className="text-[10px]">{planInfo.today.zone}</Badge>
+                      )}
+                      {planInfo.today.pieces && (
+                        <span className="text-muted-foreground">{planInfo.today.pieces}</span>
+                      )}
+                      {planInfo.today.targetSplit && (
+                        <span className="font-mono text-muted-foreground">
+                          Target {planInfo.today.targetSplit}
+                        </span>
+                      )}
+                      {planInfo.today.optionalLabel && (
+                        <Badge variant="secondary" className="text-[10px]">+ optional</Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground mt-1">
@@ -315,7 +397,19 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
         </CardContent>
       </Card>
 
-      {/* ── 4. Training Tools ─────────────────────────────────────────────── */}
+      {/* ── 4. Log a Workout ──────────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
+          Log a Workout
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          {LOG_TOOLS.map((t) => (
+            <ToolCard key={t.id} tool={t} accent={accent} onClick={() => setOpenTool(t.id)} />
+          ))}
+        </div>
+      </section>
+
+      {/* ── 5. Training Tools ─────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
           Training Tools
@@ -327,7 +421,7 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
         </div>
       </section>
 
-      {/* ── 5. Calculators ────────────────────────────────────────────────── */}
+      {/* ── 6. Calculators ────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
           Calculators

@@ -19,6 +19,7 @@ import { SpreadsheetUpload } from "./SpreadsheetUpload";
 import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
 import { GenerationProgress } from "./GenerationProgress";
 import { Calendar } from "@/components/ui/calendar";
+import { planStartDate, localISODate, mondayOfWeek } from "@/lib/planDates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,13 @@ type WorkoutPlan = {
   description?: string | null;
   workout_data: any;
   created_at?: string;
+  /**
+   * Monday that week 1 of the plan starts on ("YYYY-MM-DD"). Added in migration
+   * 20260802000000. Null on rows written before the backfill ran — every reader
+   * must go through planStartDate(), which falls back to the Monday of the
+   * created_at week.
+   */
+  start_date?: string | null;
   is_coach_assigned?: boolean;
   coach_plan_id?: string | null;
 };
@@ -828,9 +836,14 @@ const PlanList = ({
 const sanitizeICS = (s: string) => s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 
 const generateICS = (plan: WorkoutPlan): string => {
-  const startDate = plan.created_at ? new Date(plan.created_at) : new Date();
+  // Anchored to start_date (Monday of week 1), NOT created_at — otherwise the
+  // exported events land on the wrong weekdays for their own "Monday…Sunday"
+  // labels unless the plan happened to be generated on a Monday.
+  const startDate = planStartDate(plan);
   const weeks = extractWorkoutWeeks(plan.workout_data);
-  const fmtDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+  // localISODate, not toISOString(): the latter shifts to UTC and moves every
+  // event back a day for users west of Greenwich.
+  const fmtDate = (d: Date) => localISODate(d).replace(/-/g, "");
 
   const events = weeks.flatMap((week: any, wi: number) =>
     (Array.isArray(week?.days) ? week.days : []).map((day: any, di: number) => {
@@ -886,52 +899,150 @@ const downloadICS = (plan: WorkoutPlan) => {
 
 // ─── Calendar view ────────────────────────────────────────────────────────────
 
+/** What a single calendar day cell knows about its session. */
+type PlanDayCell = {
+  /** Colour bucket for the calendar modifier. */
+  type: "erg" | "strength" | "rest";
+  /** Short one-liner (session title). */
+  summary: string;
+  /** Training zone, e.g. "UT2" — rendered as a coloured badge. */
+  zone: string | null;
+  /** The pieces / volume line, e.g. "3 x 20:00" or "10000m". */
+  pieces: string | null;
+  /** Prescribed /500m split, e.g. "2:05". */
+  targetSplit: string | null;
+  /** Stroke-rate prescription, e.g. "r20". */
+  rate: string | null;
+  /** Title of the optional second session, when the day has one. */
+  optionalLabel: string | null;
+  /** The plan's own label for this day ("Monday"), for a mismatch check. */
+  dayLabel: string | null;
+};
+
+const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** Human "pieces" line for a session, tolerating both plan schemas. */
+const sessionPieces = (s: any): string | null => {
+  if (!s) return null;
+  if (typeof s.pieces === "string" && s.pieces.trim()) return s.pieces.trim();
+  const bits: string[] = [];
+  if (s.duration) bits.push(String(s.duration));
+  if (s.distance) bits.push(`${s.distance}m`);
+  if (s.sets && s.reps) bits.push(`${s.sets}x${s.reps}`);
+  return bits.length ? bits.join(" · ") : null;
+};
+
 const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
-  const { startDate, workoutMap, ergDays, strengthDays, restDays } = useMemo(() => {
-    const start = plan.created_at ? new Date(plan.created_at) : new Date();
-    const map: Record<string, { summary: string; type: string }> = {};
+  const { startDate, workoutMap, ergDays, strengthDays, restDays, optionalDays } = useMemo(() => {
+    // Anchored to start_date (Monday of week 1). Previously this was
+    // `created_at + wi*7 + di`, which only lined the "Monday…Sunday" labels up
+    // with real weekdays when the plan happened to be created on a Monday.
+    const start = planStartDate(plan);
+    const map: Record<string, PlanDayCell> = {};
     const erg: Date[] = [];
     const str: Date[] = [];
     const rest: Date[] = [];
+    const optional: Date[] = [];
+
+    const put = (d: Date, cell: PlanDayCell) => {
+      map[d.toDateString()] = cell;
+      if (cell.type === "erg") erg.push(new Date(d));
+      else if (cell.type === "strength") str.push(new Date(d));
+      else rest.push(new Date(d));
+      if (cell.optionalLabel) optional.push(new Date(d));
+    };
 
     const weeks = extractWorkoutWeeks(plan.workout_data);
     weeks.forEach((week: any, wi: number) => {
       (Array.isArray(week?.days) ? week.days : []).forEach((day: any, di: number) => {
         const d = new Date(start);
         d.setDate(d.getDate() + wi * 7 + di);
-        const key = d.toDateString();
+
+        const dayLabel =
+          typeof day?.day_name === "string" ? day.day_name :
+          typeof day?.day === "string" ? day.day : null;
+        const optionalLabel =
+          day?.optional?.title || day?.optional?.description || null;
 
         if (day?.is_rest) {
-          rest.push(new Date(d));
-          map[key] = { summary: "Rest Day", type: "rest" };
-        } else if (day?.required?.session_type === "erg") {
-          erg.push(new Date(d));
-          map[key] = { summary: day.required.title || "Erg workout", type: "erg" };
-        } else if (day?.required?.session_type === "lift") {
-          str.push(new Date(d));
-          map[key] = { summary: day.required.title || "Lift", type: "strength" };
-        } else if (day?.ergWorkout) {
-          erg.push(new Date(d));
-          map[key] = { summary: `${day.ergWorkout?.zone ? "[" + day.ergWorkout.zone + "] " : ""}${day.ergWorkout?.description || "Erg workout"}`, type: "erg" };
+          put(d, {
+            type: "rest", summary: "Rest Day", zone: null, pieces: null,
+            targetSplit: null, rate: null, optionalLabel, dayLabel,
+          });
+          return;
+        }
+
+        // ── New schema: day.required / day.optional ────────────────────────
+        const req = day?.required;
+        if (req) {
+          const isLift = req.session_type === "lift";
+          put(d, {
+            type: isLift ? "strength" : "erg",
+            summary: req.title || req.description || (isLift ? "Lift" : "Erg workout"),
+            zone: !isLift && req.zone ? String(req.zone) : null,
+            pieces: sessionPieces(req),
+            targetSplit: req.targetSplit ? String(req.targetSplit) : null,
+            rate: req.rate ? String(req.rate) : null,
+            optionalLabel,
+            dayLabel,
+          });
+          return;
+        }
+
+        // ── Legacy schema ──────────────────────────────────────────────────
+        if (day?.ergWorkout) {
+          const e = day.ergWorkout;
+          put(d, {
+            type: "erg",
+            summary: e.description || "Erg workout",
+            zone: e.zone ? String(e.zone) : null,
+            pieces: sessionPieces(e),
+            targetSplit: e.targetSplit ? String(e.targetSplit) : null,
+            rate: e.rate ? String(e.rate) : null,
+            optionalLabel,
+            dayLabel,
+          });
         } else if (day?.strengthWorkout) {
-          str.push(new Date(d));
-          map[key] = { summary: `Strength: ${day.strengthWorkout?.focus || "Workout"}`, type: "strength" };
+          put(d, {
+            type: "strength",
+            summary: `Strength: ${day.strengthWorkout?.focus || "Workout"}`,
+            zone: null, pieces: sessionPieces(day.strengthWorkout),
+            targetSplit: null, rate: null, optionalLabel, dayLabel,
+          });
         } else if (day?.yogaSession) {
-          rest.push(new Date(d));
-          map[key] = { summary: `Recovery: ${day.yogaSession?.focus || "Rest day"}`, type: "rest" };
+          put(d, {
+            type: "rest",
+            summary: `Recovery: ${day.yogaSession?.focus || "Rest day"}`,
+            zone: null, pieces: null, targetSplit: null, rate: null,
+            optionalLabel, dayLabel,
+          });
         } else if (day?.workout) {
-          erg.push(new Date(d));
-          map[key] = { summary: String(day.workout).slice(0, 80), type: "erg" };
+          put(d, {
+            type: "erg",
+            summary: String(day.workout).slice(0, 120),
+            zone: null, pieces: null, targetSplit: null, rate: null,
+            optionalLabel, dayLabel,
+          });
         }
       });
     });
 
-    return { startDate: start, workoutMap: map, ergDays: erg, strengthDays: str, restDays: rest };
+    return {
+      startDate: start, workoutMap: map, ergDays: erg,
+      strengthDays: str, restDays: rest, optionalDays: optional,
+    };
   }, [plan]);
 
   const selectedWorkout = selectedDate ? workoutMap[selectedDate.toDateString()] : null;
+
+  // Surfaces a plan whose own day labels disagree with the anchored weekday —
+  // i.e. a plan whose JSON does not start on Monday.
+  const labelMismatch =
+    selectedDate && selectedWorkout?.dayLabel
+      ? !selectedWorkout.dayLabel.toLowerCase().includes(WEEKDAY_NAMES[selectedDate.getDay()])
+      : false;
 
   return (
     <div className="space-y-4">
@@ -939,24 +1050,78 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Erg / Cardio</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" /> Strength</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Rest / Recovery</span>
+        <span className="flex items-center gap-1.5"><span className="text-[13px] leading-none">＋</span> Optional 2nd session</span>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Week 1 starts {startDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+      </p>
       <Calendar
         mode="single"
         selected={selectedDate}
         onSelect={setSelectedDate}
         defaultMonth={startDate}
-        modifiers={{ erg: ergDays, strength: strengthDays, rest: restDays }}
+        modifiers={{ erg: ergDays, strength: strengthDays, rest: restDays, optional: optionalDays }}
         modifiersClassNames={{
           erg: "!bg-blue-100 !text-blue-800 dark:!bg-blue-900/40 dark:!text-blue-300 font-semibold hover:!bg-blue-200",
           strength: "!bg-orange-100 !text-orange-800 dark:!bg-orange-900/40 dark:!text-orange-300 font-semibold hover:!bg-orange-200",
           rest: "!bg-purple-100 !text-purple-800 dark:!bg-purple-900/40 dark:!text-purple-300 font-semibold hover:!bg-purple-200",
+          // Ring marks a day that also carries an optional second session.
+          optional: "ring-1 ring-inset ring-primary/60",
         }}
         className="rounded-md border w-full max-w-full overflow-x-auto"
       />
       {selectedDate && selectedWorkout && (
-        <div className="p-3 rounded-lg border bg-muted/30 text-sm space-y-1">
-          <p className="font-medium">{selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+        <div className="p-3 rounded-lg border bg-muted/30 text-sm space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">
+              {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            </p>
+            {selectedWorkout.zone && (
+              <Badge variant="outline" className={`text-xs ${getZoneColor(selectedWorkout.zone)}`}>
+                {selectedWorkout.zone}
+              </Badge>
+            )}
+            {selectedWorkout.type === "strength" && (
+              <Badge variant="outline" className="text-xs bg-orange-500/20 text-orange-700 border-orange-500/30">
+                Lift
+              </Badge>
+            )}
+            {selectedWorkout.type === "rest" && (
+              <Badge className="bg-green-500/20 text-green-700 border-green-500/30 text-xs">Rest</Badge>
+            )}
+          </div>
+
           <p className="text-muted-foreground">{selectedWorkout.summary}</p>
+
+          {(selectedWorkout.pieces || selectedWorkout.targetSplit || selectedWorkout.rate) && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {selectedWorkout.pieces && (
+                <span><span className="text-muted-foreground">Pieces: </span>{selectedWorkout.pieces}</span>
+              )}
+              {selectedWorkout.targetSplit && (
+                <span className="font-mono">
+                  <span className="text-muted-foreground font-sans">Target split: </span>
+                  {selectedWorkout.targetSplit}
+                </span>
+              )}
+              {selectedWorkout.rate && (
+                <span><span className="text-muted-foreground">Rate: </span>{selectedWorkout.rate}</span>
+              )}
+            </div>
+          )}
+
+          {selectedWorkout.optionalLabel && (
+            <div className="flex items-start gap-2 rounded-md border border-dashed p-2">
+              <Badge variant="secondary" className="text-[10px] shrink-0">Optional</Badge>
+              <span className="text-xs text-muted-foreground">{selectedWorkout.optionalLabel}</span>
+            </div>
+          )}
+
+          {labelMismatch && selectedWorkout.dayLabel && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              Plan labels this session "{selectedWorkout.dayLabel}".
+            </p>
+          )}
         </div>
       )}
       {selectedDate && !selectedWorkout && (
@@ -1098,7 +1263,18 @@ export const WorkoutPlanSection = () => {
           },
         },
         {
-          // Advance the batch counter as each 4-week chunk streams in.
+          // Advance the counter the moment a chunk STARTS so the label matches
+          // the batch actually being generated (chunk_start fires before the
+          // slow Anthropic call, chunk fires after it).
+          onProgress: (p) => {
+            if (p.phase === "chunk_start" && typeof p.chunkStart === "number") {
+              setGenerationProgress({
+                currentBatch: Math.min(batches, Math.max(1, Math.ceil(p.chunkStart / 4))),
+                totalBatches: batches,
+              });
+            }
+          },
+          // Fallback / completion tick for each finished 4-week chunk.
           onChunk: (c) =>
             setGenerationProgress({
               currentBatch: Math.min(batches, Math.max(1, Math.ceil(c.weeksSoFar / 4))),
@@ -1133,7 +1309,11 @@ export const WorkoutPlanSection = () => {
         title: `${prefs.months}-Month ${goalLabels[prefs.training_goal] || ""} Plan (${prefs.intensity})`,
         description: `${prefs.intensity} intensity plan for ${goalLabels[prefs.training_goal] || "general fitness"}`,
         workout_data: data?.plan ?? data,
-      });
+        // Week 1 / day 0 anchor. Plan days are labelled Monday…Sunday, so the
+        // plan must start on a Monday for the calendar and .ics export to line
+        // up. See src/lib/planDates.ts and migration 20260802000000.
+        start_date: localISODate(mondayOfWeek(new Date())),
+      } as any);
 
       if (error) throw error;
 

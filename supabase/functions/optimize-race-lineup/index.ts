@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -8,6 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MODEL = "claude-sonnet-5";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -22,11 +24,15 @@ serve(async (req) => {
 
     const { team_id, boat_class, athlete_ids, locked_seats = [], race_name, race_date, factor_weights } = await req.json();
 
-    // Cache per sorted athlete set + boat class + locked seats — 1h TTL
-    const cacheKey = `lineup:${team_id}:${boat_class}:${hashKey({ athlete_ids, locked_seats, factor_weights })}`;
+    // Cache per athlete SET + boat class + locked seats + factor weights.
+    // athlete_ids is the pool of candidates to place, not a seat order, so its
+    // ordering is not semantically meaningful — hashKey preserves array order,
+    // so sort explicitly to keep one entry per roster. locked_seats IS ordered
+    // (each entry pins a seat) and is deliberately left alone.
+    const cacheKey = `lineup:${team_id}:${boat_class}:${hashKey({ athlete_ids: [...(athlete_ids ?? [])].sort(), locked_seats, factor_weights })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { function_name: "optimize-race-lineup", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -43,7 +49,7 @@ serve(async (req) => {
       supabase.from("weekly_load_logs").select("*").in("user_id", athlete_ids).order("week_start", { ascending: false }).limit(athlete_ids.length * 4),
     ]);
 
-    const prompt = `You are an elite rowing coach building a race lineup.
+    const prompt = `Elite rowing coach building a race lineup. Balance all factors by the given weights and flag fatigue concerns. Keep every rationale to one short sentence.
 
 Race: ${race_name || "Regatta"} on ${race_date || "upcoming"}
 Boat class: ${boat_class}
@@ -54,8 +60,6 @@ Erg scores (latest per athlete): ${JSON.stringify(ergRes.data?.slice(0, 50) || [
 Recent seat race sessions: ${JSON.stringify(seatRaceRes.data || [])}
 Recent load/fatigue: ${JSON.stringify(loadRes.data || [])}
 Athlete IDs to place: ${JSON.stringify(athlete_ids)}
-
-Build the optimal lineup balancing all factors. Flag any fatigue concerns.
 
 Respond with ONLY valid JSON:
 {
@@ -73,10 +77,13 @@ Respond with ONLY valid JSON:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
-        // Disable adaptive thinking (Sonnet 5 default) — it consumed the 800-token
-        // budget and left an empty {} lineup. Disable + widen for the JSON.
-        max_tokens: 2048,
+        model: MODEL,
+        // thinking MUST stay disabled: adaptive thinking is Sonnet 5's default
+        // and max_tokens caps thinking + text together, so with it on the whole
+        // 800 went to thinking and the lineup came back as {}. With it off the
+        // full 800 is output — enough for a 9-seat 8+ (~730 tokens worst case:
+        // 9 seats x ~52 + cox + overall_rationale + fatigue_flags).
+        max_tokens: 800,
         thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
@@ -94,9 +101,9 @@ Respond with ONLY valid JSON:
     const end = text.lastIndexOf("}");
     const lineup = JSON.parse(text.slice(start, end + 1));
 
-    const usage = result?.usage ?? {};
-    await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { function_name: "optimize-race-lineup", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    const tokens = tokensFrom(result?.usage);
+    await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { function_name: "optimize-race-lineup", model: MODEL, ...tokens, cache_hit: false });
     return new Response(JSON.stringify(lineup), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);

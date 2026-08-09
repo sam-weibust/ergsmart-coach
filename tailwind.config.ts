@@ -58,11 +58,18 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      fontFamily: {
+        sans: ["Proxima Nova", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+      },
       backgroundImage: {
         'gradient-primary': 'var(--gradient-primary)',
         'gradient-hero': 'var(--gradient-hero)',
       },
       boxShadow: {
+        // Design system elevation tokens (DESIGN.md §6)
+        'raised': 'var(--shadow-raised)',
+        'floating': 'var(--shadow-floating)',
+        'overlay': 'var(--shadow-overlay)',
         'glow': 'var(--shadow-glow)',
       },
       transitionTimingFunction: {

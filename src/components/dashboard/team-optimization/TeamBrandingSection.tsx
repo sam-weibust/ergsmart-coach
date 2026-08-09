@@ -40,7 +40,7 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
         .eq("id", teamId)
         .maybeSingle();
       if (data) {
-        setColorInput(data.primary_color || "#0a1628");
+        setColorInput(data.primary_color || "#1A1A2E");
         setSlugInput(data.slug || "");
         setDescInput(data.portal_description || "");
       }
@@ -102,7 +102,7 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading…</div>;
 
-  const color = colorInput || "#0a1628";
+  const color = colorInput || "#1A1A2E";
 
   return (
     <div className="space-y-6">
@@ -186,7 +186,7 @@ export default function TeamBrandingSection({ teamId, isCoach }: Props) {
               value={colorInput}
               disabled={!isCoach}
               onChange={(e) => setColorInput(e.target.value)}
-              placeholder="#0a1628"
+              placeholder="#1A1A2E"
               className="w-32 font-mono text-sm"
             />
             <Button

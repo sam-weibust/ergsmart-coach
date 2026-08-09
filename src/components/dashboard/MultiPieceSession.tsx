@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { csToInterval, parseSplitInput } from "@/lib/ergFormat";
 import { Loader2, Plus, Trash2, Layers } from "lucide-react";
 
 interface MultiPieceSessionProps {
@@ -51,6 +52,17 @@ const fmt = (s: number): string => {
   return `${m}:${sec.toFixed(1).padStart(4, "0")}`;
 };
 
+/**
+ * Seconds → a Postgres INTERVAL literal.
+ *
+ * erg_workouts.duration and erg_workouts.avg_split are INTERVAL columns.
+ * Postgres reads a bare display string like "1:50" as 1 HOUR 50 MINUTES, so
+ * writing fmt() output stored a value 60x too large. Everything that lands in
+ * those columns must go through csToInterval (HH:MM:SS.ss).
+ */
+const secToInterval = (s: number | null): string | null =>
+  s == null || !isFinite(s) || s <= 0 ? null : csToInterval(Math.round(s * 100));
+
 const MultiPieceSession = ({ profile }: MultiPieceSessionProps) => {
   const { toast } = useToast();
   const [pieces, setPieces] = useState<Piece[]>([createPiece()]);
@@ -93,16 +105,21 @@ const MultiPieceSession = ({ profile }: MultiPieceSessionProps) => {
       const pieceRows = pieces.map((p, i) => {
         const dist = parseInt(p.distance) || null;
         const timeSec = parseTime(p.time);
-        let split = p.avgSplit || null;
-        if (!split && dist && timeSec) {
-          split = fmt(timeSec / (dist / 500));
-        }
+        // Prefer the typed split; otherwise derive it from distance + time.
+        // Both paths end up as an INTERVAL literal, never a display string.
+        const typedSplitCs = p.avgSplit ? parseSplitInput(p.avgSplit.trim()) : null;
+        const splitSec =
+          typedSplitCs != null
+            ? typedSplitCs / 100
+            : dist && timeSec
+            ? timeSec / (dist / 500)
+            : null;
         return {
           user_id: profile.id,
           workout_type: "multi_piece",
           distance: dist,
-          duration: p.time || null,
-          avg_split: split,
+          duration: secToInterval(timeSec),
+          avg_split: secToInterval(splitSec),
           avg_heart_rate: parseInt(p.avgHR) || null,
           notes: `Piece ${i + 1}${p.swapErg ? " [Swap Erg]" : ""}${p.notes ? ": " + p.notes : ""}`,
           session_id: sessionId,
@@ -118,8 +135,8 @@ const MultiPieceSession = ({ profile }: MultiPieceSessionProps) => {
         user_id: profile.id,
         workout_type: "multi_piece_summary",
         distance: totalDistance || null,
-        duration: totalTimeSec > 0 ? fmt(totalTimeSec) : null,
-        avg_split: avgPace > 0 ? fmt(avgPace) : null,
+        duration: secToInterval(totalTimeSec),
+        avg_split: secToInterval(avgPace),
         avg_heart_rate: weightedHR,
         notes: `Multi-piece session: ${pieces.length} pieces`,
         session_id: sessionId,

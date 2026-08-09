@@ -149,7 +149,7 @@ export default function MultiSeasonAnalytics({ teamId, teamMembers, isCoach }: P
     .filter((p) => p.totalMeters > 0)
     .reverse();
 
-  const COLORS = ["#0a1628", "#6366f1"];
+  const COLORS = ["#1A1A2E", "#8B8B9E"]; // navy + navy tint (single-accent system)
 
   return (
     <div className="space-y-6">
@@ -269,7 +269,7 @@ export default function MultiSeasonAnalytics({ teamId, teamMembers, isCoach }: P
                       contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
                       formatter={(v: number) => [`${(v / 1000).toFixed(1)}k m`, "Total Meters"]}
                     />
-                    <Line type="monotone" dataKey="totalMeters" stroke="#0a1628" strokeWidth={2} dot={{ fill: "#0a1628", r: 4 }} />
+                    <Line type="monotone" dataKey="totalMeters" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

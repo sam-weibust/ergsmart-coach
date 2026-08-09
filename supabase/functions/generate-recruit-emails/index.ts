@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -82,7 +82,9 @@ Athlete: ${profile?.full_name||"?"}, grad ${profile?.grad_year||profile?.graduat
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        // 400 truncated the 3-email campaign JSON, so it always fell back to empty.
+        // Keep 2000. Output is a general_email plus three full email bodies
+        // (~200 words each) plus coaches[] and campaign_tips[] — ~1300-1600
+        // output tokens. 400 already truncated this once; 500 would too.
         max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: "user", content: `Generate recruiting email campaign for: ${target_school}` }],
@@ -106,10 +108,11 @@ Athlete: ${profile?.full_name||"?"}, grad ${profile?.grad_year||profile?.graduat
       try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch { /* fallback */ }
     }
 
-    await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, usage.input_tokens, usage.output_tokens);
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, parsed, TTL.WEEK, MODEL, tokens.input_tokens, tokens.output_tokens);
     if (user_id) {
-      await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-      await recordUsage(supabase, user_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+      await logUsage(supabase, { user_id, function_name: "generate-recruit-emails", model: MODEL, ...tokens, cache_hit: false });
+      await recordUsage(supabase, user_id, tokens.input_tokens + tokens.output_tokens);
     }
 
     return new Response(JSON.stringify(parsed), {

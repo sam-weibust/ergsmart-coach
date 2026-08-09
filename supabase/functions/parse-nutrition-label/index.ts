@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL, hashKey } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -67,10 +67,9 @@ serve(async (req) => {
       },
     };
 
-    const systemPrompt = `
-You are a nutrition label parser. Extract nutritional information from food packaging photos or nutrition labels.
+    const systemPrompt = `Nutrition label parser. Read food packaging / nutrition label photos.
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in exactly this format:
 {
   "name": "Product name if visible, otherwise describe the food",
   "serving_size": "serving size if visible",
@@ -81,15 +80,11 @@ Return ONLY valid JSON in this exact format:
 }
 
 Rules:
-- If a value is missing or unreadable, return 0.
-- Extract per‑serving values when available.
-- Never include commentary — ONLY return JSON.
-`;
+- Missing or unreadable value: return 0. (grams for protein/carbs/fats, kcal for calories)
+- Use per-serving values when available.
+- No commentary — JSON only.`;
 
-    const userPrompt = `
-Extract the nutritional information from this food/nutrition label image.
-Return ONLY the JSON.
-`;
+    const userPrompt = "Extract the nutritional information from this image.";
 
     // ⭐ CALL ANTHROPIC
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -101,7 +96,12 @@ Return ONLY the JSON.
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2048,
+        // Disable adaptive thinking (Sonnet 5 default) — max_tokens caps
+        // thinking + text together, so with it on the whole budget goes to
+        // thinking and the label comes back empty.
+        thinking: { type: "disabled" },
+        // Fixed 6-field schema, ~80 output tokens. 500 fits with wide headroom.
+        max_tokens: 500,
         system: systemPrompt,
         messages: [
           {
@@ -130,8 +130,9 @@ Return ONLY the JSON.
 
     const nutrition = JSON.parse(text);
 
-    await setCached(supabase, cacheKey, nutrition, TTL.DAY, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, nutrition, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, ...tokens, cache_hit: false });
 
     return new Response(JSON.stringify(nutrition), {
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },

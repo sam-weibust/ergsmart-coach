@@ -59,7 +59,7 @@ export default function TeamPortalPage() {
     enabled: !!team,
   });
 
-  const color = team?.primary_color || "#0a1628";
+  const color = team?.primary_color || "#1A1A2E";
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -87,9 +87,9 @@ export default function TeamPortalPage() {
       <div className="text-white py-10 px-4" style={{ background: color }}>
         <div className="max-w-3xl mx-auto flex items-center gap-5">
           {team.logo_url ? (
-            <img src={team.logo_url} alt={team.name} className="h-20 w-20 rounded-2xl object-cover bg-white shadow-lg" />
+            <img src={team.logo_url} alt={team.name} className="h-20 w-20 rounded-lg object-cover bg-white shadow-lg" />
           ) : (
-            <img src={crewsyncLogo} alt="CrewSync" className="h-20 w-20 rounded-2xl object-cover shadow-lg" />
+            <img src={crewsyncLogo} alt="CrewSync" className="h-20 w-20 rounded-lg object-cover shadow-lg" />
           )}
           <div>
             <h1 className="text-3xl font-black">{team.name}</h1>
@@ -102,17 +102,17 @@ export default function TeamPortalPage() {
       <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-xl border border-border p-4 text-center">
+          <div className="rounded-lg border border-border p-4 text-center">
             <Users className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
             <p className="text-2xl font-black text-foreground">{team.team_members?.length ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Athletes</p>
           </div>
-          <div className="rounded-xl border border-border p-4 text-center">
+          <div className="rounded-lg border border-border p-4 text-center">
             <Trophy className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
             <p className="text-2xl font-black text-foreground">{ergStats?.avg2k ? formatSplit(ergStats.avg2k) : "—"}</p>
             <p className="text-xs text-muted-foreground mt-1">Avg 2K</p>
           </div>
-          <div className="rounded-xl border border-border p-4 text-center">
+          <div className="rounded-lg border border-border p-4 text-center">
             <Waves className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
             <p className="text-2xl font-black text-foreground">
               {ergStats?.totalMeters ? `${(ergStats.totalMeters / 1_000_000).toFixed(1)}M` : "—"}
@@ -128,7 +128,7 @@ export default function TeamPortalPage() {
               <Trophy className="h-4 w-4" style={{ color }} />
               Top Athletes — 2K Leaderboard
             </h2>
-            <div className="rounded-2xl border border-border overflow-hidden">
+            <div className="rounded-lg border border-border overflow-hidden">
               {top5.map((m: any, i: number) => (
                 <div
                   key={m.user_id}
@@ -148,12 +148,12 @@ export default function TeamPortalPage() {
         )}
 
         {/* Join CTA */}
-        <div className="rounded-2xl p-6 text-center text-white" style={{ background: color }}>
+        <div className="rounded-lg p-6 text-center text-white" style={{ background: color }}>
           <h2 className="text-xl font-bold mb-2">Want to join {team.name}?</h2>
           <p className="text-white/70 text-sm mb-4">Ask your coach for the team join code, then sign up on CrewSync.</p>
           <Link
             to="/auth"
-            className="inline-block bg-white font-bold px-6 py-2.5 rounded-xl text-sm hover:bg-white/90 transition-colors"
+            className="inline-block bg-white font-bold px-6 py-2.5 rounded-lg text-sm hover:bg-white/90 transition-colors"
             style={{ color }}
           >
             Join CrewSync Free →

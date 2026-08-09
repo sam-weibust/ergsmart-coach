@@ -23,13 +23,13 @@ export const EVENT_TYPES = [
   { value: "strength",   label: "Strength",     color: "#7c3aed" },
   { value: "rest_day",   label: "Rest Day",     color: "#6b7280" },
   { value: "travel",     label: "Travel",       color: "#0d9488" },
-  { value: "other",      label: "Other",        color: "#0a1628" },
+  { value: "other",      label: "Other",        color: "#1A1A2E" },
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number]["value"];
 
 export function getEventColor(type: EventType | string): string {
-  return EVENT_TYPES.find(e => e.value === type)?.color ?? "#0a1628";
+  return EVENT_TYPES.find(e => e.value === type)?.color ?? "#1A1A2E";
 }
 
 interface Props {

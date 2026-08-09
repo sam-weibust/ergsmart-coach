@@ -66,7 +66,7 @@ export function StreakWidget() {
   if (current === 0 && longest === 0) return null;
 
   return (
-    <Card className="bg-gradient-to-r from-[#0a1628] to-[#112240] border-orange-500/30 overflow-hidden">
+    <Card className="bg-primary border-orange-500/30 overflow-hidden">
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

@@ -22,7 +22,7 @@ export function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, ma
   const iW = W - PAD.left - PAD.right;
   const iH = H - PAD.top - PAD.bottom;
 
-  ctx.strokeStyle = "#1e2d45";
+  ctx.strokeStyle = "#E2E1E9";
   ctx.lineWidth = 1;
 
   // Horizontal grid lines (every 25% of maxN)
@@ -36,8 +36,8 @@ export function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, ma
 
     // Y labels
     const label = Math.round(maxN * (1 - i / yTicks));
-    ctx.fillStyle = "#4b6080";
-    ctx.font = "10px 'Inter', system-ui, sans-serif";
+    ctx.fillStyle = "#6B6B7D";
+    ctx.font = "10px 'Proxima Nova', system-ui, sans-serif";
     ctx.textAlign = "right";
     ctx.fillText(`${label}N`, PAD.left - 6, y + 3.5);
   }
@@ -52,15 +52,15 @@ export function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, ma
     ctx.stroke();
 
     // X labels
-    ctx.fillStyle = "#4b6080";
-    ctx.font = "10px 'Inter', system-ui, sans-serif";
+    ctx.fillStyle = "#6B6B7D";
+    ctx.font = "10px 'Proxima Nova', system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(`${pct}%`, x, PAD.top + iH + 16);
   }
 
   // Axis labels
-  ctx.fillStyle = "#6b7a99";
-  ctx.font = "10px 'Inter', system-ui, sans-serif";
+  ctx.fillStyle = "#6B6B7D";
+  ctx.font = "10px 'Proxima Nova', system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Drive Phase", PAD.left + iW / 2, H - 4);
 

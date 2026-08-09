@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logUsage } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -10,6 +10,17 @@ const corsHeaders = {
 
 const MODEL = "claude-sonnet-5";
 const FN = "import-team-plan";
+
+/**
+ * True when the plan actually contains weeks. Mirrors the shapes
+ * personalizePlanData accepts. Used as the cache guard on both sides so a
+ * degenerate parse (`{}`, or a model reply with no JSON) is never written to
+ * the cache and never served from it.
+ */
+function hasPlanWeeks(p: any): boolean {
+  const weeks = Array.isArray(p?.plan) ? p.plan : Array.isArray(p?.weeks) ? p.weeks : Array.isArray(p) ? p : [];
+  return weeks.length > 0;
+}
 
 function formatPace(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -140,12 +151,8 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Failsafe 9 + 1: circuit breaker + per-user daily limits.
-    const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
-    if (blocked) return blocked;
-
     // Call Anthropic to parse the spreadsheet
-    const userMessage = `Parse this rowing training plan spreadsheet and extract a structured weekly plan. Return valid JSON matching this schema exactly:
+    const userMessage = `Parse this rowing training plan spreadsheet into a structured weekly plan. Return valid JSON matching this schema exactly:
 {
   "total_weeks": number,
   "plan": [
@@ -178,52 +185,97 @@ serve(async (req) => {
 }
 
 Rules:
-- If splits are expressed as 2K+X or 2K-X keep them exactly as written
-- If splits are absolute, convert to 2K+X format using 7:00 2K baseline (28s/500m base)
-- Express all pace targets as 2K±Xs/500m format
+- Splits already written as 2K+X or 2K-X: keep exactly as written.
+- Absolute splits: convert to 2K+X using a 7:00 2K baseline (28s/500m base).
+- Express every pace target as 2K±Xs/500m.
 
 File content:
 ${file_content}`;
 
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+    const SYSTEM_PROMPT =
+      "Rowing training plan parser. Parse the provided spreadsheet content and return ONLY valid JSON. No explanation, no markdown.";
+
+    // Cache the MODEL OUTPUT (the parsed plan), not the HTTP response: the
+    // response carries a freshly-inserted team_plan_id and athlete count, which
+    // must not be replayed. Keyed on the source document alone — the parse is a
+    // pure function of file_content, so the same spreadsheet imported by a
+    // different team or under a different title reuses the entry (team_id,
+    // coach_id and title affect only the DB rows written below, never the parse).
+    const cacheKey = `import-team-plan_${hashKey({ system: SYSTEM_PROMPT, file_content })}`;
+    const cachedPlan = await getCached(supabase, cacheKey);
+    let planData: any = hasPlanWeeks(cachedPlan) ? cachedPlan : null;
+    const cacheHit = planData !== null;
+
+    if (cacheHit) {
+      await logUsage(supabase, {
+        user_id: coach_id ?? null,
+        function_name: FN,
         model: MODEL,
-        // Disable adaptive thinking (Sonnet 5 default) and widen the budget so the
-        // parsed plan JSON isn't truncated (8000 with thinking on failed to parse).
-        max_tokens: 16000,
-        thinking: { type: "disabled" },
-        system:
-          "You are a rowing training plan parser. Parse the provided training plan spreadsheet content and return ONLY valid JSON with no explanation or markdown.",
-        messages: [{ role: "user", content: userMessage }],
-      }),
-    });
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_hit: true,
+      });
+    } else {
+      // Failsafe 9 + 1: circuit breaker + per-user daily limits (after cache check).
+      const blocked = await preflight(supabase, { userId: coach_id ?? null, functionName: FN, corsHeaders });
+      if (blocked) return blocked;
 
-    if (!claudeResponse.ok) {
-      console.error("Anthropic error:", await claudeResponse.text());
-      await recordApiError(supabase, FN);
-      return jsonError(corsHeaders, 503, "AI service unavailable");
-    }
-    await recordApiSuccess(supabase, FN);
+      const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          // Disable adaptive thinking (Sonnet 5 default) and widen the budget so the
+          // parsed plan JSON isn't truncated (8000 with thinking on failed to parse).
+          max_tokens: 16000,
+          thinking: { type: "disabled" },
+          system: SYSTEM_PROMPT,
+          messages: [{ role: "user", content: userMessage }],
+        }),
+      });
 
-    const claudeData = await claudeResponse.json();
-    const rawText = claudeData.content?.[0]?.text || "";
-    const usage = claudeData?.usage ?? {};
-    await logUsage(supabase, { user_id: coach_id ?? null, function_name: FN, model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+      if (!claudeResponse.ok) {
+        console.error("Anthropic error:", await claudeResponse.text());
+        await recordApiError(supabase, FN);
+        return jsonError(corsHeaders, 503, "AI service unavailable");
+      }
+      await recordApiSuccess(supabase, FN);
 
-    let planData: any;
-    try {
-      // Strip markdown fences if present
-      const cleaned = rawText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-      planData = JSON.parse(cleaned);
-    } catch {
-      throw new Error("Failed to parse Claude response as JSON");
+      const claudeData = await claudeResponse.json();
+      const rawText = claudeData.content?.[0]?.text || "";
+      const tok = tokensFrom(claudeData?.usage);
+      await logUsage(supabase, {
+        user_id: coach_id ?? null,
+        function_name: FN,
+        model: MODEL,
+        input_tokens: tok.input_tokens,
+        output_tokens: tok.output_tokens,
+        cache_creation_input_tokens: tok.cache_creation_input_tokens,
+        cache_read_input_tokens: tok.cache_read_input_tokens,
+        cache_hit: false,
+      });
+      await recordUsage(supabase, coach_id, tok.input_tokens + tok.output_tokens);
+
+      try {
+        // Strip markdown fences if present
+        const cleaned = rawText.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        planData = JSON.parse(cleaned);
+      } catch {
+        throw new Error("Failed to parse Claude response as JSON");
+      }
+
+      // A week: parsing a fixed document is stable, and re-importing the same
+      // spreadsheet (retry, second team, corrected title) is the common case.
+      // Not PERMANENT — a prompt/schema change on deploy should age out.
+      if (hasPlanWeeks(planData)) {
+        await setCached(supabase, cacheKey, planData, TTL.WEEK, MODEL, tok.input_tokens, tok.output_tokens);
+      }
     }
 
     const planTitle = title || file_name || "Imported Team Plan";
@@ -262,7 +314,7 @@ ${file_content}`;
         athletes_updated: athletesUpdated,
         total_weeks: totalWeeks,
       }),
-      { headers: { ...corsHeaders, "content-type": "application/json" } },
+      { headers: { ...corsHeaders, "content-type": "application/json", "X-Cache": cacheHit ? "HIT" : "MISS" } },
     );
   } catch (err: any) {
     return new Response(

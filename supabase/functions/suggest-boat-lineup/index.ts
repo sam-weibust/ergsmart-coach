@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -8,6 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const MODEL = "claude-haiku-4-5";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -25,12 +27,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Cache per sorted athlete pool + boat class + locked seats — 1h TTL
+    // Cache per athlete pool + boat class + locked seats — 1h TTL.
+    // The pool is a SET of candidates (the order the client happens to send
+    // them in carries no meaning), and hashKey preserves array order, so sort
+    // the ids explicitly or the same pool produces a different key each time.
+    // locked_seats is NOT sorted — those entries are seat assignments and
+    // their ordering is part of the input.
     const athleteIds = athlete_pool.map((a: any) => a.id);
-    const cacheKey = `suggest_lineup:${team_id}:${boat_class}:${hashKey({ athleteIds, locked_seats })}`;
+    const cacheKey = `suggest_lineup:${team_id}:${boat_class}:${hashKey({ athleteIds: [...athleteIds].sort(), locked_seats })}`;
     const cached = await getCached(supabase, cacheKey);
     if (cached) {
-      await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-5", input_tokens: 0, output_tokens: 0, cache_hit: true });
+      await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
       });
@@ -69,21 +76,20 @@ serve(async (req) => {
     const totalSeats = SEAT_COUNTS[boat_class] || 8;
     const hasCox = boat_class.includes("+");
 
-    const prompt = `You are an expert rowing coach optimizing a boat lineup.
+    const prompt = `Expert rowing coach optimizing a boat lineup.
 
-Boat class: ${boat_class} (${totalSeats} seats total${hasCox ? ", seat 1 is coxswain" : ""})
+Boat class: ${boat_class} (${totalSeats} seats${hasCox ? ", seat 1 is coxswain" : ""})
 Locked seats (do not change): ${JSON.stringify(locked_seats)}
 
-Available athletes:
-${JSON.stringify(athleteData, null, 2)}
+Athletes:
+${JSON.stringify(athleteData)}
 
-Rules for rowing lineup:
-- Seat 1 is bow (lightest/smallest usually), highest seat number is stroke
-${hasCox ? "- Seat 1 in this format is COXSWAIN (lightest, best race IQ, leadership)" : ""}
+RULES:
+- Seat 1 = bow (usually lightest), highest seat number = stroke
+${hasCox ? "- Seat 1 is COXSWAIN: lightest, best race IQ and leadership" : ""}
 - Balance port (even seats) vs starboard (odd seats) by weight
-- Put strongest 2k performers at stroke end (highest seats)
-- Respect side preferences when possible
-- For 8+: seats 8=stroke, 7=seven, 6=six, 5=five, 4=four, 3=three, 2=two, 1=bow${hasCox ? ", cox=separate" : ""}
+- Strongest 2k performers at the stroke end (highest seats)
+- Respect side_preference where possible
 
 Respond with ONLY valid JSON, no extra text:
 {
@@ -101,11 +107,12 @@ Respond with ONLY valid JSON, no extra text:
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
-        // Disable adaptive thinking (Sonnet 5 default) — it consumed the token
-        // budget and left an empty {} lineup.
-        max_tokens: 2048,
-        thinking: { type: "disabled" },
+        model: MODEL,
+        // Haiku 4.5 does not think by default, so the `thinking` block that
+        // Sonnet 5 needed here is gone. 500 would truncate an 8+: 9 seats x
+        // ~50 tokens (uuid + name + one-sentence rationale) + cox + balance
+        // notes + a 2-3 sentence overall_rationale is ~600 tokens.
+        max_tokens: 900,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -124,8 +131,9 @@ Respond with ONLY valid JSON, no extra text:
     const end = text.lastIndexOf("}");
     const suggestion = JSON.parse(text.slice(start, end + 1));
 
-    await setCached(supabase, cacheKey, suggestion, TTL.HOUR, "claude-sonnet-5", usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: "claude-sonnet-5", input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    const tokens = tokensFrom(usage);
+    await setCached(supabase, cacheKey, suggestion, TTL.HOUR, MODEL, tokens.input_tokens, tokens.output_tokens);
+    await logUsage(supabase, { user_id: null, function_name: "suggest-boat-lineup", model: MODEL, ...tokens, cache_hit: false });
     return new Response(JSON.stringify(suggestion), { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error(e);

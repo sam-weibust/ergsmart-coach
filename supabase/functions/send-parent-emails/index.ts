@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { recordApiError, recordApiSuccess } from "../_shared/aiGuard.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
+
+const MODEL = "claude-haiku-4-5";
+const FN = "send-parent-emails";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = Deno.env.get("RESEND_FROM_EMAIL") ?? "CrewSync <noreply@crewsync.app>";
@@ -36,8 +40,32 @@ function getWeekRange(): { start: string; end: string } {
   };
 }
 
+/**
+ * CACHING SCOPE — read before widening this.
+ *
+ * The email itself is NOT cached and never should be. Each send is addressed to
+ * one parent and interpolates that family's athlete name, that athlete's coach
+ * note, and a per-recipient unsubscribe token derived from their email address.
+ * Caching at the email or per-send level would risk delivering one family's copy
+ * to another, and would suppress sends the caller asked for. There is also
+ * nothing to gain: `buildEmailHtml` is local string work with no API call.
+ *
+ * What IS cached is the one genuinely reusable sub-part: the Anthropic-generated
+ * summary paragraph. It is a pure function of four values (athlete name and the
+ * three week statistics) plus the week it covers, and every one of those is in
+ * the cache key — so a hit can only ever return the text that this exact input
+ * would have produced. Two athletes cannot collide unless their name AND all
+ * three stats AND the week are identical, in which case the generated paragraph
+ * would be identical anyway.
+ *
+ * The payoff is real: this runs as a weekly batch over every athlete on every
+ * opted-in team, and a re-run after a partial Resend failure (or a manual
+ * re-trigger for the same week) currently re-pays for every summary.
+ */
 async function generateAISummary(
+  athleteId: string,
   athleteName: string,
+  weekStart: string,
   weekMeters: number,
   practices: number,
   seasonAvgMeters: number,
@@ -45,27 +73,78 @@ async function generateAISummary(
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) return "";
 
+  const roundedSeasonAvg = Math.round(seasonAvgMeters);
+
+  // Every input that shapes the paragraph is in the key. week_start is the date
+  // component: the summary is explicitly "this week", so it must not be reused
+  // across weeks even if the statistics happen to repeat.
+  const cacheKey = `send-parent-emails_${hashKey({
+    athlete_id: athleteId,
+    athlete_name: athleteName,
+    week_start: weekStart,
+    week_meters: weekMeters,
+    practices,
+    season_avg_meters: roundedSeasonAvg,
+  })}`;
+
+  const cached = await getCached(supabase, cacheKey) as { summary?: string } | null;
+  if (cached && typeof cached.summary === "string") {
+    await logUsage(supabase, {
+      user_id: athleteId,
+      function_name: FN,
+      model: MODEL,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_hit: true,
+    });
+    return cached.summary;
+  }
+
   try {
-    const prompt = `Write a single encouraging paragraph (2-3 sentences) summarizing an athlete's week for their parent. Athlete: ${athleteName}. This week: ${weekMeters.toLocaleString()}m logged, ${practices} practices attended. Season average per week: ${Math.round(seasonAvgMeters).toLocaleString()}m. Be positive and specific. Do not use markdown. Keep it under 60 words.`;
+    const prompt = `Write one encouraging paragraph (2-3 sentences, under 60 words, no markdown) summarizing an athlete's week for their parent. Be positive and specific.
+Athlete: ${athleteName}
+This week: ${weekMeters.toLocaleString()}m logged, ${practices} practices attended
+Season average per week: ${roundedSeasonAvg.toLocaleString()}m`;
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model: MODEL,
+        // 150, not 500: the required output is capped at 60 words (~90 tokens).
         max_tokens: 150,
         messages: [{ role: "user", content: prompt }],
       }),
     });
     if (!resp.ok) {
       console.error("Anthropic error:", resp.status, await resp.text());
-      await recordApiError(supabase, "send-parent-emails");
+      await recordApiError(supabase, FN);
       return "";
     }
-    await recordApiSuccess(supabase, "send-parent-emails");
+    await recordApiSuccess(supabase, FN);
     const data = await resp.json();
-    return data.content?.[0]?.text || "";
+    const tok = tokensFrom(data?.usage);
+    await logUsage(supabase, {
+      user_id: athleteId,
+      function_name: FN,
+      model: MODEL,
+      input_tokens: tok.input_tokens,
+      output_tokens: tok.output_tokens,
+      cache_creation_input_tokens: tok.cache_creation_input_tokens,
+      cache_read_input_tokens: tok.cache_read_input_tokens,
+      cache_hit: false,
+    });
+
+    const summary = data.content?.[0]?.text || "";
+    // A week: the entry is scoped to one week_start and is dead after it.
+    // Never cache an empty summary — that would pin the failure for a week.
+    if (summary) {
+      await setCached(supabase, cacheKey, { summary }, TTL.WEEK, MODEL, tok.input_tokens, tok.output_tokens);
+    }
+    return summary;
   } catch {
-    await recordApiError(supabase, "send-parent-emails");
+    await recordApiError(supabase, FN);
     return "";
   }
 }
@@ -296,8 +375,15 @@ serve(async (req) => {
           .eq("week_of", weekStart)
           .maybeSingle();
 
-        // AI summary
-        const aiSummary = await generateAISummary(athleteName, weekMeters, practicesAttended, seasonAvgWeekly);
+        // AI summary (cached per athlete + week + stats; see generateAISummary)
+        const aiSummary = await generateAISummary(
+          athlete_id,
+          athleteName,
+          weekStart,
+          weekMeters,
+          practicesAttended,
+          seasonAvgWeekly,
+        );
 
         // Build and send email
         const unsubscribeToken = btoa(`${team_id}:${athlete_id}:${parent_email}`);

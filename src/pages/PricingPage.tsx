@@ -38,7 +38,7 @@ const INDIVIDUAL_PLANS = [
     price: 8,
     betaPrice: 6.40,
     badge: "Most Popular",
-    badgeColor: "bg-blue-500",
+    badgeColor: "bg-primary",
     cta: "Coming Fall 2026",
     ctaHref: null,
     features: [
@@ -64,7 +64,7 @@ const INDIVIDUAL_PLANS = [
     price: 14,
     betaPrice: 11.20,
     badge: "Best Value",
-    badgeColor: "bg-purple-500",
+    badgeColor: "bg-primary",
     cta: "Coming Fall 2026",
     ctaHref: null,
     features: [
@@ -160,7 +160,7 @@ const ORG_PLAN = {
   price: 899,
   betaPrice: 719,
   badge: "Multi-Program",
-  badgeColor: "bg-amber-600",
+  badgeColor: "bg-[hsl(var(--warning))]",
   cta: "Coming Fall 2026",
   ctaHref: null,
   maxAthletes: "Up to 5 teams · 500 athletes",
@@ -292,7 +292,7 @@ function IndividualPlanCard({ plan }: { plan: typeof INDIVIDUAL_PLANS[0] }) {
   const hasBeta = plan.price > 0;
 
   return (
-    <div className="relative flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="relative flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
       {plan.badge && (
         <span className={`absolute -top-3 left-6 text-xs font-semibold text-white px-3 py-1 rounded-full ${plan.badgeColor}`}>
           {plan.badge}
@@ -334,14 +334,14 @@ function IndividualPlanCard({ plan }: { plan: typeof INDIVIDUAL_PLANS[0] }) {
       {plan.ctaHref ? (
         <Link
           to={plan.ctaHref}
-          className="block text-center py-2.5 rounded-xl font-semibold text-sm bg-[#0a1628] text-white hover:bg-[#152238] transition-colors mb-5"
+          className="block text-center py-2.5 rounded-lg font-semibold text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors mb-5"
         >
           {plan.cta}
         </Link>
       ) : (
         <button
           disabled
-          className="block w-full text-center py-2.5 rounded-xl font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
+          className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
         >
           {plan.cta}
         </button>
@@ -375,7 +375,7 @@ function TeamPlanCard({ name, badge, badgeColor, pricing, teamSize, features, in
   const sizeLabel = teamSize === "unlimited" ? "150+ athletes" : `up to ${teamSize} athletes`;
 
   return (
-    <div className="relative flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="relative flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
       <span className={`absolute -top-3 left-6 text-xs font-semibold text-white px-3 py-1 rounded-full ${badgeColor}`}>
         {badge}
       </span>
@@ -409,7 +409,7 @@ function TeamPlanCard({ name, badge, badgeColor, pricing, teamSize, features, in
 
       <button
         disabled
-        className="block w-full text-center py-2.5 rounded-xl font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
+        className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
       >
         Coming Fall 2026
       </button>
@@ -430,7 +430,7 @@ function TeamPlanCard({ name, badge, badgeColor, pricing, teamSize, features, in
 
 function OrgPlanCard() {
   return (
-    <div className="relative flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow max-w-xl mx-auto">
+    <div className="relative flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm hover:shadow-md transition-shadow max-w-xl mx-auto">
       <span className={`absolute -top-3 left-6 text-xs font-semibold text-white px-3 py-1 rounded-full ${ORG_PLAN.badgeColor}`}>
         {ORG_PLAN.badge}
       </span>
@@ -459,7 +459,7 @@ function OrgPlanCard() {
 
       <button
         disabled
-        className="block w-full text-center py-2.5 rounded-xl font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
+        className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
       >
         Coming Fall 2026
       </button>
@@ -481,14 +481,14 @@ function OrgPlanCard() {
 function TeamSizeSelector({ selected, onChange }: { selected: TeamSize; onChange: (s: TeamSize) => void }) {
   return (
     <div className="flex justify-center">
-      <div className="inline-flex items-center bg-muted rounded-xl p-1 gap-1">
+      <div className="inline-flex items-center bg-muted rounded-lg p-1 gap-1">
         {TEAM_SIZE_OPTIONS.map((opt) => (
           <button
             key={opt.key}
             onClick={() => onChange(opt.key)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
               selected === opt.key
-                ? "bg-[#0a1628] text-white shadow"
+                ? "bg-primary text-primary-foreground shadow"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -514,11 +514,11 @@ export default function PricingPage() {
       <nav className="border-b border-border bg-background/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <span className="font-black text-xl text-[#0a1628] dark:text-white">CrewSync</span>
+            <span className="font-display text-xl text-foreground">CrewSync</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign in</Link>
-            <Link to="/auth" className="text-sm font-semibold bg-[#0a1628] text-white px-4 py-2 rounded-xl hover:bg-[#152238] transition-colors">
+            <Link to="/auth" className="text-sm font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
               Get started free
             </Link>
           </div>
@@ -526,7 +526,7 @@ export default function PricingPage() {
       </nav>
 
       {/* Beta banner */}
-      <div className="bg-[#0a1628] text-white text-center py-3 px-4">
+      <div className="bg-primary text-primary-foreground text-center py-3 px-4">
         <p className="text-sm font-medium">
           🎉 <strong>All features are free during beta.</strong> Paid plans launch Fall 2026 — sign up now to lock in <strong>20% off all plans for life.</strong>
         </p>
@@ -555,16 +555,16 @@ export default function PricingPage() {
             </div>
           </div>
 
-          <div className="inline-flex items-center bg-muted rounded-xl p-1 mt-6">
+          <div className="inline-flex items-center bg-muted rounded-lg p-1 mt-6">
             <button
               onClick={() => { setPlanType("individual"); setShowOrg(false); }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "individual" && !showOrg ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "individual" && !showOrg ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
             >
               Individual
             </button>
             <button
               onClick={() => { setPlanType("team"); setShowOrg(false); }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "team" && !showOrg ? "bg-[#0a1628] text-white shadow" : "text-muted-foreground hover:text-foreground"}`}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${planType === "team" && !showOrg ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
             >
               Team / Coach
             </button>
@@ -585,14 +585,14 @@ export default function PricingPage() {
           </div>
         ) : showOrg ? (
           <>
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 text-sm text-amber-800 dark:text-amber-300 text-center">
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-300 text-center">
               <strong>Organization Plan</strong> — manage up to 5 teams and 500 athletes under one roof. Includes SafeSport compliant messaging, equipment inventory, dues collection, and board reporting. Additional teams $100/month each.
             </div>
             <OrgPlanCard />
           </>
         ) : (
           <>
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 text-sm text-blue-800 dark:text-blue-300 text-center">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-300 text-center">
               <strong>Athletes don't need a paid plan.</strong> Free users get full team participation. Team plans cover the coach — athletes automatically inherit individual benefits based on your plan tier.
             </div>
 
@@ -624,7 +624,7 @@ export default function PricingPage() {
             </div>
 
             {/* CrewLAB comparison callout */}
-            <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-6">
+            <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-6">
               <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 <span className="font-bold text-slate-900 dark:text-white">CrewLAB charges $167/month</span> for communication tools only.{" "}
                 <span className="font-bold text-slate-900 dark:text-white">CrewSync at ${TEAM_PRO_PRICING[teamSize].price}/month</span> includes everything CrewLAB does{" "}
@@ -635,7 +635,7 @@ export default function PricingPage() {
             <div className="text-center">
               <button
                 onClick={() => setShowOrg(true)}
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border border-border rounded-xl px-5 py-2.5"
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border border-border rounded-lg px-5 py-2.5"
               >
                 <Building2 className="h-4 w-4" />
                 View Organization Plan ($899/mo) →
@@ -645,7 +645,7 @@ export default function PricingPage() {
         )}
 
         {/* Beta discount note */}
-        <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl p-5 text-center">
+        <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-5 text-center">
           <p className="text-green-800 dark:text-green-300 font-semibold text-sm">
             🎉 Beta users lock in 20% off all plans for life — applied automatically when billing launches. No coupon needed.
           </p>
@@ -660,7 +660,7 @@ export default function PricingPage() {
               { icon: Shield, title: "Lock in 20% off, forever", desc: "Beta users are flagged in our system. When billing launches you automatically receive 20% off your chosen plan for life.", color: "text-green-500" },
               { icon: Sparkles, title: "Help shape the product", desc: "Your feedback directly influences what gets built. Beta users get early access to new features before anyone else.", color: "text-purple-500" },
             ].map(({ icon: Icon, title, desc, color }) => (
-              <div key={title} className="bg-card border border-border rounded-2xl p-6 space-y-3">
+              <div key={title} className="bg-card border border-border rounded-lg p-6 space-y-3">
                 <Icon className={`h-8 w-8 ${color}`} />
                 <h3 className="font-bold text-foreground">{title}</h3>
                 <p className="text-sm text-muted-foreground">{desc}</p>
@@ -672,10 +672,10 @@ export default function PricingPage() {
         {/* Comparison table */}
         <div className="space-y-6">
           <h2 className="text-3xl font-black text-center text-foreground">Full feature comparison</h2>
-          <div className="overflow-x-auto rounded-2xl border border-border">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm min-w-[600px]">
               <thead>
-                <tr className="bg-[#0a1628] text-white">
+                <tr className="bg-primary text-primary-foreground">
                   <th className="text-left py-4 px-4 font-semibold w-52">Feature</th>
                   <th className="text-center py-4 px-3 font-semibold">Free</th>
                   <th className="text-center py-4 px-3 font-semibold">Pro</th>
@@ -710,7 +710,7 @@ export default function PricingPage() {
         </div>
 
         {/* Nonprofit callout */}
-        <div className="bg-[#0a1628] rounded-2xl p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center gap-6">
+        <div className="bg-primary rounded-lg p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center gap-6">
           <div className="flex-1 space-y-3">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-white/70 shrink-0" />
@@ -723,7 +723,7 @@ export default function PricingPage() {
           <div className="shrink-0 flex flex-col items-start md:items-end gap-2">
             <a
               href="mailto:sam.weibust@gmail.com?subject=CrewSync%20Nonprofit%20Application&body=Organization%20name%3A%20%0AEIN%3A%20%0ABrief%20description%20of%20your%20program%3A%20"
-              className="inline-block bg-white text-[#0a1628] font-bold px-6 py-3 rounded-xl text-sm hover:bg-white/90 transition-colors whitespace-nowrap"
+              className="inline-block bg-background text-foreground font-bold px-6 py-3 rounded-lg text-sm hover:bg-background/90 transition-colors whitespace-nowrap"
             >
               Contact Us
             </a>
@@ -738,7 +738,7 @@ export default function PricingPage() {
           <h2 className="text-3xl font-black text-center text-foreground">Frequently asked questions</h2>
           <div className="space-y-3">
             {FAQ_ITEMS.map((item, i) => (
-              <div key={i} className="border border-border rounded-xl overflow-hidden">
+              <div key={i} className="border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
                   className="w-full flex items-center justify-between px-5 py-4 text-left font-semibold text-foreground hover:bg-muted/50 transition-colors"
@@ -757,7 +757,7 @@ export default function PricingPage() {
         </div>
 
         {/* CTA */}
-        <div className="bg-[#0a1628] rounded-3xl p-10 text-center space-y-5">
+        <div className="bg-primary rounded-lg p-10 text-center space-y-5">
           <h2 className="text-3xl font-black text-white">Start free. Lock in your discount.</h2>
           <p className="text-white/70 text-lg max-w-xl mx-auto">
             Sign up today while everything is free and secure your 20% beta user discount — applied automatically when billing launches Fall 2026.
@@ -765,13 +765,13 @@ export default function PricingPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to="/auth"
-              className="inline-block bg-white text-[#0a1628] font-bold px-8 py-3.5 rounded-xl text-sm hover:bg-white/90 transition-colors"
+              className="inline-block bg-background text-foreground font-bold px-8 py-3.5 rounded-lg text-sm hover:bg-background/90 transition-colors"
             >
               Get started free →
             </Link>
             <Link
               to="/dashboard"
-              className="inline-block border border-white/30 text-white font-semibold px-8 py-3.5 rounded-xl text-sm hover:bg-white/10 transition-colors"
+              className="inline-block border border-white/30 text-white font-semibold px-8 py-3.5 rounded-lg text-sm hover:bg-white/10 transition-colors"
             >
               Go to dashboard
             </Link>

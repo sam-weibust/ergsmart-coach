@@ -24,7 +24,7 @@ export interface AthleteTabProps {
   /** Active team display name, or null when not on a team. */
   teamName: string | null;
   /**
-   * Team primary color hex (e.g. "#0a1628"). Falls back to the CrewSync default
+   * Team primary color hex (e.g. "#1A1A2E"). Falls back to the CrewSync default
    * color when the athlete has no team. Use for active states / accents.
    */
   teamColor: string;

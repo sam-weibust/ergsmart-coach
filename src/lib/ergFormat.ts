@@ -88,6 +88,119 @@ export function csToInterval(cs: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${s.toFixed(2).padStart(5, "0")}`;
 }
 
+// ── Live landscape view helpers ──────────────────────────────────────────────
+// Added for the landscape LiveErgView rebuild. Pure functions so the projected
+// finish maths and the force-curve scores can be reasoned about (and tested)
+// without a PM5 on the other end of a Bluetooth link.
+
+/** Seconds of elapsed time below which a projection is pure noise. */
+export const PROJECTION_MIN_ELAPSED_SEC = 3;
+
+/** m:ss (or h:mm:ss) from whole seconds. Returns "—" for anything unusable. */
+export function fmtClock(totalSeconds: number | null | undefined): string {
+  if (totalSeconds == null || !Number.isFinite(totalSeconds) || totalSeconds < 0) return "—";
+  const s   = Math.round(totalSeconds);
+  const h   = Math.floor(s / 3600);
+  const m   = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/**
+ * Projected finish time (seconds) for a DISTANCE target.
+ *
+ *   ((target - dist) * splitSeconds / 500) + elapsedSeconds
+ *
+ * Returns null — never Infinity/NaN — when the inputs cannot support a
+ * projection: no target, the first few seconds of a piece, a zero/absurd split.
+ */
+export function projectedFinishSeconds(
+  targetMeters: number | null | undefined,
+  distanceMeters: number | null | undefined,
+  splitCs: number | null | undefined,
+  elapsedCs: number | null | undefined,
+): number | null {
+  if (targetMeters == null || !Number.isFinite(targetMeters) || targetMeters <= 0) return null;
+  const elapsedSec = (elapsedCs ?? 0) / 100;
+  if (!Number.isFinite(elapsedSec) || elapsedSec < PROJECTION_MIN_ELAPSED_SEC) return null;
+  const dist = distanceMeters ?? 0;
+  if (!Number.isFinite(dist) || dist < 0) return null;
+
+  const remaining = targetMeters - dist;
+  if (remaining <= 0) return elapsedSec;          // already there — it *is* the finish
+
+  const splitSec = (splitCs ?? 0) / 100;
+  if (!Number.isFinite(splitSec) || splitSec <= 0 || splitSec > 1000) return null;
+
+  const total = elapsedSec + (remaining * splitSec) / 500;
+  if (!Number.isFinite(total) || total > 24 * 3600) return null;
+  return total;
+}
+
+/**
+ * Projected distance (metres) for a TIME target.
+ *
+ *   dist + (dist / elapsedSeconds) * remainingSeconds
+ *
+ * Guards the elapsed≈0 divide-by-zero and returns null instead of Infinity.
+ */
+export function projectedDistanceMeters(
+  targetSeconds: number | null | undefined,
+  distanceMeters: number | null | undefined,
+  elapsedCs: number | null | undefined,
+): number | null {
+  if (targetSeconds == null || !Number.isFinite(targetSeconds) || targetSeconds <= 0) return null;
+  const elapsedSec = (elapsedCs ?? 0) / 100;
+  if (!Number.isFinite(elapsedSec) || elapsedSec < PROJECTION_MIN_ELAPSED_SEC) return null;
+  const dist = distanceMeters ?? 0;
+  if (!Number.isFinite(dist) || dist <= 0) return null;
+
+  const remaining = targetSeconds - elapsedSec;
+  if (remaining <= 0) return dist;
+
+  const rate = dist / elapsedSec;                 // m/s — elapsedSec >= 3 here
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+
+  const projected = dist + rate * remaining;
+  return Number.isFinite(projected) ? projected : null;
+}
+
+/**
+ * Drive efficiency, 0–100: mean force as a percentage of peak force.
+ *
+ * A rectangular ("fill the boat early and hold it") curve scores high; a
+ * spiky curve that reaches a big peak and collapses scores low. Null when the
+ * curve is too short or flat to say anything.
+ */
+export function driveEfficiencyScore(curve: number[] | null | undefined): number | null {
+  if (!curve || curve.length < 3) return null;
+  const clean = curve.filter(v => Number.isFinite(v) && v >= 0);
+  if (clean.length < 3) return null;
+  const peak = Math.max(...clean);
+  if (peak <= 0) return null;
+  const mean = clean.reduce((a, b) => a + b, 0) / clean.length;
+  return Math.max(0, Math.min(100, Math.round((mean / peak) * 100)));
+}
+
+/**
+ * Catch slip: the fraction of the drive that goes by before force reaches 25%
+ * of peak. Above ~0.2 the handle is being pulled through water that hasn't
+ * been caught yet. Null when the curve is too short to judge.
+ */
+export function catchSlipRatio(curve: number[] | null | undefined): number | null {
+  if (!curve || curve.length < 5) return null;
+  const peak = Math.max(...curve);
+  if (!Number.isFinite(peak) || peak <= 0) return null;
+  const threshold = peak * 0.25;
+  let i = 0;
+  while (i < curve.length && curve[i] < threshold) i++;
+  return i / curve.length;
+}
+
+/** Threshold above which catchSlipRatio() counts as a slipped catch. */
+export const CATCH_SLIP_THRESHOLD = 0.2;
+
 /** Local (not UTC) calendar date as YYYY-MM-DD for workout_date. */
 export function localDateISO(d: Date = new Date()): string {
   const y = d.getFullYear();

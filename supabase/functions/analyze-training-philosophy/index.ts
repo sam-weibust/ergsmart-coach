@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, hashKey, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -81,7 +81,13 @@ serve(async (req) => {
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
+        // 1500, not 500: the JSON has 9 descriptive fields plus a `system_prompt`
+        // that is itself specified as 200-300 words (~400 tokens). 500 cannot fit
+        // the system_prompt alone, and a truncated body fails the JSON.parse below.
+        max_tokens: 1500,
+        // Sonnet 5 runs adaptive thinking unless disabled; thinking shares the
+        // max_tokens budget and would truncate the philosophy JSON.
+        thinking: { type: "disabled" },
         system: `Expert rowing coach analyst. Analyze a training spreadsheet and extract coaching methodology. Return ONLY valid JSON, no markdown, no code fences.`,
         messages: [{
           role: "user",
@@ -98,7 +104,7 @@ serve(async (req) => {
     await recordApiSuccess(supabase, "analyze-training-philosophy");
 
     const aiResult = await anthropicResp.json();
-    const usage = aiResult?.usage ?? {};
+    const usage = tokensFrom(aiResult?.usage);
     const aiText = aiResult?.content?.[0]?.text ?? "";
 
     let philosophy: any = null;
@@ -134,8 +140,8 @@ serve(async (req) => {
     };
 
     await setCached(supabase, cacheKey, cachePayload, TTL.PERMANENT, MODEL, usage.input_tokens, usage.output_tokens);
-    await logUsage(supabase, { user_id: coach_id, function_name: "analyze-training-philosophy", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
-    await recordUsage(supabase, coach_id, (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0));
+    await logUsage(supabase, { user_id: coach_id, function_name: "analyze-training-philosophy", model: MODEL, ...usage, cache_hit: false });
+    await recordUsage(supabase, coach_id, usage.input_tokens + usage.output_tokens);
 
     return new Response(JSON.stringify({ success: true, ...cachePayload }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -110,11 +110,28 @@ export interface WorkoutStreamCallbacks {
   }) => void;
 }
 
-// Consume the generate-workout Server-Sent Events stream. The edge function
-// streams each 4-week chunk as it completes (never idling past the 150s
-// timeout) and ends with a `done` event carrying the full plan. A cache hit or
-// an early validation error comes back as a plain JSON body instead — handled
-// transparently. Resolves with the complete plan object ({ plan: [...] }).
+// The edge function goes idle for at most 10s (it emits `: ping` comment
+// frames). Anything past this means the connection is dead — fail loudly
+// instead of leaving the UI spinning forever.
+const WORKOUT_STREAM_IDLE_MS = 60_000;
+
+/**
+ * Consume the generate-workout Server-Sent Events stream.
+ *
+ * The edge function returns SSE headers immediately and then does all of its
+ * work inside the stream, so every outcome — cache hit, validation error,
+ * limit block, generated plan — arrives as an SSE frame:
+ *
+ *   event: progress   { phase, chunkStart?, chunkEnd?, chars?, weeksSoFar?, totalWeeks? }
+ *   event: chunk      { weeks, chunkStart, chunkEnd, weeksSoFar, totalWeeks }
+ *   event: done       { duration, total_weeks, plan, cached }
+ *   event: error      { error, status?, detail? }
+ *   ": ping"          heartbeat comment frame, ignored
+ *
+ * Resolves with the `done` payload ({ plan: [...] }). The Content-Type sniff
+ * below is a defensive fallback for any deployment that still answers with
+ * plain JSON (old function version, or a gateway error page).
+ */
 export async function generateWorkoutStream(
   payload: object,
   cb: WorkoutStreamCallbacks = {},
@@ -129,6 +146,7 @@ export async function generateWorkoutStream(
     } catch {}
   }
 
+  const controller = new AbortController();
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -137,17 +155,20 @@ export async function generateWorkoutStream(
       "Authorization": `Bearer ${bearerToken}`,
     },
     body: JSON.stringify(payload),
+    signal: controller.signal,
   });
 
   const contentType = res.headers.get("Content-Type") || "";
 
-  // Non-streaming response: cache hit (200 JSON) or an early error (4xx/5xx JSON).
+  // Defensive fallback: a non-SSE body means an older function build or a
+  // gateway/proxy error page rather than the streaming path.
   if (!contentType.includes("text/event-stream")) {
     let json: any = null;
     try { json = await res.json(); } catch {}
     if (json?.error) throw new Error(json.error);
     if (!res.ok) throw new Error(`Function generate-workout returned ${res.status}`);
-    return json;
+    if (json) return json;
+    throw new Error(`Function generate-workout returned an unexpected ${res.status} response.`);
   }
 
   if (!res.body) throw new Error("Plan generation stream unavailable. Please try again.");
@@ -155,38 +176,60 @@ export async function generateWorkoutStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let done: any = null;
-  let streamError: string | null = null;
+  const result: { done: any; error: string | null } = { done: null, error: null };
 
   const handle = (event: string, data: any) => {
     if (event === "progress") cb.onProgress?.(data);
     else if (event === "chunk") cb.onChunk?.(data);
-    else if (event === "done") done = data;
-    else if (event === "error") streamError = data?.error || "Plan generation failed. Please try again.";
+    else if (event === "done") result.done = data;
+    else if (event === "error") result.error = data?.error || "Plan generation failed. Please try again.";
   };
 
-  while (true) {
-    const { done: readerDone, value } = await reader.read();
-    if (readerDone) break;
-    buffer += decoder.decode(value, { stream: true });
-    let sep: number;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const rawEvent = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = "message";
-      let dataStr = "";
-      for (const line of rawEvent.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let idleTimedOut = false;
+  const armIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleTimedOut = true;
+      try { controller.abort(); } catch {}
+    }, WORKOUT_STREAM_IDLE_MS);
+  };
+
+  try {
+    while (true) {
+      armIdle();
+      const { done: readerDone, value } = await reader.read();
+      if (readerDone) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let sep: number;
+      while ((sep = buffer.indexOf("\n\n")) !== -1) {
+        const rawEvent = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        let event = "message";
+        const dataLines: string[] = [];
+        for (const line of rawEvent.split("\n")) {
+          // SSE comment frame (heartbeat). Must never reach the parser.
+          if (line.startsWith(":")) continue;
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length === 0) continue;
+        try { handle(event, JSON.parse(dataLines.join("\n"))); } catch {}
       }
-      if (!dataStr) continue;
-      try { handle(event, JSON.parse(dataStr)); } catch {}
     }
+  } catch (err) {
+    if (idleTimedOut) {
+      throw new Error("Plan generation timed out — the server stopped responding. Please try again.");
+    }
+    throw err;
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
   }
 
-  if (streamError) throw new Error(streamError);
-  if (!done) throw new Error("Plan generation did not complete. Please try again.");
-  return done;
+  if (result.error) throw new Error(result.error);
+  if (!result.done) throw new Error("Plan generation did not complete. Please try again.");
+  return result.done;
 }
 
 export function generateMeals(payload: object) {

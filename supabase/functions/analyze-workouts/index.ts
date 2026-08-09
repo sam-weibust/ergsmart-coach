@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCached, setCached, logUsage, TTL } from "../_shared/cache.ts";
+import { getCached, setCached, logUsage, tokensFrom, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
 
 const corsHeaders = {
@@ -105,6 +105,9 @@ Provide:\n**TEAM SUMMARY**\n**STANDOUT PERFORMANCES**\n**AREAS OF CONCERN**\n**P
 
     const anthropicPayload = {
       model: MODEL,
+      // 600, not 500: the session branch asks for 6 sections x 2-4 sentences
+      // (~550 output tokens worst case). At 500 the final ANOMALIES section is
+      // cut and the parser below silently drops it.
       max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     };
@@ -123,10 +126,10 @@ Provide:\n**TEAM SUMMARY**\n**STANDOUT PERFORMANCES**\n**AREAS OF CONCERN**\n**P
     await recordApiSuccess(supabase, "analyze-workouts");
 
     const data = await response.json();
-    const usage = data?.usage ?? {};
+    const usage = tokensFrom(data?.usage);
     const text = data.content?.[0]?.text ?? "";
 
-    await logUsage(supabase, { function_name: "analyze-workouts", model: MODEL, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0, cache_hit: false });
+    await logUsage(supabase, { function_name: "analyze-workouts", model: MODEL, ...usage, cache_hit: false });
 
     if (isErgAssignment) {
       const sectionKeys = ["TEAM SUMMARY", "STANDOUT PERFORMANCES", "AREAS OF CONCERN", "PACING PATTERNS", "RECOMMENDATIONS"];
