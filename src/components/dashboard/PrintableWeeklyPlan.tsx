@@ -1,114 +1,75 @@
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 import crewsyncLogo from "@/assets/crewsync-logo-full.jpg";
+import {
+  dayDisplayName, formatWeekRange, isLiftSession, isRestDay, phaseBreakdown,
+  sessionCooldown, sessionPieces, sessionRate, sessionRest, sessionTargetSplit,
+  sessionTitle, sessionWarmup, sessionZone,
+} from "@/lib/planSchema";
 
-// Handles both new schema (day: number 1-7) and old schema (day: string "Monday")
-interface WorkoutDay {
-  day: number | string;
-  type?: string;
-  warmup?: string;
-  workout?: string;
-  rest?: string;
-  breakup?: string;
-  rates?: string;
-  cooldown?: string;
-  notes?: string;
-  ergWorkout?: {
-    zone?: string;
-    description?: string;
-    distance?: string;
-    duration?: string;
-    targetSplit?: string;
-    rate?: string;
-    warmup?: string;
-    cooldown?: string;
-    restPeriods?: string;
-  } | null;
-}
-
-interface WorkoutWeek {
-  week?: number;
-  phase?: string;
-  startDate?: string;
-  days?: WorkoutDay[];
-}
+/**
+ * Printable view of a generated plan.
+ *
+ * This component previously read only the legacy schema — day.type, day.workout,
+ * day.rates, day.warmup, day.cooldown and day.ergWorkout. The current generator
+ * writes none of those: the session lives at day.required / day.optional. Every
+ * cell therefore resolved to "" and the erg-detail section (gated on
+ * `days.some(d => d.ergWorkout)`) never rendered, so the whole section printed
+ * blank. It now reads the required/optional schema and keeps the legacy fields
+ * as a fallback for older uploaded plans.
+ */
 
 interface PrintableWeeklyPlanProps {
-  weeks: WorkoutWeek[];
+  /** Week objects, exactly as produced by extractWorkoutWeeks(). */
+  weeks: any[];
   title: string;
   userName?: string;
 }
-
-const DAY_NUMBER_MAP: Record<string, number> = {
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-  sunday: 7,
-};
-
-const getDayLabel = (dayNum: number): string => {
-  const days = ["M", "T", "W", "T", "F", "S", "S"];
-  return days[(dayNum - 1) % 7] || "?";
-};
-
-const getDayName = (dayNum: number): string => {
-  const days = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
-  return days[(dayNum - 1) % 7] || `Day ${dayNum}`;
-};
 
 const getPhaseColor = (phase?: string): string => {
   const p = phase?.toLowerCase() || "";
   if (p.includes("easy") || p.includes("base")) return "bg-green-100 text-green-800";
   if (p.includes("med") || p.includes("build")) return "bg-blue-100 text-blue-800";
-  if (p.includes("hard") || p.includes("peak")) return "bg-red-100 text-red-800";
+  if (p.includes("hard") || p.includes("peak") || p.includes("race")) return "bg-red-100 text-red-800";
   return "bg-muted text-muted-foreground";
 };
 
-const getTypeColor = (type?: string): string => {
-  const t = type?.toUpperCase() || "";
-  if (t === "UT1") return "bg-blue-200";
-  if (t === "UT2") return "bg-green-200";
-  if (t === "LIFT") return "bg-purple-200";
-  if (t === "REST" || t === "OFF") return "bg-gray-100";
-  return "bg-yellow-100";
-};
-
-/**
- * Resolves a WorkoutDay's canonical day number (1-7).
- * - New schema: day is already a number.
- * - Old schema: day is a string like "Monday" — looked up in map, or falls back to index.
- */
-const resolveDayNumber = (day: WorkoutDay, fallbackIndex: number): number => {
-  if (typeof day.day === "number") return day.day;
-  if (typeof day.day === "string") {
-    const mapped = DAY_NUMBER_MAP[day.day.toLowerCase()];
-    if (mapped !== undefined) return mapped;
+const getZoneCellColor = (zone?: string | null): string => {
+  switch (zone?.toUpperCase()) {
+    case "UT2": return "bg-green-100 text-green-900";
+    case "UT1": return "bg-blue-100 text-blue-900";
+    case "TR": case "TR1": case "TR2": return "bg-yellow-100 text-yellow-900";
+    case "AT": return "bg-red-100 text-red-900";
+    default: return "";
   }
-  // Fallback: use position in array (1-based)
-  return (fallbackIndex % 7) + 1;
 };
 
-export const PrintableWeeklyPlan = ({
-  weeks,
-  title,
-  userName,
-}: PrintableWeeklyPlanProps) => {
-  const handlePrint = () => {
-    window.print();
-  };
+/** The volume line for a day: explicit pieces when present, else the title. */
+const workoutLine = (session: any): string => {
+  const pieces = sessionPieces(session);
+  const title = sessionTitle(session);
+  if (pieces && pieces !== title) return `${title} — ${pieces}`;
+  return title;
+};
+
+/** Warmup / rest / cooldown pairs a session actually supplies. */
+const sessionDetail = (session: any): Array<[string, string]> => {
+  if (!session) return [];
+  const rows: Array<[string, string | null]> = [
+    ["Warmup", sessionWarmup(session)],
+    ["Rest", sessionRest(session)],
+    ["Cooldown", sessionCooldown(session)],
+  ];
+  return rows.filter((r): r is [string, string] => !!r[1]);
+};
+
+export const PrintableWeeklyPlan = ({ weeks, title, userName }: PrintableWeeklyPlanProps) => {
+  const handlePrint = () => window.print();
 
   if (!weeks || weeks.length === 0) return null;
+
+  const totalWeeks = weeks.length;
+  const phases = phaseBreakdown(weeks);
 
   return (
     <div className="space-y-4">
@@ -130,14 +91,8 @@ export const PrintableWeeklyPlan = ({
             break-inside: avoid;
             margin-bottom: 1.5rem;
           }
-          .printable-plan-week-overflow {
-            overflow: visible !important;
-          }
-          /* Ensure any ancestor overflow constraints are lifted */
-          * {
-            overflow: visible !important;
-            max-height: none !important;
-          }
+          .printable-plan-week-overflow { overflow: visible !important; }
+          * { overflow: visible !important; max-height: none !important; }
         }
       `}</style>
 
@@ -149,18 +104,12 @@ export const PrintableWeeklyPlan = ({
       </div>
 
       <div className="print:block" id="printable-plan">
-        {/* Print Header */}
-        <div className="flex items-center justify-between mb-6 print:mb-4 border-b pb-4">
-          <img
-            src={crewsyncLogo}
-            alt="CrewSync"
-            className="h-10 w-auto object-contain"
-          />
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 border-b pb-4">
+          <img src={crewsyncLogo} alt="CrewSync" className="h-10 w-auto object-contain" />
           <div className="text-center flex-1 px-4">
             <h1 className="text-xl font-bold">{title}</h1>
-            {userName && (
-              <p className="text-sm text-muted-foreground mt-1">{userName}</p>
-            )}
+            {userName && <p className="text-sm text-muted-foreground mt-1">{userName}</p>}
           </div>
           <div className="text-right text-xs text-muted-foreground">
             <div>CrewSync Training</div>
@@ -168,192 +117,136 @@ export const PrintableWeeklyPlan = ({
           </div>
         </div>
 
-        {weeks.map((week, weekIdx) => {
-          // Always treat days as potentially undefined/null
-          const rawDays: WorkoutDay[] = Array.isArray(week.days) ? week.days : [];
+        {/* Plan summary: total weeks + phase breakdown */}
+        <div className="mb-6 printable-plan-week">
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 mb-2">
+            <h2 className="text-base font-semibold">Plan Summary</h2>
+            <span className="text-sm text-muted-foreground">
+              {totalWeeks} {totalWeeks === 1 ? "week" : "weeks"}
+            </span>
+          </div>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b-2 border-foreground">
+                <th className="p-1 text-left font-bold">Phase</th>
+                <th className="p-1 text-left font-bold w-32">Weeks</th>
+                <th className="p-1 text-left font-bold w-24">Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              {phases.map((p, i) => (
+                <tr key={i} className="border-b border-dashed">
+                  <td className={`p-1 ${getPhaseColor(p.phase)}`}>{p.phase}</td>
+                  <td className="p-1">{formatWeekRange(p.weekNumbers)}</td>
+                  <td className="p-1">
+                    {p.weekNumbers.length} {p.weekNumbers.length === 1 ? "week" : "weeks"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-          // Build a map of dayNumber -> WorkoutDay, resolving both schema types
-          const dayMap = new Map<number, WorkoutDay>();
-          rawDays.forEach((d, idx) => {
-            const num = resolveDayNumber(d, idx);
-            dayMap.set(num, d);
-          });
-
-          const findDay = (d: number): WorkoutDay | undefined => dayMap.get(d);
-          const weekLabel = week.week ?? weekIdx + 1;
-          const phaseLabel = week.phase ?? "";
+        {/* One condensed table per week */}
+        {weeks.map((week: any, weekIdx: number) => {
+          const days: any[] = Array.isArray(week?.days) ? week.days : [];
+          const weekLabel = week?.week ?? weekIdx + 1;
+          const phaseLabel = week?.phase ?? "";
 
           return (
-            <div
-              key={weekIdx}
-              className="mb-8 print:mb-6 printable-plan-week"
-            >
-              {/* Weekly grid table */}
+            <div key={weekIdx} className="mb-8 print:mb-6 printable-plan-week">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-sm font-bold">Week {weekLabel}</h3>
+                {phaseLabel && (
+                  <span className={`text-xs px-2 py-0.5 rounded ${getPhaseColor(phaseLabel)}`}>
+                    {phaseLabel}
+                  </span>
+                )}
+              </div>
+
               <div className="overflow-x-auto printable-plan-week-overflow">
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b-2 border-foreground">
-                      <th className="p-1 text-left w-20"></th>
-                      {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                        <th
-                          key={d}
-                          className="p-1 text-center font-bold min-w-[100px]"
-                        >
-                          {getDayLabel(d)}
-                        </th>
-                      ))}
-                      <th
-                        className={`p-1 text-center font-bold w-16 ${getPhaseColor(phaseLabel)}`}
-                      >
-                        {phaseLabel}
-                      </th>
-                    </tr>
-                    <tr className="border-b">
-                      <th className="p-1 text-left text-xs text-muted-foreground">
-                        Week {weekLabel}
-                      </th>
-                      {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                        const day = findDay(d);
-                        return (
-                          <th
-                            key={d}
-                            className={`p-1 text-center text-xs ${
-                              day?.type ? getTypeColor(day.type) : ""
-                            }`}
-                          >
-                            {week.startDate || ""}
-                          </th>
-                        );
-                      })}
-                      <th></th>
+                      <th className="p-1 text-left font-bold w-24">Day</th>
+                      <th className="p-1 text-left font-bold w-16">Zone</th>
+                      <th className="p-1 text-left font-bold">Session</th>
+                      <th className="p-1 text-left font-bold w-32">Target</th>
+                      <th className="p-1 text-left font-bold w-16">Rate</th>
+                      <th className="p-1 text-left font-bold">Optional</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(
-                      [
-                        "Type",
-                        "Warmup",
-                        "Workout",
-                        "Rest",
-                        "Breakup",
-                        "Rates",
-                        "Cooldown",
-                      ] as const
-                    ).map((rowLabel, rowIdx) => {
-                      const field = rowLabel.toLowerCase() as keyof WorkoutDay;
-                      const isLast = rowIdx === 6;
-                      return (
-                        <tr
-                          key={rowLabel}
-                          className={
-                            isLast ? "border-b" : "border-b border-dashed"
-                          }
-                        >
-                          <td className="p-1 text-xs font-medium">
-                            {rowLabel}
-                          </td>
-                          {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                            const day = findDay(d);
-                            let cellVal = "";
-                            if (rowLabel === "Type") {
-                              cellVal =
-                                day?.type ?? day?.ergWorkout?.zone ?? "";
-                            } else if (rowLabel === "Workout") {
-                              cellVal =
-                                day?.workout ??
-                                day?.ergWorkout?.description ??
-                                "";
-                            } else if (rowLabel === "Rates") {
-                              cellVal =
-                                day?.rates ?? day?.ergWorkout?.rate ?? "";
-                            } else if (rowLabel === "Warmup") {
-                              cellVal =
-                                day?.warmup ??
-                                day?.ergWorkout?.warmup ??
-                                "";
-                            } else if (rowLabel === "Cooldown") {
-                              cellVal =
-                                day?.cooldown ??
-                                day?.ergWorkout?.cooldown ??
-                                "";
-                            } else {
-                              const raw = day?.[field];
-                              cellVal =
-                                typeof raw === "string" ? raw : "";
-                            }
-                            return (
-                              <td
-                                key={d}
-                                className={`p-1 text-center text-xs ${
-                                  rowLabel === "Type" && day?.type
-                                    ? getTypeColor(day.type)
-                                    : ""
-                                }`}
-                              >
-                                {cellVal}
-                              </td>
-                            );
-                          })}
-                          <td></td>
-                        </tr>
-                      );
-                    })}
+                    {days.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-2 text-xs text-muted-foreground text-center">
+                          No days in this week
+                        </td>
+                      </tr>
+                    ) : (
+                      days.map((day: any, dayIdx: number) => {
+                        const name = dayDisplayName(day, dayIdx);
+                        const req = day?.required;
+
+                        // Legacy uploaded plans keep their session on the day itself.
+                        const legacy = !req ? (day?.ergWorkout ?? null) : null;
+                        const session = req ?? legacy;
+                        const rest = isRestDay(day) && !session;
+
+                        const zone = session ? sessionZone(session) : null;
+                        const lift = session ? isLiftSession(session) : false;
+                        const optional = day?.optional;
+
+                        return (
+                          <tr key={dayIdx} className="border-b border-dashed align-top">
+                            <td className="p-1 font-medium">{name}</td>
+                            <td className={`p-1 text-xs ${getZoneCellColor(zone)}`}>
+                              {rest ? "—" : lift ? "Lift" : (zone ?? "")}
+                            </td>
+                            <td className="p-1">
+                              {rest ? (
+                                <span className="text-muted-foreground">Rest / recovery</span>
+                              ) : session ? (
+                                <>
+                                  <div>{workoutLine(session)}</div>
+                                  {session.description && session.description !== session.title && (
+                                    <div className="text-xs text-muted-foreground">{session.description}</div>
+                                  )}
+                                </>
+                              ) : typeof day?.workout === "string" ? (
+                                day.workout
+                              ) : (
+                                ""
+                              )}
+                            </td>
+                            <td className="p-1 text-xs">{session ? (sessionTargetSplit(session) ?? "") : ""}</td>
+                            <td className="p-1 text-xs">{session ? (sessionRate(session) ?? "") : ""}</td>
+                            <td className="p-1 text-xs text-muted-foreground">
+                              {optional ? sessionTitle(optional) : ""}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
-              {/* Erg details section — days with ergWorkout data */}
-              {rawDays.some((d) => d.ergWorkout) && (
-                <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 print:grid-cols-4">
-                  {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-                    const day = findDay(d);
-                    const ew = day?.ergWorkout;
-                    if (!ew) return null;
+              {/* Warmup / rest / cooldown detail, only where the plan supplies it */}
+              {days.some((d: any) => sessionDetail(d?.required).length > 0) && (
+                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 print:grid-cols-4">
+                  {days.map((day: any, dayIdx: number) => {
+                    const detail = sessionDetail(day?.required);
+                    if (detail.length === 0) return null;
+                    const zone = sessionZone(day.required);
                     return (
-                      <div
-                        key={d}
-                        className={`p-2 rounded border text-xs space-y-0.5 ${getTypeColor(
-                          day?.type
-                        )}`}
-                      >
+                      <div key={dayIdx} className="p-2 rounded border text-xs space-y-0.5">
                         <div className="font-semibold">
-                          {getDayName(d)} — {ew?.zone ?? day?.type ?? ""}
+                          {dayDisplayName(day, dayIdx)}{zone ? ` — ${zone}` : ""}
                         </div>
-                        {ew?.description && (
-                          <div className="text-muted-foreground">
-                            {ew.description}
-                          </div>
-                        )}
-                        {ew?.distance && (
-                          <div>
-                            <span className="font-medium">Dist:</span>{" "}
-                            {ew.distance}m
-                          </div>
-                        )}
-                        {ew?.duration && (
-                          <div>
-                            <span className="font-medium">Dur:</span>{" "}
-                            {ew.duration}
-                          </div>
-                        )}
-                        {ew?.targetSplit && (
-                          <div>
-                            <span className="font-medium">Split:</span>{" "}
-                            {ew.targetSplit}
-                          </div>
-                        )}
-                        {ew?.rate && (
-                          <div>
-                            <span className="font-medium">Rate:</span>{" "}
-                            {ew.rate}
-                          </div>
-                        )}
-                        {ew?.restPeriods && (
-                          <div>
-                            <span className="font-medium">Rest:</span>{" "}
-                            {ew.restPeriods}
-                          </div>
-                        )}
+                        {detail.map(([label, text]) => (
+                          <div key={label}><span className="font-medium">{label}:</span> {text}</div>
+                        ))}
                       </div>
                     );
                   })}
@@ -363,7 +256,6 @@ export const PrintableWeeklyPlan = ({
           );
         })}
 
-        {/* Print footer */}
         <div className="print:block hidden mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
           Generated by CrewSync · crewsync.app
         </div>

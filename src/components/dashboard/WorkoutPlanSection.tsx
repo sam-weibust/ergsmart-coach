@@ -20,6 +20,10 @@ import { PrintableWeeklyPlan } from "./PrintableWeeklyPlan";
 import { GenerationProgress } from "./GenerationProgress";
 import { Calendar } from "@/components/ui/calendar";
 import { planStartDate, localISODate, mondayOfWeek } from "@/lib/planDates";
+import {
+  isLiftSession, sessionZone, sessionPieces, sessionTargetSplit,
+  sessionRate, sessionRest, sessionTitle, sessionWarmup, sessionCooldown,
+} from "@/lib/planSchema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -472,21 +476,36 @@ const MealBlock = ({ mealPlan }: { mealPlan: any }) => {
   );
 };
 
-// New session block for required/optional new schema
+// New session block for required/optional new schema.
+//
+// This used to gate every detail on `session_type === "erg"` (and the Lift badge
+// on `=== "lift"`). The generator never emits either value — live plans hold
+// "steady state", "intervals", "lifting", "AT" or "UT2" — so both flags were
+// always false and the block rendered only its label and title, dropping zone,
+// split, rate, warmup, rest and cooldown. Rowing is now the default and only
+// lifts are special-cased.
 const SessionBlock = ({ session, label }: { session: any; label: string }) => {
   if (!session) return null;
-  const isLift = session.session_type === "lift";
-  const isErg = session.session_type === "erg";
+  const isLift = isLiftSession(session);
+  const isRow = !isLift;
+  const zone = sessionZone(session);
+  const pieces = sessionPieces(session);
+  const targetSplit = sessionTargetSplit(session);
+  const rate = sessionRate(session);
+  const rest = sessionRest(session);
+  const title = sessionTitle(session);
+  const warmup = sessionWarmup(session);
+  const cooldown = sessionCooldown(session);
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${label === "Optional" ? "border-dashed opacity-80" : ""}`}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Badge variant={label === "Required" ? "default" : "secondary"} className="text-xs">
           {label}
         </Badge>
-        {isErg && session.zone && (
-          <Badge variant="outline" className={`text-xs ${getZoneColor(session.zone)}`}>
-            {session.zone}
+        {isRow && zone && (
+          <Badge variant="outline" className={`text-xs ${getZoneColor(zone)}`}>
+            {zone}
           </Badge>
         )}
         {isLift && (
@@ -494,24 +513,23 @@ const SessionBlock = ({ session, label }: { session: any; label: string }) => {
             Lift
           </Badge>
         )}
-        <span className="text-sm font-semibold">{session.title || session.description || "Session"}</span>
+        <span className="text-sm font-semibold">{title}</span>
       </div>
       {session.description && session.description !== session.title && (
         <p className="text-sm text-muted-foreground">{session.description}</p>
       )}
-      {isErg && (
-        <div className="text-sm text-muted-foreground space-y-0.5">
-          {session.duration && <span className="mr-3">{session.duration}</span>}
-          {session.distance && <span className="mr-3">{session.distance}m</span>}
-          {session.targetSplit && (
-            <span className="mr-3">Target: <TargetSplit value={session.targetSplit} /></span>
+      {isRow && (pieces || targetSplit || rate) && (
+        <div className="text-sm text-muted-foreground">
+          {pieces && <span className="mr-3">{pieces}</span>}
+          {targetSplit && (
+            <span className="mr-3">Target: <TargetSplit value={targetSplit} /></span>
           )}
-          {session.rate && <span>{session.rate}</span>}
+          {rate && <span>{rate}</span>}
         </div>
       )}
-      {isErg && session.warmup && <div className="text-xs text-green-600 dark:text-green-400">Warmup: {session.warmup}</div>}
-      {isErg && session.restPeriods && <div className="text-xs text-yellow-600">Rest: {session.restPeriods}</div>}
-      {isErg && session.cooldown && <div className="text-xs text-blue-600 dark:text-blue-400">Cooldown: {session.cooldown}</div>}
+      {warmup && <div className="text-xs text-green-600 dark:text-green-400">Warmup: {warmup}</div>}
+      {rest && <div className="text-xs text-yellow-600">Rest: {rest}</div>}
+      {cooldown && <div className="text-xs text-blue-600 dark:text-blue-400">Cooldown: {cooldown}</div>}
       {session.note && <div className="text-xs text-muted-foreground italic">{session.note}</div>}
     </div>
   );
@@ -1008,17 +1026,6 @@ type PlanDayCell = {
 };
 
 const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-
-/** Human "pieces" line for a session, tolerating both plan schemas. */
-const sessionPieces = (s: any): string | null => {
-  if (!s) return null;
-  if (typeof s.pieces === "string" && s.pieces.trim()) return s.pieces.trim();
-  const bits: string[] = [];
-  if (s.duration) bits.push(String(s.duration));
-  if (s.distance) bits.push(`${s.distance}m`);
-  if (s.sets && s.reps) bits.push(`${s.sets}x${s.reps}`);
-  return bits.length ? bits.join(" · ") : null;
-};
 
 const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
