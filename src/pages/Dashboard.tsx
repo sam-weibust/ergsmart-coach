@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { LogOut, Sparkles, Users, User, Zap, Trophy, Settings, X } from "lucide-react";
+import { LogOut, Sparkles, Users, User, Zap, Trophy, Settings, LayoutGrid, X } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { PullToRefreshIndicator } from "@/components/PullToRefresh";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
@@ -31,12 +31,13 @@ import TeamTab from "@/components/dashboard/tabs/TeamTab";
 import MeTab from "@/components/dashboard/tabs/MeTab";
 import PerformanceTab from "@/components/dashboard/tabs/PerformanceTab";
 import CompetitionTab from "@/components/dashboard/tabs/CompetitionTab";
+import MoreTab from "@/components/dashboard/tabs/MoreTab";
 import SettingsTab from "@/components/dashboard/tabs/SettingsTab";
 import type { AthleteTabProps } from "@/components/dashboard/tabs/types";
 
 // ─── ATHLETE 5-TAB SHELL CONSTANTS ───────────────────────────────────────────
 
-type AthleteTabId = "team" | "me" | "performance" | "competition" | "settings";
+type AthleteTabId = "team" | "me" | "performance" | "competition" | "more" | "settings";
 
 const ONBOARDING_COMPLETE_KEY = "onboarding_complete";
 
@@ -79,8 +80,8 @@ const SECTION_TO_TAB: Record<string, AthleteTabId> = {
   community: "team",
   "coaches-hub": "team",
   organization: "team",
-  recruiting: "me",
-  regattas: "competition",
+  recruiting: "more",
+  regattas: "more",
   competition: "competition",
   settings: "settings",
   "admin-costs": "settings",
@@ -475,7 +476,8 @@ const Dashboard = () => {
     { id: "team", label: hasTeam ? teamAbbrev(shellTeamName) : "Team", icon: Users },
     { id: "me", label: "Me", icon: User },
     { id: "performance", label: "Performance", icon: Zap },
-    { id: "competition", label: "Competition", icon: Trophy },
+    { id: "competition", label: "Compete", icon: Trophy },
+    { id: "more", label: "More", icon: LayoutGrid },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
@@ -489,6 +491,8 @@ const Dashboard = () => {
         return <PerformanceTab {...athleteTabProps} />;
       case "competition":
         return <CompetitionTab {...athleteTabProps} />;
+      case "more":
+        return <MoreTab {...athleteTabProps} />;
       case "settings":
         return <SettingsTab {...athleteTabProps} />;
       default:
@@ -710,7 +714,7 @@ const Dashboard = () => {
         className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border shadow-lg"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex justify-around items-center h-16 px-1 max-w-2xl mx-auto">
+        <div className="flex justify-around items-center h-16 px-0.5 max-w-2xl mx-auto">
           {athleteTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -718,7 +722,7 @@ const Dashboard = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 data-tour-id={`tour-tab-${tab.id}`}
-                className="relative flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] transition-colors"
+                className="relative flex flex-col items-center justify-center gap-1 flex-1 min-w-0 min-h-[44px] transition-colors"
                 style={{ color: isActive ? teamColor : undefined }}
               >
                 <tab.icon
@@ -726,7 +730,7 @@ const Dashboard = () => {
                   style={isActive ? { color: teamColor } : undefined}
                 />
                 <span
-                  className={`text-[11px] font-medium ${isActive ? "font-semibold" : "text-muted-foreground"}`}
+                  className={`text-[10px] leading-none max-w-full truncate px-0.5 font-medium ${isActive ? "font-semibold" : "text-muted-foreground"}`}
                   style={isActive ? { color: teamColor } : undefined}
                 >
                   {tab.label}

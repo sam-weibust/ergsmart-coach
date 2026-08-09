@@ -1,6 +1,79 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, X, ChevronDown, ChevronUp, Sparkles, Users, Zap, Shield, Building2 } from "lucide-react";
+import { Check, X, ChevronDown, ChevronUp, Sparkles, Users, Zap, Shield, Building2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+// ── Checkout ─────────────────────────────────────────────────────────────────
+
+/** Plan ids understood by the stripe-create-checkout edge function. */
+type CheckoutPlanId = "pro" | "elite" | "team_pro" | "elite_team" | "org";
+
+/**
+ * Opens Stripe Checkout for a plan. The amount lives server-side in
+ * supabase/functions/_shared/plans.ts — this only names the plan.
+ *
+ * Signed-out visitors go to /auth first; a subscription has to belong to an
+ * account, and Checkout needs the Supabase JWT to identify one.
+ */
+async function startCheckout(planId: CheckoutPlanId, teamSize?: TeamSize) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = `/auth?next=${encodeURIComponent("/pricing")}`;
+    return;
+  }
+
+  const { data, error } = await supabase.functions.invoke("stripe-create-checkout", {
+    body: {
+      plan_id: planId,
+      team_size: teamSize ?? null,
+      success_url: `${window.location.origin}/dashboard`,
+      cancel_url: `${window.location.origin}/pricing`,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  if (!data?.url) throw new Error("Stripe did not return a checkout URL.");
+
+  window.location.href = data.url;
+}
+
+/** Shared checkout button: handles the pending state and surfaces failures. */
+function CheckoutButton({
+  planId, teamSize, label, className,
+}: {
+  planId: CheckoutPlanId;
+  teamSize?: TeamSize;
+  label: string;
+  className?: string;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const go = useCallback(async () => {
+    setLoading(true);
+    try {
+      await startCheckout(planId, teamSize);
+    } catch (e: any) {
+      toast.error(e?.message || "Could not start checkout. Please try again.");
+      setLoading(false);
+    }
+  }, [planId, teamSize]);
+
+  return (
+    <button
+      onClick={go}
+      disabled={loading}
+      className={
+        className ??
+        "flex w-full items-center justify-center gap-2 text-center py-2.5 rounded-lg font-semibold text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors mb-5 disabled:opacity-60"
+      }
+    >
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {loading ? "Opening checkout…" : label}
+    </button>
+  );
+}
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -39,7 +112,7 @@ const INDIVIDUAL_PLANS = [
     betaPrice: 6.40,
     badge: "Most Popular",
     badgeColor: "bg-primary",
-    cta: "Coming Fall 2026",
+    cta: "Subscribe to Pro",
     ctaHref: null,
     features: [
       "Everything in Free",
@@ -65,7 +138,7 @@ const INDIVIDUAL_PLANS = [
     betaPrice: 11.20,
     badge: "Best Value",
     badgeColor: "bg-primary",
-    cta: "Coming Fall 2026",
+    cta: "Subscribe to Elite",
     ctaHref: null,
     features: [
       "Everything in Pro",
@@ -161,7 +234,7 @@ const ORG_PLAN = {
   betaPrice: 719,
   badge: "Multi-Program",
   badgeColor: "bg-[hsl(var(--warning))]",
-  cta: "Coming Fall 2026",
+  cta: "Subscribe to Organization",
   ctaHref: null,
   maxAthletes: "Up to 5 teams · 500 athletes",
   features: [
@@ -339,12 +412,7 @@ function IndividualPlanCard({ plan }: { plan: typeof INDIVIDUAL_PLANS[0] }) {
           {plan.cta}
         </Link>
       ) : (
-        <button
-          disabled
-          className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
-        >
-          {plan.cta}
-        </button>
+        <CheckoutButton planId={plan.id as CheckoutPlanId} label={plan.cta} />
       )}
 
       <ul className="space-y-2 flex-1">
@@ -362,6 +430,8 @@ function IndividualPlanCard({ plan }: { plan: typeof INDIVIDUAL_PLANS[0] }) {
 // ── Team plan card ────────────────────────────────────────────────────────────
 
 interface TeamPlanCardProps {
+  /** Plan id sent to stripe-create-checkout. */
+  planId: Extract<CheckoutPlanId, "team_pro" | "elite_team">;
   name: string;
   badge: string;
   badgeColor: string;
@@ -371,7 +441,7 @@ interface TeamPlanCardProps {
   inheritLabel: string;
 }
 
-function TeamPlanCard({ name, badge, badgeColor, pricing, teamSize, features, inheritLabel }: TeamPlanCardProps) {
+function TeamPlanCard({ planId, name, badge, badgeColor, pricing, teamSize, features, inheritLabel }: TeamPlanCardProps) {
   const sizeLabel = teamSize === "unlimited" ? "150+ athletes" : `up to ${teamSize} athletes`;
 
   return (
@@ -407,12 +477,7 @@ function TeamPlanCard({ name, badge, badgeColor, pricing, teamSize, features, in
         <span className="text-green-600 text-xs font-semibold">🎉 Early Backer — 20% off for life</span>
       </div>
 
-      <button
-        disabled
-        className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
-      >
-        Coming Fall 2026
-      </button>
+      <CheckoutButton planId={planId} teamSize={teamSize} label={`Subscribe to ${name}`} />
 
       <ul className="space-y-2 flex-1">
         {features.map((f) => (
@@ -457,12 +522,7 @@ function OrgPlanCard() {
         <span className="text-green-600 text-xs font-semibold">🎉 Early Backer — 20% off for life</span>
       </div>
 
-      <button
-        disabled
-        className="block w-full text-center py-2.5 rounded-lg font-semibold text-sm bg-muted text-muted-foreground cursor-not-allowed mb-5"
-      >
-        Coming Fall 2026
-      </button>
+      <CheckoutButton planId="org" label="Subscribe to Organization" />
 
       <ul className="space-y-2 flex-1">
         {ORG_PLAN.features.map((f) => (
@@ -604,6 +664,7 @@ export default function PricingPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <TeamPlanCard
+                planId="team_pro"
                 name="Team Pro"
                 badge="For Developing Programs"
                 badgeColor="bg-blue-500"
@@ -613,6 +674,7 @@ export default function PricingPage() {
                 inheritLabel="Pro"
               />
               <TeamPlanCard
+                planId="elite_team"
                 name="Elite Team"
                 badge="Most Popular"
                 badgeColor="bg-purple-500"

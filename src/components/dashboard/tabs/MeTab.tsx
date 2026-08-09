@@ -20,34 +20,15 @@ import {
   Zap,
   Gauge,
   Ruler,
-  Award,
-  GraduationCap,
-  Link2,
-  Bluetooth,
-  Swords,
-  Medal,
-  type LucideIcon,
 } from "lucide-react";
 
 import RecoveryDashboard from "@/components/dashboard/RecoveryDashboard";
 import MealPlanTab from "@/components/dashboard/MealPlanTab";
 import HistorySection from "@/components/dashboard/HistorySection";
 import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
-// ── "More" surface ─────────────────────────────────────────────────────────
-// Athlete-side counterpart to the coach's CoachMoreGrid. Lives inside the Me
-// tab rather than as a 6th bottom-bar tab: the bar is already at five 44px
-// targets, and every item here ("my regattas", "my recruiting profile", "my
-// connected apps", "my achievements", "my nutrition", "my H2H history") is a
-// personal-profile concern, which is exactly what the Me tab is.
-import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
-import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
-import WeeklyChallengeSection from "@/components/dashboard/WeeklyChallengeSection";
-import AwardsSection from "@/components/dashboard/AwardsSection";
-import RaceSection from "@/components/dashboard/RaceSection";
-import Concept2Section from "@/components/dashboard/Concept2Section";
-import WhoopConnectSection from "@/components/dashboard/WhoopConnectSection";
-import HealthKitConnect from "@/components/dashboard/HealthKitConnect";
-import DeviceSection from "@/components/dashboard/DeviceSection";
+// The "More" surface (regattas, recruiting, connected apps, achievements,
+// challenges, nutrition detail, H2H history) now lives in its own always-visible
+// bottom-bar tab — see ./MoreTab.tsx.
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -164,37 +145,9 @@ function Stat({
   );
 }
 
-// ─── "More" grid ─────────────────────────────────────────────────────────────
-
-type MoreId =
-  | "regattas" | "recruiting" | "connected" | "devices"
-  | "achievements" | "challenges" | "nutrition-detail" | "h2h";
-
-const MORE_ITEMS: { id: MoreId; label: string; desc: string; icon: LucideIcon }[] = [
-  { id: "regattas",         label: "Regattas",            desc: "Results & racing history",   icon: Trophy },
-  { id: "recruiting",       label: "Recruiting Profile",  desc: "College recruiting details", icon: GraduationCap },
-  { id: "connected",        label: "Connected Apps",      desc: "Concept2, Whoop, Health",    icon: Link2 },
-  { id: "devices",          label: "Devices",             desc: "Pair your PM5 & HR strap",   icon: Bluetooth },
-  { id: "achievements",     label: "Achievements",        desc: "Badges and milestones",      icon: Award },
-  { id: "challenges",       label: "Weekly Challenges",   desc: "This week's community goal", icon: Medal },
-  { id: "nutrition-detail", label: "Nutrition",           desc: "Meals, macros and water",    icon: Utensils },
-  { id: "h2h",              label: "H2H Racing",          desc: "Head-to-head race history",  icon: Swords },
-];
-
-const MORE_TITLES: Record<MoreId, string> = {
-  regattas: "Regattas",
-  recruiting: "Recruiting Profile",
-  connected: "Connected Apps",
-  devices: "Devices",
-  achievements: "Achievements",
-  challenges: "Weekly Challenges",
-  "nutrition-detail": "Nutrition",
-  h2h: "H2H Racing",
-};
-
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-type DetailView = "recovery" | "nutrition" | "history" | "strength" | MoreId | null;
+type DetailView = "recovery" | "nutrition" | "history" | "strength" | null;
 
 export default function MeTab(props: AthleteTabProps) {
   const { userId, profile, teamColor } = props;
@@ -702,35 +655,6 @@ export default function MeTab(props: AthleteTabProps) {
         )}
       </SectionCard>
 
-      {/* 8 ── More ───────────────────────────────────────────────────────── */}
-      {/* Unconditional: no role, team or feature gating. Scrolls with the tab,
-          and pb-24 on the wrapper keeps the last row clear of the tab bar. */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
-          More
-        </h2>
-        <div className="grid grid-cols-2 gap-3 overflow-y-auto">
-          {MORE_ITEMS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setDetail(item.id)}
-                className="rounded-xl border border-border bg-card p-3 text-left active:scale-[0.97] transition-transform flex flex-col gap-2 min-h-[96px]"
-              >
-                <div className="rounded-lg p-2 w-fit" style={{ background: `${teamColor}1a` }}>
-                  <Icon className="h-5 w-5" style={{ color: teamColor }} />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold leading-tight">{item.label}</div>
-                  <div className="text-xs text-muted-foreground leading-snug mt-0.5">{item.desc}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       {/* ── Detail drawers (reuse full existing components) ─────────────────── */}
       <Sheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)}>
         <SheetContent
@@ -748,8 +672,6 @@ export default function MeTab(props: AthleteTabProps) {
                 ? "Workout History"
                 : detail === "strength"
                 ? "Strength"
-                : detail
-                ? MORE_TITLES[detail as MoreId] ?? ""
                 : ""}
             </SheetTitle>
           </SheetHeader>
@@ -757,22 +679,6 @@ export default function MeTab(props: AthleteTabProps) {
           {detail === "nutrition" && <MealPlanTab profile={profile} />}
           {detail === "history" && <HistorySection profile={profile} />}
           {detail === "strength" && <StrengthProgramSection profile={profile} />}
-
-          {/* More surface */}
-          {detail === "regattas" && <RegattasSection profile={profile} isCoach={false} />}
-          {detail === "recruiting" && <RecruitingProfileSection />}
-          {detail === "connected" && (
-            <div className="space-y-6">
-              <Concept2Section />
-              <WhoopConnectSection />
-              <HealthKitConnect />
-            </div>
-          )}
-          {detail === "devices" && <DeviceSection />}
-          {detail === "achievements" && <AwardsSection profile={profile} />}
-          {detail === "challenges" && <WeeklyChallengeSection />}
-          {detail === "nutrition-detail" && <MealPlanTab profile={profile} />}
-          {detail === "h2h" && <RaceSection />}
         </SheetContent>
       </Sheet>
     </div>

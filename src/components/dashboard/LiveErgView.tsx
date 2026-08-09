@@ -914,7 +914,10 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {coachWorkout && (
+          {/* Send to PM5 is available whenever there is an erg to send to —
+              with a coach-assigned workout loaded it pushes that piece, and
+              otherwise it opens the builder on the same programming screen. */}
+          {(coachWorkout || ergConnected) && (
             <Button
               size="sm"
               variant="outline"
@@ -925,7 +928,7 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
               <Send className="h-3.5 w-3.5 mr-1.5" /> Send to PM5
             </Button>
           )}
-          {canBuild && (
+          {canBuild && !ergConnected && (
             <Button
               size="sm"
               variant="outline"

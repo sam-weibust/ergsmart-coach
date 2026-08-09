@@ -137,3 +137,17 @@ verify_jwt = false
 
 [functions.import-team-plan]
 verify_jwt = false
+
+# Stripe checkout + portal authenticate the caller themselves (they read the
+# Authorization header and call auth.getUser), so the gateway JWT check is off
+# to keep the anon-key invoke path working from the native app.
+[functions.stripe-create-checkout]
+verify_jwt = false
+
+[functions.stripe-customer-portal]
+verify_jwt = false
+
+# Stripe cannot present a Supabase JWT — the webhook authenticates by verifying
+# the stripe-signature header instead.
+[functions.stripe-webhook]
+verify_jwt = false

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
-import { Activity, Dumbbell, Download, ChevronDown, Trash2, Link as LinkIcon } from "lucide-react";
+import { Activity, Dumbbell, Download, ChevronDown, Trash2, PersonStanding, Link as LinkIcon } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -84,6 +84,7 @@ function workoutTypeLabel(type: string): string {
 const HistorySection = ({ profile }: HistorySectionProps) => {
   const [ergWorkouts, setErgWorkouts] = useState<any[]>([]);
   const [strengthWorkouts, setStrengthWorkouts] = useState<any[]>([]);
+  const [crossWorkouts, setCrossWorkouts] = useState<any[]>([]);
   const [openCards, setOpenCards] = useState<Set<string>>(new Set());
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -113,6 +114,7 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
     if (profile) {
       fetchErgHistory();
       fetchStrengthHistory();
+      fetchCrossHistory();
     }
   }, [profile]);
 
@@ -134,6 +136,18 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
       .order("workout_date", { ascending: false })
       .limit(20);
     setStrengthWorkouts(data || []);
+  };
+
+  // Cross-training lives in its own table (runs, rides, swims) — surfaced here
+  // so every manually-logged session is findable from one history screen.
+  const fetchCrossHistory = async () => {
+    const { data } = await (supabase as any)
+      .from("cross_training")
+      .select("*")
+      .eq("user_id", profile.id)
+      .order("date", { ascending: false })
+      .limit(50);
+    setCrossWorkouts(data || []);
   };
 
   const deleteWorkout = async (workout: any) => {
@@ -423,14 +437,18 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
             setHistoryTab(v);
             try { localStorage.setItem("historyActiveTab", v); } catch {}
           }}>
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="erg">
-              <Activity className="h-4 w-4 mr-2" />
-              Erg Workouts
+              <Activity className="h-4 w-4 mr-1.5" />
+              Erg
             </TabsTrigger>
             <TabsTrigger value="strength">
-              <Dumbbell className="h-4 w-4 mr-2" />
-              Strength Workouts
+              <Dumbbell className="h-4 w-4 mr-1.5" />
+              Strength
+            </TabsTrigger>
+            <TabsTrigger value="cross">
+              <PersonStanding className="h-4 w-4 mr-1.5" />
+              Cross
             </TabsTrigger>
           </TabsList>
 
@@ -693,6 +711,44 @@ const HistorySection = ({ profile }: HistorySectionProps) => {
                 </div>
                 <PaginationControls page={strengthPage} pageCount={strengthPageCount} setPage={setStrengthPage} />
               </>
+            )}
+          </TabsContent>
+
+          {/* ── Cross-training tab ──────────────────────────────────────────── */}
+          <TabsContent value="cross" className="space-y-3 mt-4">
+            {crossWorkouts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No cross-training logged yet. Log a run, ride or swim from Performance → Cross Training.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {crossWorkouts.map((w: any) => (
+                  <div key={w.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium capitalize truncate">
+                        {String(w.activity_type || "Activity").replace(/_/g, " ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {w.date ? new Date(w.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                        {w.notes ? ` · ${w.notes}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      {w.distance != null && (
+                        <p className="text-sm font-semibold">{w.distance} {w.distance_unit || ""}</p>
+                      )}
+                      {w.duration_seconds != null && (
+                        <p className="text-xs font-mono text-muted-foreground">
+                          {Math.floor(w.duration_seconds / 60)}:{String(Math.round(w.duration_seconds % 60)).padStart(2, "0")}
+                        </p>
+                      )}
+                      {w.heart_rate_average != null && Number(w.heart_rate_average) > 0 && (
+                        <p className="text-[10px] text-muted-foreground">{w.heart_rate_average} bpm</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>

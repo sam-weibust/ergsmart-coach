@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { getSessionUser } from '@/lib/getUser';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +33,7 @@ type Profile = {
   age?: number | null;
   health_issues?: string[] | null;
   user_type?: string | null;
+  best_2k_seconds?: number | null;
 };
 
 type WorkoutPlan = {
@@ -330,6 +331,55 @@ const PlanPreferencesWizard = ({ onSave, initialPrefs }: WizardProps) => {
   );
 };
 
+// ─── Target splits as 2K ± X ──────────────────────────────────────────────────
+
+/**
+ * The athlete's 500m pace at their best 2K, in seconds — the baseline every
+ * target split is expressed against. Null when there is no 2K on record.
+ */
+const Base2kContext = createContext<number | null>(null);
+const useBase500 = () => useContext(Base2kContext);
+
+/**
+ * Render a plan's target split in the idiom the rest of the app uses: an offset
+ * from 2K pace. generate-workout writes absolute splits when it knows the
+ * athlete's 2K and "2k+Xs" when it does not, so both shapes arrive here.
+ *
+ * Absolute splits are converted and shown with the clock time in parentheses,
+ * so the athlete still sees the number to row to. Without a 2K on record the
+ * original string is returned untouched.
+ */
+function formatTargetSplit(raw: unknown, base500: number | null): string | null {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+
+  // Already an offset ("2k+18s/500m", "2K + 20-25s") — normalise it.
+  const offset = str.match(/2k\s*([+\-\u2212])\s*(\d+(?:\s*[-\u2013]\s*\d+)?)\s*s?/i);
+  if (offset) {
+    const sign = offset[1] === "+" ? "+" : "\u2212";
+    return `2K${sign}${offset[2].replace(/\s+/g, "")}s`;
+  }
+
+  const abs = str.match(/(\d+):(\d{2}(?:\.\d+)?)/);
+  if (!abs || !base500) return str;
+
+  const seconds = parseInt(abs[1], 10) * 60 + parseFloat(abs[2]);
+  const delta = Math.round(seconds - base500);
+  const label =
+    delta === 0 ? "2K pace" :
+    delta > 0 ? `2K+${delta}s` : `2K\u2212${Math.abs(delta)}s`;
+  return `${label} (${abs[0]})`;
+}
+
+/** Inline target-split read-out, so every surface formats it identically. */
+const TargetSplit = ({ value }: { value: unknown }) => {
+  const base500 = useBase500();
+  const text = formatTargetSplit(value, base500);
+  if (!text) return null;
+  return <span className="font-mono">{text}</span>;
+};
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const ErgBlock = ({ ergWorkout }: { ergWorkout: any }) => {
@@ -344,7 +394,7 @@ const ErgBlock = ({ ergWorkout }: { ergWorkout: any }) => {
         <div className="text-sm text-muted-foreground">
           {ergWorkout?.duration && `${ergWorkout.duration}`}
           {ergWorkout?.distance && ` • ${ergWorkout.distance}m`}
-          {ergWorkout?.targetSplit && ` • Target: ${ergWorkout.targetSplit}`}
+          {ergWorkout?.targetSplit && <> {"• Target: "}<TargetSplit value={ergWorkout.targetSplit} /></>}
           {ergWorkout?.rate && ` • ${ergWorkout.rate}`}
         </div>
         {ergWorkout?.warmup && <div className="text-xs text-green-600 dark:text-green-400 mt-1">Warmup: {ergWorkout.warmup}</div>}
@@ -453,7 +503,9 @@ const SessionBlock = ({ session, label }: { session: any; label: string }) => {
         <div className="text-sm text-muted-foreground space-y-0.5">
           {session.duration && <span className="mr-3">{session.duration}</span>}
           {session.distance && <span className="mr-3">{session.distance}m</span>}
-          {session.targetSplit && <span className="mr-3">Target: {session.targetSplit}</span>}
+          {session.targetSplit && (
+            <span className="mr-3">Target: <TargetSplit value={session.targetSplit} /></span>
+          )}
           {session.rate && <span>{session.rate}</span>}
         </div>
       )}
@@ -467,10 +519,46 @@ const SessionBlock = ({ session, label }: { session: any; label: string }) => {
 
 type DayCardProps = { day: any; dayIndex: number };
 
+/** "Monday" / "Day 3" — whatever the plan JSON gives us. */
+const dayCardLabel = (day: any, dayIndex: number): string =>
+  typeof day?.day_name === "string" ? day.day_name
+  : typeof day?.day === "string" ? day.day
+  : `Day ${day?.day ?? dayIndex + 1}`;
+
+/**
+ * A day in the week accordion. The full session renders inline (so a week
+ * always shows its content at a glance) and tapping it opens the same detail
+ * in a modal, which is the reachable surface on a phone where the accordion
+ * row is cropped.
+ */
 const DayCard = ({ day, dayIndex }: DayCardProps) => {
-  const dayLabel = typeof day?.day_name === "string" ? day.day_name
-    : typeof day?.day === "string" ? day.day
-    : `Day ${day?.day ?? dayIndex + 1}`;
+  const [open, setOpen] = useState(false);
+  const label = dayCardLabel(day, dayIndex);
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+        className="cursor-pointer rounded-lg transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <DayCardBody day={day} dayIndex={dayIndex} />
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{label}</DialogTitle></DialogHeader>
+          <DayCardBody day={day} dayIndex={dayIndex} />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+const DayCardBody = ({ day, dayIndex }: DayCardProps) => {
+  const dayLabel = dayCardLabel(day, dayIndex);
 
   // New schema with required/optional
   if (day?.is_rest === true) {
@@ -1070,12 +1158,18 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
         }}
         className="rounded-md border w-full max-w-full overflow-x-auto"
       />
-      {selectedDate && selectedWorkout && (
-        <div className="p-3 rounded-lg border bg-muted/30 text-sm space-y-2">
+      {/* Tapping a day opens its detail — a modal, so it is reachable without
+          scrolling past the calendar on a phone. */}
+      <Dialog open={!!selectedDate} onOpenChange={(o) => !o && setSelectedDate(undefined)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDate?.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedDate && selectedWorkout ? (
+        <div className="text-sm space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">
-              {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </p>
             {selectedWorkout.zone && (
               <Badge variant="outline" className={`text-xs ${getZoneColor(selectedWorkout.zone)}`}>
                 {selectedWorkout.zone}
@@ -1099,9 +1193,9 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
                 <span><span className="text-muted-foreground">Pieces: </span>{selectedWorkout.pieces}</span>
               )}
               {selectedWorkout.targetSplit && (
-                <span className="font-mono">
-                  <span className="text-muted-foreground font-sans">Target split: </span>
-                  {selectedWorkout.targetSplit}
+                <span>
+                  <span className="text-muted-foreground">Target split: </span>
+                  <TargetSplit value={selectedWorkout.targetSplit} />
                 </span>
               )}
               {selectedWorkout.rate && (
@@ -1123,10 +1217,13 @@ const PlanCalendarView = ({ plan }: { plan: WorkoutPlan }) => {
             </p>
           )}
         </div>
-      )}
-      {selectedDate && !selectedWorkout && (
-        <p className="text-sm text-muted-foreground text-center py-2">No workout scheduled for this day</p>
-      )}
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              No workout scheduled for this day
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -1361,6 +1458,11 @@ export const WorkoutPlanSection = () => {
   const isProfileComplete = !!profile?.weight && !!profile?.height;
   const isCoach = profile?.user_type === "coach";
 
+  // 500m pace at the athlete's best 2K — the baseline target splits are shown
+  // against ("2K+18s"). Null when there is no 2K on record, in which case the
+  // plan's own wording is shown verbatim.
+  const base500 = profile?.best_2k_seconds ? profile.best_2k_seconds / 4 : null;
+
   const prefsSummary = savedPrefs ? (() => {
     const goalLabels: Record<string, string> = {
       general_fitness: "General Fitness", erg_testing: "Erg Testing",
@@ -1372,6 +1474,7 @@ export const WorkoutPlanSection = () => {
 
   if (showWizard) {
     return (
+      <Base2kContext.Provider value={base500}>
       <div className="space-y-6">
         {!isProfileComplete && (
           <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-700 dark:text-yellow-400">
@@ -1393,10 +1496,12 @@ export const WorkoutPlanSection = () => {
           </Button>
         )}
       </div>
+      </Base2kContext.Provider>
     );
   }
 
   return (
+    <Base2kContext.Provider value={base500}>
     <div className="space-y-6">
       {/* Current preferences summary + regenerate */}
       {savedPrefs && (
@@ -1474,5 +1579,6 @@ export const WorkoutPlanSection = () => {
         canRegenerate={isProfileComplete}
       />
     </div>
+    </Base2kContext.Provider>
   );
 };
