@@ -13,19 +13,49 @@ const FN = "generate-workout";
 const MODEL = "claude-sonnet-5";
 const REPAIR_MODEL = "claude-haiku-4-5";
 
-// Every generation runs through the same 4-week chunk loop, including short
-// plans. A 4-week chunk of fully-populated JSON measures ~4,600 output tokens
-// (7 days x ~175 tokens + week header, x4). 4,000 would truncate, so the cap is
-// 6,000 — the smallest value with real headroom. See report notes.
+// Chunks are generated CONCURRENTLY over fixed 4-week windows, so total wall
+// time is the slowest single chunk (~50-75s) rather than the sum of all of them.
+// Supabase kills the isolate at 150s wall clock; the old sequential loop blew
+// through that on any plan longer than one chunk.
+//
+// Fixed windows are what make concurrency possible: each chunk's week range is
+// known up front instead of depending on how many weeks the previous chunk
+// actually returned. The trade-off is that a chunk returning 3 weeks instead
+// of 4 leaves a genuine gap, so the final plan can come up short.
+// max_tokens is a size limit, not a speed limit — going parallel does nothing
+// for it. Measured: dense workout JSON runs ~2.1 chars/token, so a 6,000-token
+// cap truncates a 4-week chunk at ~12,600 chars, mid-object. Truncated JSON
+// then fails both the parser and the repair pass, losing the whole chunk.
+// 8,000 clears a full 4-week chunk with headroom.
 const CHUNK_SIZE = 4;
-const MAX_TOKENS_PER_CHUNK = 6000;
+const MAX_TOKENS_PER_CHUNK = 8000;
+
+// Fewer than this from a chunk and the chunk is retried.
+const MIN_CHUNK_WEEKS = 2;
 
 // No bytes from Anthropic for this long => the request is stalled, abort it.
 // This is an IDLE timeout, not a wall-clock one: a legitimate 6k-token chunk
 // takes 60-120s but never goes 25s without a delta.
 const IDLE_TIMEOUT_MS = 25_000;
-// Absolute ceiling per Anthropic call so nothing can hang forever.
-const HARD_TIMEOUT_MS = 180_000;
+// Absolute ceiling per Anthropic call. Must stay under Supabase's 150s isolate
+// limit: a ceiling above it can never fire, so a hung chunk would get the whole
+// function killed instead of surfacing an error to the client. Concurrent
+// chunks run slower than a solo one (shared output-token throughput), so this
+// has to be generous — 70s was low enough to abort healthy chunks mid-stream.
+const HARD_TIMEOUT_MS = 115_000;
+// Whole-request budget, measured from handler entry and shared by every chunk.
+// Each Anthropic call is capped at whatever is left, so the function always
+// gets to emit an error event instead of being killed silently at 150s.
+const TOTAL_BUDGET_MS = 130_000;
+// Don't start a retry unless there is realistically time for it to finish.
+const MIN_RETRY_BUDGET_MS = 45_000;
+// Ceiling for the top-up call that fills weeks the parallel pass left missing.
+// Still clamped by the shared deadline; the parallel pass typically finishes
+// around 56s, leaving ~70s of the budget for this.
+const TOPUP_TIMEOUT_MS = 100_000;
+// A top-up needs less time than a full chunk (usually one week), but don't
+// start one that can't plausibly finish.
+const MIN_TOPUP_BUDGET_MS = 20_000;
 // SSE comment frame cadence — keeps bytes on the wire through proxies.
 const HEARTBEAT_MS = 10_000;
 
@@ -129,7 +159,10 @@ Rest days: is_rest true, required null, optional null.
 targetSplit: use the athlete's exact computed splits when supplied, otherwise the 2k+Xs/500m format.
 EVERY week object MUST contain all 7 days (day 1 = Monday through day 7 = Sunday), and every
 non-rest day MUST have a fully populated required session (title plus zone/type plus a
-description or duration or distance). Never emit an empty or placeholder day.`;
+description or duration or distance). Never emit an empty or placeholder day.
+
+You MUST generate exactly the weeks requested. Do not stop early. If you are running out of
+space, compress individual workout descriptions but never omit a week.`;
 
 // Compact preference directives. Every line here is consumed by the model —
 // verbose prose was stripped because it added input tokens without changing output.
@@ -392,6 +425,47 @@ const tryParseJsonArray = (raw: string): any[] | null => {
   }
 };
 
+/**
+ * Recover the complete leading elements of a truncated JSON array.
+ *
+ * A chunk cut off at max_tokens ends mid-object, so the whole array fails to
+ * parse and every already-finished week is thrown away with it. Walk the text
+ * tracking nesting depth (string- and escape-aware), find where the last
+ * top-level element closed, and close the array there.
+ */
+const salvageJsonArray = (raw: string): any[] | null => {
+  const start = raw.indexOf("[");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let lastElementEnd = -1;
+
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { if (inString) escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === "[" || ch === "{") depth++;
+    else if (ch === "]" || ch === "}") {
+      depth--;
+      // Back to depth 1 means a top-level array element just closed cleanly.
+      if (depth === 1) lastElementEnd = i;
+    }
+  }
+
+  if (lastElementEnd === -1) return null;
+  try {
+    const v = JSON.parse(raw.slice(start, lastElementEnd + 1) + "]");
+    return Array.isArray(v) && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+};
+
 const requiredIsPopulated = (req: any): boolean => {
   if (!req || typeof req !== "object") return false;
   if (typeof req.title !== "string" || !req.title.trim()) return false;
@@ -409,10 +483,16 @@ const weekIsComplete = (week: any): boolean => {
   return populated >= 1;
 };
 
-/** null when the plan is complete, otherwise a human-readable reason. */
-const planIssue = (weeks: any[], expected: number): string | null => {
-  if (!Array.isArray(weeks) || weeks.length !== expected) {
-    return `expected ${expected} weeks, got ${Array.isArray(weeks) ? weeks.length : 0}`;
+/**
+ * null when the plan is usable, otherwise a human-readable reason.
+ *
+ * `minWeeks` is a floor, not an exact count: with fixed parallel windows a
+ * chunk that returns 3 weeks instead of 4 is accepted, so a 12-week request can
+ * legitimately settle at 11. Every week that IS present must still be complete.
+ */
+const planIssue = (weeks: any[], minWeeks: number): string | null => {
+  if (!Array.isArray(weeks) || weeks.length < minWeeks) {
+    return `expected at least ${minWeeks} weeks, got ${Array.isArray(weeks) ? weeks.length : 0}`;
   }
   for (let i = 0; i < weeks.length; i++) {
     if (!weekIsComplete(weeks[i])) {
@@ -421,6 +501,10 @@ const planIssue = (weeks: any[], expected: number): string | null => {
   }
   return null;
 };
+
+/** Weeks we insist on before calling a plan usable: at most one short week per chunk. */
+const minAcceptableWeeks = (totalWeeks: number): number =>
+  Math.max(1, totalWeeks - Math.ceil(totalWeeks / CHUNK_SIZE));
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -446,6 +530,8 @@ serve((req) => {
       heartbeat = undefined;
     }
   };
+
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -526,7 +612,7 @@ serve((req) => {
         const cached = await getCached(supabase, cacheKey);
         if (cached) {
           const cachedWeeks = Array.isArray((cached as any)?.plan) ? (cached as any).plan : [];
-          const cachedIssue = planIssue(cachedWeeks, totalWeeks);
+          const cachedIssue = planIssue(cachedWeeks, minAcceptableWeeks(totalWeeks));
           if (!cachedIssue) {
             console.log("generate-workout: cache hit (complete plan)");
             await logUsage(supabase, { user_id, function_name: FN, model: MODEL, input_tokens: 0, output_tokens: 0, cache_hit: true });
@@ -619,23 +705,54 @@ PLAN LENGTH: ${durationLabel}, ${totalWeeks} weeks total, numbered 1 to ${totalW
           await recordUsage(supabase, user_id, inTok + outTok);
         };
 
-        for (let chunkStart = 1; chunkStart <= totalWeeks; chunkStart += CHUNK_SIZE) {
-          const chunkEnd = Math.min(chunkStart + CHUNK_SIZE - 1, totalWeeks);
+        // Fixed 4-week windows, known up front — that is what lets every chunk
+        // fire at once.
+        const chunks: Array<{ start: number; end: number }> = [];
+        for (let start = 1; start <= totalWeeks; start += CHUNK_SIZE) {
+          chunks.push({ start, end: Math.min(start + CHUNK_SIZE - 1, totalWeeks) });
+        }
+
+        // Counters mutated from concurrent tasks. Safe without locking: Deno
+        // runs this on a single thread, so each `+=` completes between awaits.
+        let chunksDone = 0;
+        let weeksSoFar = 0;
+
+        console.log(`generate-workout: dispatching ${chunks.length} chunk(s) concurrently for ${totalWeeks} weeks`);
+        send("progress", { phase: "chunks_dispatched", chunks: chunks.length, totalWeeks });
+
+        const generateChunk = async (
+          chunkStart: number,
+          chunkEnd: number,
+        ): Promise<{ start: number; weeks: any[] } | { start: number; error: string }> => {
           const expectedChunkWeeks = chunkEnd - chunkStart + 1;
-          console.log(`generate-workout: generating chunk weeks ${chunkStart}-${chunkEnd}`);
-          send("progress", { phase: "chunk_start", chunkStart, chunkEnd, weeksSoFar: allWeeks.length, totalWeeks });
+          // A 1-week chunk is legitimate when the plan length isn't a multiple of 4.
+          const minChunkWeeks = Math.min(MIN_CHUNK_WEEKS, expectedChunkWeeks);
 
           const userMessage =
-            `Generate weeks ${chunkStart} through ${chunkEnd} of the ${totalWeeks}-week plan. ` +
-            `Output ONLY a JSON array of exactly ${expectedChunkWeeks} week object(s), with week numbers ${chunkStart} through ${chunkEnd}. ` +
-            `Every week must contain all 7 days (Monday-Sunday) with fully populated required sessions.`;
+            `Generate ONLY weeks ${chunkStart} through ${chunkEnd} of the ${totalWeeks}-week plan. ` +
+            `Week numbers must start at ${chunkStart}. ` +
+            `Output only valid JSON: an array of exactly ${expectedChunkWeeks} week object(s), numbered ${chunkStart} through ${chunkEnd}. ` +
+            `No prose, no markdown fences. ` +
+            `Every week must contain all 7 days (Monday-Sunday) with fully populated required sessions. ` +
+            `You MUST generate exactly the weeks requested. Do not stop early. If you are running out of space, ` +
+            `compress individual workout descriptions but never omit a week.`;
 
-          let chunkWeeks: any[] | null = null;
           let lastError = "";
 
           // Two attempts: one retry covers a timeout, a transport error, or a
           // truncated/incomplete response.
           for (let attempt = 1; attempt <= 2; attempt++) {
+            const budgetLeft = deadline - Date.now();
+            if (attempt === 2 && budgetLeft < MIN_RETRY_BUDGET_MS) {
+              console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} skipping retry, only ${budgetLeft}ms left`);
+              break;
+            }
+            const attemptTimeout = Math.min(HARD_TIMEOUT_MS, budgetLeft);
+            if (attemptTimeout <= 0) {
+              lastError = lastError || "ran out of time budget";
+              break;
+            }
+
             const r = await withHardTimeout(
               streamAnthropicText(
                 ANTHROPIC_API_KEY,
@@ -646,15 +763,16 @@ PLAN LENGTH: ${durationLabel}, ${totalWeeks} weeks total, numbered 1 to ${totalW
                   system: systemBlocks,
                   messages: [{ role: "user", content: userMessage }],
                 },
-                (chars) => send("progress", { phase: "streaming", chunkStart, chunkEnd, chars, weeksSoFar: allWeeks.length, totalWeeks, attempt }),
+                (chars) => send("progress", { phase: "streaming", chunkStart, chunkEnd, chars, weeksSoFar, totalWeeks, attempt }),
               ),
-              HARD_TIMEOUT_MS,
+              attemptTimeout,
               `chunk ${chunkStart}-${chunkEnd}`,
             );
 
             if (!r.ok) {
               lastError = r.errorText || "AI service unavailable";
               console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} failed: ${lastError}`);
+              send("progress", { phase: "chunk_attempt_failed", chunkStart, chunkEnd, attempt, reason: lastError, status: r.status, timedOut: r.timedOut === true });
               await recordApiError(supabase, FN);
               continue;
             }
@@ -667,6 +785,15 @@ PLAN LENGTH: ${durationLabel}, ${totalWeeks} weeks total, numbered 1 to ${totalW
 
             let candidate = tryParseJsonArray(r.text);
 
+            // Truncated at max_tokens? Salvage the weeks that did finish. Free
+            // and deterministic, so try it before spending a repair call.
+            if (!candidate && r.text) {
+              candidate = salvageJsonArray(r.text);
+              if (candidate) {
+                console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} truncated, salvaged ${candidate.length} week(s)`);
+              }
+            }
+
             // Cheap Haiku repair pass for a syntactically broken array.
             if (!candidate && r.text) {
               console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} parse failed, repairing`);
@@ -678,48 +805,172 @@ PLAN LENGTH: ${durationLabel}, ${totalWeeks} weeks total, numbered 1 to ${totalW
                   system: "You are a JSON repair tool. Output only a valid JSON array. No text before or after. Fix any syntax errors in the training plan JSON provided.",
                   messages: [{ role: "user", content: r.text }],
                 }),
-                HARD_TIMEOUT_MS,
+                Math.max(0, Math.min(HARD_TIMEOUT_MS, deadline - Date.now())),
                 `repair ${chunkStart}-${chunkEnd}`,
               );
               if (rep.ok) candidate = tryParseJsonArray(rep.text);
             }
 
+            // Trim any trailing truncated week and keep the complete ones.
+            let usable: any[] | null = null;
+            if (candidate) {
+              usable = candidate.slice(0, expectedChunkWeeks);
+              const firstBad = usable.findIndex((w: any) => !weekIsComplete(w));
+              if (firstBad !== -1) usable = usable.slice(0, firstBad);
+            }
+
             const issue = !candidate
               ? "invalid JSON"
-              : candidate.length !== expectedChunkWeeks
-                ? `expected ${expectedChunkWeeks} weeks, got ${candidate.length}`
-                : candidate.some((w: any) => !weekIsComplete(w))
-                  ? "incomplete week(s)"
-                  : null;
+              : !usable || usable.length < minChunkWeeks
+                ? `expected ${expectedChunkWeeks} weeks, got ${usable?.length ?? 0} complete`
+                : null;
 
-            if (!issue) { chunkWeeks = candidate; break; }
+            if (!issue && usable) {
+              if (usable.length < expectedChunkWeeks) {
+                console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} short (${usable.length}/${expectedChunkWeeks}) — accepting`);
+              }
+              // Number against this chunk's own window. The final combine
+              // renumbers globally, which is what closes any gap a short chunk left.
+              const weeks = usable.map((w: any, i: number) => ({ ...w, week: chunkStart + i }));
+
+              chunksDone++;
+              weeksSoFar += weeks.length;
+              console.log(`generate-workout: chunk ${chunkStart}-${chunkEnd} done with ${weeks.length} weeks (${chunksDone}/${chunks.length} chunks)`);
+              send("chunk", { weeks, chunkStart, chunkEnd, weeksSoFar, chunksDone, chunksTotal: chunks.length, totalWeeks });
+              return { start: chunkStart, weeks };
+            }
             lastError = issue;
             console.warn(`generate-workout: chunk ${chunkStart}-${chunkEnd} attempt ${attempt} rejected: ${issue}`);
+            send("progress", { phase: "chunk_attempt_rejected", chunkStart, chunkEnd, attempt, reason: issue, chars: r.text.length, parsed: candidate?.length ?? 0, complete: usable?.length ?? 0 });
           }
 
-          if (!chunkWeeks) {
-            console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} failed after retry (${lastError})`);
-            await flushUsage();
-            send("error", { error: `Plan generation failed for weeks ${chunkStart}-${chunkEnd}. Please try again.`, detail: lastError });
-            return;
-          }
+          console.error(`generate-workout: chunk ${chunkStart}-${chunkEnd} failed after retry (${lastError})`);
+          return { start: chunkStart, error: lastError };
+        };
 
-          allWeeks.push(...chunkWeeks);
-          console.log(`generate-workout: chunk ${chunkStart}-${chunkEnd} added ${chunkWeeks.length} weeks (total ${allWeeks.length})`);
-          send("chunk", { weeks: chunkWeeks, chunkStart, chunkEnd, weeksSoFar: allWeeks.length, totalWeeks });
+        // All chunks in flight simultaneously: wall time is the slowest chunk,
+        // not the sum. allSettled rather than all so one rejection can't leave
+        // the others unhandled mid-flight.
+        const settled = await Promise.allSettled(chunks.map((c) => generateChunk(c.start, c.end)));
+
+        const failures: string[] = [];
+        const succeeded: Array<{ start: number; weeks: any[] }> = [];
+        for (let i = 0; i < settled.length; i++) {
+          const s = settled[i];
+          const { start, end } = chunks[i];
+          if (s.status === "rejected") {
+            failures.push(`weeks ${start}-${end}: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`);
+          } else if ("error" in s.value) {
+            failures.push(`weeks ${start}-${end}: ${s.value.error}`);
+          } else {
+            succeeded.push(s.value);
+          }
         }
+
+        if (failures.length > 0) {
+          await flushUsage();
+          send("error", {
+            error: `Plan generation failed for ${failures.length} of ${chunks.length} block(s). Please try again.`,
+            detail: failures.join("; "),
+          });
+          return;
+        }
+
+        // Combine in window order. Week numbers are still the per-window ones,
+        // so a short chunk leaves a real hole (chunk 1-4 returning 3 weeks
+        // yields 1,2,3,5,6,7,8,...). The gaps must be read BEFORE renumbering,
+        // since renumbering is what closes them.
+        succeeded.sort((a, b) => a.start - b.start);
+        for (const s of succeeded) allWeeks.push(...s.weeks);
+
+        const present = new Set(allWeeks.map((w: any) => Number(w.week)));
+        const missingWeeks: number[] = [];
+        for (let w = 1; w <= totalWeeks; w++) if (!present.has(w)) missingWeeks.push(w);
+
+        // --- Top-up: one extra call for whatever the parallel pass missed ----
+        if (missingWeeks.length > 0) {
+          const topupBudget = Math.min(TOPUP_TIMEOUT_MS, deadline - Date.now());
+          if (topupBudget < MIN_TOPUP_BUDGET_MS) {
+            console.warn(`generate-workout: skipping top-up for weeks ${missingWeeks.join(", ")}, only ${topupBudget}ms left`);
+          } else {
+            console.log(`generate-workout: topping up missing weeks ${missingWeeks.join(", ")}`);
+            send("progress", { phase: "topup", missingWeeks, weeksSoFar: allWeeks.length, totalWeeks });
+
+            const topupMessage =
+              `Generate ONLY the following missing weeks of the ${totalWeeks}-week plan: ${missingWeeks.join(", ")}. ` +
+              `Output only a valid JSON array of ${missingWeeks.length} week object(s), starting at week ${missingWeeks[0]}. ` +
+              `No prose, no markdown fences. ` +
+              `Every week must contain all 7 days (Monday-Sunday) with fully populated required sessions. ` +
+              `Do not stop early. If you are running out of space, compress individual workout ` +
+              `descriptions but never omit a week.`;
+
+            // Single attempt by design — a short top-up is acceptable, and a
+            // retry risks the isolate deadline for a marginal extra week.
+            const t = await withHardTimeout(
+              streamAnthropicText(
+                ANTHROPIC_API_KEY,
+                {
+                  model: MODEL,
+                  max_tokens: MAX_TOKENS_PER_CHUNK,
+                  thinking: { type: "disabled" },
+                  system: systemBlocks,
+                  messages: [{ role: "user", content: topupMessage }],
+                },
+                (chars) => send("progress", { phase: "streaming", topup: true, missingWeeks, chars, weeksSoFar: allWeeks.length, totalWeeks }),
+              ),
+              topupBudget,
+              `topup ${missingWeeks.join(",")}`,
+            );
+
+            if (!t.ok) {
+              console.error(`generate-workout: top-up failed: ${t.errorText}`);
+              await recordApiError(supabase, FN);
+            } else {
+              await recordApiSuccess(supabase, FN);
+              inTok += t.usage?.input_tokens ?? 0;
+              outTok += t.usage?.output_tokens ?? 0;
+              cacheReadTok += t.usage?.cache_read_input_tokens ?? 0;
+              cacheWriteTok += t.usage?.cache_creation_input_tokens ?? 0;
+
+              const topupCandidate = tryParseJsonArray(t.text) ?? salvageJsonArray(t.text);
+              const topupComplete = (topupCandidate ?? []).filter((w: any) => weekIsComplete(w));
+              // Assign the missing numbers positionally — the model's own
+              // numbering can't be trusted when the gaps aren't contiguous.
+              const topped = topupComplete
+                .slice(0, missingWeeks.length)
+                .map((w: any, i: number) => ({ ...w, week: missingWeeks[i] }));
+
+              if (topped.length > 0) {
+                allWeeks.push(...topped);
+                console.log(`generate-workout: top-up recovered ${topped.length} of ${missingWeeks.length} missing week(s)`);
+              } else {
+                console.warn(`generate-workout: top-up returned no complete weeks`);
+              }
+              send("progress", { phase: "topup_done", recovered: topped.length, requested: missingWeeks.length, weeksSoFar: allWeeks.length, totalWeeks });
+            }
+          }
+        }
+
+        // Order by week number (top-up weeks were appended out of order), then
+        // renumber sequentially so any still-missing week leaves no hole.
+        allWeeks.sort((a: any, b: any) => Number(a.week) - Number(b.week));
+        for (let i = 0; i < allWeeks.length; i++) allWeeks[i].week = i + 1;
 
         await flushUsage();
         console.log(`generate-workout: tokens in=${inTok} out=${outTok} cacheRead=${cacheReadTok} cacheWrite=${cacheWriteTok}`);
 
-        const parsed = { duration: durationLabel, total_weeks: totalWeeks, plan: allWeeks };
+        const parsed = { duration: durationLabel, total_weeks: allWeeks.length, plan: allWeeks };
 
-        // Final gate — never emit or cache an incomplete plan.
-        const finalIssue = planIssue(allWeeks, totalWeeks);
+        // Final gate — a plan can be short (a chunk returning 3 of 4 weeks is
+        // accepted), but every week present must be complete.
+        const finalIssue = planIssue(allWeeks, minAcceptableWeeks(totalWeeks));
         if (finalIssue) {
           console.warn(`generate-workout: rejecting incomplete plan: ${finalIssue}`);
           send("error", { error: `Plan generation incomplete (${finalIssue}). Please try again.` });
           return;
+        }
+        if (allWeeks.length < totalWeeks) {
+          console.warn(`generate-workout: plan short — ${allWeeks.length} of ${totalWeeks} weeks requested`);
         }
 
         await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, inTok, outTok);

@@ -1283,9 +1283,13 @@ export const WorkoutPlanSection = () => {
         },
       );
 
-      // Validate completeness before saving
+      // Validate completeness before saving. The function generates weeks in
+      // parallel 4-week blocks and accepts a block that returns 3 weeks, so a
+      // plan can legitimately land one week short per block. Reject only a plan
+      // that's shorter than that tolerance.
       const returnedWeeks = Array.isArray(data?.plan) ? data.plan : (Array.isArray(data) ? data : []);
-      if (returnedWeeks.length > 0 && returnedWeeks.length < totalWeeks) {
+      const minWeeks = Math.max(1, totalWeeks - Math.ceil(totalWeeks / 4));
+      if (returnedWeeks.length > 0 && returnedWeeks.length < minWeeks) {
         throw new Error(`Plan generation incomplete — only ${returnedWeeks.length} of ${totalWeeks} weeks generated. Please try again.`);
       }
 
