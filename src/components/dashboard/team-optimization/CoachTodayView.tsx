@@ -63,6 +63,20 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
     },
   });
 
+  // Coach-only draft row (practice_entry_drafts is not readable by athletes).
+  const { data: workoutDraft } = useQuery({
+    queryKey: ["today-workout-draft", teamId, todayStr],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("practice_entry_drafts")
+        .select("draft_text")
+        .eq("team_id", teamId)
+        .eq("practice_date", todayStr)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const { data: todayLineups = [], isLoading: lineupsLoading } = useQuery({
     queryKey: ["today-lineups-all", teamId, todayStr],
     queryFn: async () => {
@@ -122,26 +136,27 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
 
   const saveDraft = useMutation({
     mutationFn: async (text: string) => {
-      if (practiceEntry?.id) {
-        const { error } = await supabase
-          .from("practice_entries")
-          .update({ workout_draft: text, updated_at: new Date().toISOString() } as any)
-          .eq("id", practiceEntry.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("practice_entries").insert({
-          team_id: teamId,
-          practice_date: todayStr,
-          workout_draft: text,
-          created_by: profile?.id,
-        } as any);
-        if (error) throw error;
-      }
+      // Drafts live in practice_entry_drafts, which is coach-only at the RLS
+      // level. They used to be a column on practice_entries — a row athletes
+      // are allowed to read — so any athlete could query the unpublished text.
+      const { error } = await (supabase as any)
+        .from("practice_entry_drafts")
+        .upsert(
+          {
+            team_id: teamId,
+            practice_date: todayStr,
+            draft_text: text,
+            updated_by: profile?.id,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "team_id,practice_date" }
+        );
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Draft saved" });
       setEditingWorkout(false);
-      queryClient.invalidateQueries({ queryKey: ["today-practice-entry", teamId, todayStr] });
+      queryClient.invalidateQueries({ queryKey: ["today-workout-draft", teamId, todayStr] });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -153,7 +168,6 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
           .from("practice_entries")
           .update({
             workout_description: text,
-            workout_draft: null,
             workout_published_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           } as any)
@@ -169,15 +183,27 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
         } as any);
         if (error) throw error;
       }
+      // Publishing consumes the draft.
+      await (supabase as any)
+        .from("practice_entry_drafts")
+        .delete()
+        .eq("team_id", teamId)
+        .eq("practice_date", todayStr);
     },
     onSuccess: () => {
       toast({ title: "Workout published!", description: "Athletes can now see today's workout." });
       setEditingWorkout(false);
       queryClient.invalidateQueries({ queryKey: ["today-practice-entry", teamId, todayStr] });
+      queryClient.invalidateQueries({ queryKey: ["today-workout-draft", teamId, todayStr] });
       const coachName = profile?.full_name || profile?.username || "Your coach";
       supabase.functions.invoke("send-notification", {
         body: {
           team_id: teamId,
+          // `type` must be top level — send-notification reads it there to pick
+          // the notification_preferences column and to stamp the in-app row.
+          // Nested inside `data` it was ignored, so every athlete got an
+          // untyped "general" notification and opt-outs were bypassed.
+          type: "workout_published",
           title: "Workout Posted",
           body: `${coachName} posted today's workout. Check the app to see your assignment.`,
           data: { type: "workout_published", team_id: teamId, date: todayStr },
@@ -190,10 +216,14 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
 
   const publishLineup = useMutation({
     mutationFn: async ({ lineupId, seats }: { lineupId: string; seats: any[] }) => {
-      const { error } = await supabase
-        .from("boat_lineups")
-        .update({ seats, published_at: new Date().toISOString() })
-        .eq("id", lineupId);
+      // publish_lineup marks the lineup published and rewrites its attendance
+      // rows in one transaction. Doing it client-side left the two steps
+      // non-atomic and tripped the practice_attendance unique constraint on
+      // re-publish (see 20260809000002_publish_lineup_rpc.sql).
+      const { error } = await (supabase as any).rpc("publish_lineup", {
+        p_lineup_id: lineupId,
+        p_seats: seats,
+      });
       if (error) throw error;
     },
     onSuccess: (_, { lineupId }) => {
@@ -205,6 +235,8 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
       supabase.functions.invoke("send-notification", {
         body: {
           team_id: teamId,
+          // Top level — see the note in publishWorkout above.
+          type: "lineup_published",
           title: "Lineup Posted",
           body: `${coachName} posted the lineup for ${dateLabel}. Check the app to see your seat.`,
           data: { type: "lineup_published", team_id: teamId, date: todayStr },
@@ -249,7 +281,8 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
   const absentCount = todayAttendance.filter((a: any) => a.status === "absent").length;
   const noResponseCount = teamMembers.length - confirmedCount - absentCount;
 
-  const hasDraft = !!(practiceEntry as any)?.workout_draft;
+  const draftText = (workoutDraft as any)?.draft_text as string | undefined;
+  const hasDraft = !!draftText;
   const hasPublished = !!(practiceEntry as any)?.workout_description;
 
   const moreSections = SIDEBAR_ITEMS.filter(i => i.key !== "today");
@@ -278,7 +311,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
               <Button
                 size="icon" variant="ghost" className="h-7 w-7 shrink-0"
                 onClick={() => {
-                  setWorkoutEditText((practiceEntry as any)?.workout_draft || (practiceEntry as any)?.workout_description || "");
+                  setWorkoutEditText(draftText || (practiceEntry as any)?.workout_description || "");
                   setEditingWorkout(true);
                 }}
               >
@@ -321,7 +354,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
             </div>
           ) : hasDraft ? (
             <div className="space-y-3">
-              <p className="text-sm text-foreground/70 whitespace-pre-wrap italic">{(practiceEntry as any).workout_draft}</p>
+              <p className="text-sm text-foreground/70 whitespace-pre-wrap italic">{draftText}</p>
               {hasPublished && (
                 <p className="text-xs text-muted-foreground">
                   Published: {(practiceEntry as any).workout_description?.slice(0, 60)}…
@@ -329,7 +362,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
               )}
               <Button
                 size="sm" className="gap-1.5 h-8 text-xs"
-                onClick={() => publishWorkout.mutate((practiceEntry as any).workout_draft)}
+                onClick={() => publishWorkout.mutate(draftText!)}
                 disabled={publishWorkout.isPending}
               >
                 <Send className="h-3 w-3" />Publish to Athletes

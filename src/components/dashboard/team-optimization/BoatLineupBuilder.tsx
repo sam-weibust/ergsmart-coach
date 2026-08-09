@@ -335,32 +335,18 @@ const BoatLineupBuilder = ({ teamId, teamMembers, isCoach, profile, seasonId, bo
       const seatsArr: SeatAssignment[] = Array.isArray(lineup.seats) ? lineup.seats : [];
       const athleteIds = seatsArr.filter(s => s.user_id).map(s => s.user_id!);
 
-      // Mark as published
-      const { error: pubErr } = await supabase.from("boat_lineups").update({
-        published_at: new Date().toISOString(),
-        status: "final",
-      }).eq("id", lineup.id);
+      // Publish + rewrite attendance atomically. The old client-side
+      // UPDATE -> DELETE -> INSERT sequence looked correct but practice_attendance
+      // has no DELETE policy, so the delete silently matched 0 rows and the
+      // insert then failed on UNIQUE (lineup_id, user_id) for every re-publish.
+      const { error: pubErr } = await (supabase as any).rpc("publish_lineup", {
+        p_lineup_id: lineup.id,
+        p_seats: seatsArr,
+      });
       if (pubErr) throw pubErr;
 
-      // Create attendance records for each athlete.
-      // Delete existing rows then insert fresh to avoid "cannot update row a second time"
-      // upsert conflicts when the same user_id appears in multiple seats or in retried calls.
       const uniqueAthleteIds = Array.from(new Set(athleteIds));
       if (uniqueAthleteIds.length > 0) {
-        const { error: delErr } = await supabase
-          .from("practice_attendance")
-          .delete()
-          .eq("lineup_id", lineup.id);
-        if (delErr) throw delErr;
-
-        const records = uniqueAthleteIds.map(uid => ({
-          lineup_id: lineup.id,
-          user_id: uid,
-          status: "no_response",
-        }));
-        const { error: attErr } = await supabase.from("practice_attendance").insert(records);
-        if (attErr) throw attErr;
-
         // Send push + in-app notifications
         const dateStr = lineup.practice_date ? new Date(lineup.practice_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : "upcoming practice";
         supabase.functions.invoke("send-notification", {

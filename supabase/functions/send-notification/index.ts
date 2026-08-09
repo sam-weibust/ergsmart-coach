@@ -129,6 +129,7 @@ async function sendFcm(token: string, title: string, body: string, data: Record<
 // Notification preference column mapping
 const prefColumn: Record<string, string> = {
   lineup_published: "lineup_published",
+  workout_published: "workout_published",
   practice_reminder: "practice_reminder",
   direct_message: "direct_message",
   team_board_post: "team_board_post",

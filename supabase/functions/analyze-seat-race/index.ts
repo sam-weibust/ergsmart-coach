@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
+import { extractJson } from "../_shared/extractJson.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,28 +54,34 @@ Analyze the cumulative data across:
 - Statistical significance of the margins
 - Inconsistencies or noise in the results
 
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON matching this shape — no markdown fence, no text outside the JSON:
 {
-  "rankings": [
-    {"rank": 1, "user_id": "...", "name": "...", "score": 0.95, "rationale": "brief explanation"},
-    ...
-  ],
-  "overall_confidence": 0.0-1.0,
-  "confidence_notes": "explanation of confidence level",
-  "more_racing_needed": true/false,
-  "suggested_pairs": [["athlete1_id", "athlete2_id"], ...],
-  "method_notes": "statistical method used"
-}`;
+  "rankings": [{"rank": 1, "user_id": "uuid", "name": "Athlete Name", "score": 0.95, "rationale": "one sentence"}],
+  "overall_confidence": 0.7,
+  "confidence_notes": "one sentence",
+  "more_racing_needed": true,
+  "suggested_pairs": [["uuid", "uuid"]],
+  "method_notes": "one sentence"
+}
+
+Rules:
+- One "rankings" entry per athlete listed above, ordered by rank starting at 1.
+- Every rationale and notes field must be ONE sentence of at most 20 words. Do not elaborate.
+- "score" and "overall_confidence" are numbers between 0 and 1.
+- "more_racing_needed" is a boolean. "suggested_pairs" may be an empty array.`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        // 1200, not 500: `rankings` is one entry per athlete (a seat race is
+        // 2000, not 1200: `rankings` is one entry per athlete (a seat race is
         // typically 8-16 athletes) each with a rationale, plus suggested_pairs
-        // and two notes fields — ~900 output tokens worst case.
-        max_tokens: 1200,
+        // and two notes fields. 1200 truncated the JSON mid-string on a plain
+        // 4-athlete run (stop_reason "max_tokens" -> JSON.parse threw -> 500),
+        // because the model narrated each swap at length. The prompt now caps
+        // rationale length too, so this ceiling is headroom rather than a target.
+        max_tokens: 2000,
         // Disable adaptive thinking (Sonnet 5 default) — otherwise it consumed the
         // token budget and returned an empty {} analysis.
         thinking: { type: "disabled" },
@@ -92,9 +99,7 @@ Respond with ONLY valid JSON:
     const result = await resp.json();
     const text = result?.content?.[0]?.text ?? "{}";
     const usage = tokensFrom(result?.usage);
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    const analysis = JSON.parse(text.slice(start, end + 1));
+    const analysis = extractJson(text);
 
     await setCached(supabase, cacheKey, analysis, TTL.HOUR, MODEL, usage.input_tokens, usage.output_tokens);
     await logUsage(supabase, { user_id: null, function_name: FN, model: MODEL, ...usage, cache_hit: false });

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
+import { extractJson } from "../_shared/extractJson.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,17 +62,20 @@ Recent seat race sessions: ${JSON.stringify(seatRaceRes.data || [])}
 Recent load/fatigue: ${JSON.stringify(loadRes.data || [])}
 Athlete IDs to place: ${JSON.stringify(athlete_ids)}
 
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON matching this shape — no markdown fence, no text outside the JSON:
 {
-  "seats": [
-    {"seat_number": 1, "user_id": "...", "rationale": "...", "confidence": 0.0-1.0},
-    ...
-  ],
-  "cox": {"user_id": "...", "rationale": "..."} or null,
-  "overall_rationale": "...",
-  "fatigue_flags": [{"user_id": "...", "concern": "..."}],
-  "overall_confidence": 0.0-1.0
-}`;
+  "seats": [{"seat_number": 1, "user_id": "uuid", "rationale": "one sentence", "confidence": 0.8}],
+  "cox": {"user_id": "uuid", "rationale": "one sentence"},
+  "overall_rationale": "one sentence",
+  "fatigue_flags": [{"user_id": "uuid", "concern": "one sentence"}],
+  "overall_confidence": 0.7
+}
+
+Rules:
+- One "seats" entry per athlete you place, plus "cox" only if this boat class carries a coxswain (otherwise "cox": null).
+- Every rationale and concern must be ONE sentence of at most 15 words. Do not elaborate.
+- "confidence" and "overall_confidence" are numbers between 0 and 1.
+- "fatigue_flags" may be an empty array.`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -80,10 +84,12 @@ Respond with ONLY valid JSON:
         model: MODEL,
         // thinking MUST stay disabled: adaptive thinking is Sonnet 5's default
         // and max_tokens caps thinking + text together, so with it on the whole
-        // 800 went to thinking and the lineup came back as {}. With it off the
-        // full 800 is output — enough for a 9-seat 8+ (~730 tokens worst case:
-        // 9 seats x ~52 + cox + overall_rationale + fatigue_flags).
-        max_tokens: 800,
+        // budget went to thinking and the lineup came back as {}.
+        //
+        // 800 was too small and truncated the JSON mid-string on every 8+ call
+        // (stop_reason "max_tokens" -> JSON.parse threw -> HTTP 500). A 9-seat
+        // 8+ needs the larger budget; smaller classes cap out well under 1500.
+        max_tokens: boat_class === "8+" ? 2500 : 1500,
         thinking: { type: "disabled" },
         messages: [{ role: "user", content: prompt }],
       }),
@@ -97,9 +103,7 @@ Respond with ONLY valid JSON:
     await recordApiSuccess(supabase, "optimize-race-lineup");
     const result = await resp.json();
     const text = result?.content?.[0]?.text ?? "{}";
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    const lineup = JSON.parse(text.slice(start, end + 1));
+    const lineup = extractJson(text);
 
     const tokens = tokensFrom(result?.usage);
     await setCached(supabase, cacheKey, lineup, TTL.SIX_HOURS, MODEL, tokens.input_tokens, tokens.output_tokens);
