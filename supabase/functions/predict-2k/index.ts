@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
+import { extractJson } from "../_shared/extractJson.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,10 +85,14 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: MODEL,
-        // 200 truncates: the declared JSON carries confidence_explanation,
-        // two factor arrays and to_hit_best_case (predict), or a milestones
-        // array plus key_requirements (timeline) — ~250-350 output tokens.
-        max_tokens: 400,
+        // The declared JSON carries confidence_explanation, two factor arrays
+        // and to_hit_best_case (predict), or a milestones array plus
+        // key_requirements (timeline) — ~250-350 output tokens typically, but
+        // a verbose completion runs well past that. 200 then 400 both left no
+        // headroom; 1000 gives the object room to close. (The 500s that
+        // prompted this were an extraction bug, not truncation — see below —
+        // but a tight cap would have become the next failure.)
+        max_tokens: 1000,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
@@ -101,13 +106,38 @@ serve(async (req) => {
     await recordApiSuccess(supabase, "predict-2k");
 
     const result = await resp.json();
-    const text = result.content?.[0]?.text ?? "";
+    const text: string = result.content?.[0]?.text ?? "";
     const usage = result?.usage ?? {};
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const stopReason: string = result?.stop_reason ?? "unknown";
 
-    if (!jsonMatch) throw new Error("AI returned an unexpected response format. Please try again.");
+    // Log the raw completion so a future failure is diagnosable from function
+    // logs alone: stop_reason + output_tokens separate truncation from an
+    // extraction/format problem, and the bounded text prefix shows what the
+    // model actually emitted.
+    console.log(
+      `[predict-2k] mode=${mode || "predict"} stop_reason=${stopReason} output_tokens=${usage?.output_tokens ?? "?"} raw=${text.slice(0, 2000)}`,
+    );
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Balanced-brace extraction. The old /\{[\s\S]*\}/ regex was greedy: it
+    // spanned the FIRST "{" to the LAST "}" in the response, so any trailing
+    // prose, second object or closing note containing a brace produced a
+    // mid-structure SyntaxError. extractJson stops at the matching close brace
+    // and ignores everything after it.
+    let parsed: unknown;
+    try {
+      parsed = extractJson(text);
+    } catch (parseErr: any) {
+      const prefix = text.slice(0, 300).replace(/\s+/g, " ").trim();
+      console.error(
+        `[predict-2k] JSON extraction failed: ${parseErr?.message} | stop_reason=${stopReason} | raw prefix: ${prefix}`,
+      );
+      return jsonError(
+        corsHeaders,
+        500,
+        `AI returned an unparseable response (stop_reason=${stopReason}): ${parseErr?.message ?? "parse failed"}. Response began: ${prefix.slice(0, 200)}`,
+      );
+    }
+
     const tokens = tokensFrom(usage);
     await setCached(supabase, cacheKey, parsed, TTL.DAY, MODEL, tokens.input_tokens, tokens.output_tokens);
     await logUsage(supabase, { user_id, function_name: "predict-2k", model: MODEL, ...tokens, cache_hit: false });

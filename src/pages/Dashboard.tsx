@@ -265,49 +265,46 @@ const Dashboard = () => {
     const inviteToken = params.get("accept_coach_invite");
     if (!inviteToken || !profile) return;
 
+    // Drop the token from the URL up front, so it is gone on both the success
+    // and the failure path. The old code only cleared it after a successful
+    // insert, so a failing invite re-attempted on every re-render. Clearing
+    // before the await also means a re-run of this effect (profile refetch,
+    // StrictMode double-invoke) reads no token and bails instead of firing a
+    // second, now-guaranteed-to-fail accept.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("accept_coach_invite");
+    window.history.replaceState({}, "", url.toString());
+
     (async () => {
-      const user = await getSessionUser();
-      if (!user) return;
-
-      const { data: invite } = await supabase
-        .from("coach_invites")
-        .select("*")
-        .eq("token", inviteToken)
-        .is("accepted_at", null)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
-
-      if (!invite) return;
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("email")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!userProfile?.email || userProfile.email.toLowerCase() !== invite.email.toLowerCase()) return;
-
-      // Add to team_coaches
-      const { error } = await supabase.from("team_coaches").insert({
-        team_id: invite.team_id,
-        user_id: user.id,
-        role: invite.role,
-        invited_by: invite.invited_by,
-        joined_at: new Date().toISOString(),
+      // Single SECURITY DEFINER RPC. The old flow (select invite → read
+      // profiles.email → self-insert team_coaches → stamp accepted_at) could
+      // never succeed: team_coaches_insert requires the caller to already be
+      // head coach of the team, and the `if (!error)` guard meant the invite
+      // was never marked accepted, so the link silently no-opped forever.
+      // The RPC validates the token, checks the caller's email against
+      // auth.users, inserts idempotently and stamps accepted_at.
+      // Cast: types.ts has not been regenerated with the new RPC yet.
+      const { data, error } = await (supabase as any).rpc("accept_coach_invite", {
+        p_token: inviteToken,
       });
 
-      if (!error) {
-        await supabase
-          .from("coach_invites")
-          .update({ accepted_at: new Date().toISOString() })
-          .eq("id", invite.id);
-
-        const url = new URL(window.location.href);
-        url.searchParams.delete("accept_coach_invite");
-        window.history.replaceState({}, "", url.toString());
-
-        toast({ title: "Welcome to the coaching staff!", description: "You now have coach access to this team." });
+      if (error) {
+        toast.error("Could not accept coach invite", { description: error.message });
+        return;
       }
+
+      // RETURNS TABLE → data is an array of { team_id, team_name }.
+      const result = (data as { team_id: string; team_name: string }[] | null)?.[0];
+      if (!result) {
+        toast.error("Could not accept coach invite", {
+          description: "Invite not found, already accepted, or expired",
+        });
+        return;
+      }
+
+      toast.success("Welcome to the coaching staff!", {
+        description: `You now have coach access to ${result.team_name}.`,
+      });
     })();
   }, [profile]);
 
@@ -345,7 +342,7 @@ const Dashboard = () => {
         window.history.replaceState({}, "", url.toString());
 
         queryClient.invalidateQueries({ queryKey: ["profile"] });
-        toast({ title: "Athletic Director access granted!", description: "You now have oversight access to this team." });
+        toast.success("Athletic Director access granted!", { description: "You now have oversight access to this team." });
       }
     })();
   }, [profile]);
@@ -405,20 +402,19 @@ const Dashboard = () => {
     setOnboardingJoining(true);
     setOnboardingJoinError(null);
     try {
-      const { data: team } = await supabase
-        .from("teams")
-        .select("id, name")
-        .ilike("join_code", trimmed)
-        .maybeSingle();
-      if (!team) throw new Error("No team found with that code. Check the code and try again.");
-      const { error: insertError } = await supabase.from("team_members").insert({
-        team_id: team.id,
-        user_id: uid,
+      // Single SECURITY DEFINER RPC. The old lookup+insert pair could never
+      // work for a prospective member: RLS hides teams you are not on from the
+      // `teams` SELECT policy, and `team_members` INSERT requires a coach.
+      // The RPC raises "No team found with that code" / "You are already on
+      // this team" itself, so just surface error.message.
+      // Cast: types.ts has not been regenerated with the new RPC yet.
+      const { data, error } = await (supabase as any).rpc("join_team_by_code", {
+        p_code: trimmed,
       });
-      if (insertError) {
-        if (insertError.code === "23505") throw new Error("You are already on this team.");
-        throw insertError;
-      }
+      if (error) throw new Error(error.message);
+      // RETURNS TABLE → data is an array of { team_id, team_name }.
+      const team = (data as { team_id: string; team_name: string }[] | null)?.[0];
+      if (!team) throw new Error("No team found with that code. Check the code and try again.");
       // Success: mark onboarding complete, reload team data, switch to Team tab.
       try { localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true"); } catch {}
       queryClient.invalidateQueries({ queryKey: ["teams", uid] });
@@ -428,7 +424,7 @@ const Dashboard = () => {
       setShowJoinOnboarding(false);
       setOnboardingJoinCode("");
       setActiveTab("team");
-      toast({ title: `Joined ${team.name}!` });
+      toast.success(`Joined ${team.team_name}!`);
     } catch (e: any) {
       setOnboardingJoinError(e?.message || "Could not join team");
     } finally {

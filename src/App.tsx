@@ -252,6 +252,12 @@ function AppRouter() {
       <Route path="/coach/today" element={<CoachPage />} />
       <Route path="/coach" element={<Navigate to="/coach/today" replace />} />
       <Route path="/auth" element={<Auth />} />
+      {/* Marketing CTAs point here. Same page, signup tab preselected.
+          Note: this is deliberately NOT a "/auth/*" wildcard — the OAuth callback
+          routes below must keep matching, and the isCallbackPath check above keys
+          off startsWith("/auth/") && endsWith("/callback"), which "/auth/signup"
+          does not satisfy. */}
+      <Route path="/auth/signup" element={<Auth defaultTab="signup" />} />
       <Route path="/athlete/:username" element={<AthleteProfile />} />
       <Route path="/athlete/:username/prs" element={<PersonalRecordsPage />} />
       <Route path="/directory" element={<DirectoryPage />} />

@@ -28,21 +28,20 @@ const JoinTeamCard = ({ profile, onJoined }: { profile: any; onJoined: () => voi
     mutationFn: async () => {
       const trimmed = code.trim();
       if (!trimmed) throw new Error("Enter a join code");
-      const { data: team } = await supabase
-        .from("teams")
-        .select("id, name")
-        .ilike("join_code", trimmed)
-        .maybeSingle();
-      if (!team) throw new Error("No team found with that code. Check the code and try again.");
-      const { error: insertError } = await supabase.from("team_members").insert({
-        team_id: team.id,
-        user_id: profile.id,
+      // Single SECURITY DEFINER RPC. The old lookup+insert pair could never
+      // work for a prospective member: RLS hides teams you are not on from the
+      // `teams` SELECT policy, and `team_members` INSERT requires a coach.
+      // The RPC raises "No team found with that code" / "You are already on
+      // this team" itself, so just surface error.message.
+      // Cast: types.ts has not been regenerated with the new RPC yet.
+      const { data, error } = await (supabase as any).rpc("join_team_by_code", {
+        p_code: trimmed,
       });
-      if (insertError) {
-        if (insertError.code === "23505") throw new Error("You are already on this team.");
-        throw insertError;
-      }
-      return team.name;
+      if (error) throw new Error(error.message);
+      // RETURNS TABLE → data is an array of { team_id, team_name }.
+      const team = (data as { team_id: string; team_name: string }[] | null)?.[0];
+      if (!team) throw new Error("No team found with that code. Check the code and try again.");
+      return team.team_name;
     },
     onSuccess: (teamName) => {
       toast({ title: `Joined ${teamName}!` });

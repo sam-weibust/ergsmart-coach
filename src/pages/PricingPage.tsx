@@ -86,7 +86,7 @@ const INDIVIDUAL_PLANS = [
     badge: null,
     badgeColor: "",
     cta: "Get Started Free",
-    ctaHref: "/auth",
+    ctaHref: "/auth/signup",
     features: [
       "Manual erg workout logging",
       "Concept2 logbook sync",
@@ -578,7 +578,7 @@ export default function PricingPage() {
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign in</Link>
-            <Link to="/auth" className="text-sm font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+            <Link to="/auth/signup" className="text-sm font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
               Get started free
             </Link>
           </div>
@@ -826,7 +826,7 @@ export default function PricingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              to="/auth"
+              to="/auth/signup"
               className="inline-block bg-background text-foreground font-bold px-8 py-3.5 rounded-lg text-sm hover:bg-background/90 transition-colors"
             >
               Get started free →

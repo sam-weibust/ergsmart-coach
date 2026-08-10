@@ -1640,8 +1640,11 @@ const LandingPage = () => {
                     document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }),
                 },
                 { label: "Pricing", action: () => navigate("/pricing") },
-                { label: "Regattas", action: () => navigate("/regattas") },
-                { label: "Calculators", action: () => navigate("/calculators") },
+                // Regattas and calculators are in-app surfaces, not standalone
+                // routes — /regattas and /calculators 404'd. /dashboard bounces
+                // signed-out visitors to /auth, which is the intended funnel.
+                { label: "Regattas", action: () => navigate("/dashboard") },
+                { label: "Calculators", action: () => navigate("/dashboard") },
                 { label: "For Coaches", action: () => navigate("/coaches") },
                 { label: "Login", action: () => navigate("/auth") },
               ].map(({ label, action }) => (

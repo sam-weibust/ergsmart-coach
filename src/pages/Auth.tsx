@@ -28,7 +28,22 @@ const SIGNUP_ROLES = [
   { value: "organizer", label: "Organizer", desc: "I manage a program or club" },
 ] as const;
 
-const Auth = () => {
+export type AuthTab = "signin" | "signup";
+
+interface AuthProps {
+  /** Which tab opens first. `/auth` → "signin", `/auth/signup` → "signup". */
+  defaultTab?: AuthTab;
+}
+
+const Auth = ({ defaultTab = "signin" }: AuthProps) => {
+  // Controlled rather than `defaultValue`: React keeps this component mounted
+  // when routing between /auth and /auth/signup (same element type), so a
+  // defaultValue would be read once and the tab would never switch.
+  const [activeTab, setActiveTab] = useState<AuthTab>(defaultTab);
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -204,7 +219,11 @@ const Auth = () => {
                 <CardDescription className="text-base">Sign in or create an account to access your training</CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="signin" className="w-full">
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(v) => setActiveTab(v as AuthTab)}
+                  className="w-full"
+                >
                   <TabsList className="grid w-full grid-cols-2 mb-6 h-12">
                     <TabsTrigger value="signin" className="text-sm font-medium">Sign In</TabsTrigger>
                     <TabsTrigger value="signup" className="text-sm font-medium">Create Account</TabsTrigger>
