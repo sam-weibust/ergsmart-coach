@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { stashAuthNext, consumeAuthNext } from "@/lib/authNext";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Mail, Lock, User, Sparkles, Heart } from "lucide-react";
 
@@ -53,6 +54,12 @@ const Auth = ({ defaultTab = "signin" }: AuthProps) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const referralCode = searchParams.get("ref");
+
+  // Persist ?next= before any sign-in attempt: the OAuth round-trip returns to
+  // window.location.origin and loses the query string, so reading it at
+  // navigate() time would be too late.
+  const nextParam = searchParams.get("next");
+  useEffect(() => { stashAuthNext(nextParam); }, [nextParam]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,7 +153,7 @@ const Auth = ({ defaultTab = "signin" }: AuthProps) => {
       if (error) throw error;
 
       toast.success("Signed in successfully!");
-      navigate("/dashboard");
+      navigate(consumeAuthNext() ?? "/dashboard");
     } catch (error: any) {
       toast.error(error.message || "Failed to sign in");
     } finally {

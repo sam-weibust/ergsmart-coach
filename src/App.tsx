@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { consumeAuthNext } from "@/lib/authNext";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BleProvider } from "./context/BleContext";
@@ -194,6 +195,11 @@ function AppRouter() {
 
     // Resolve the correct destination based on role.
     const getDestinationForUser = async (userId: string): Promise<string> => {
+      // An explicit ?next= (e.g. a signed-out checkout attempt from /pricing)
+      // outranks the role default. Consumed here because this handler also
+      // covers OAuth and email-confirm sign-ins, which never return to Auth.tsx.
+      const next = consumeAuthNext();
+      if (next) return next;
       try {
         const { data: p } = await supabase.from("profiles").select("user_type, role").eq("id", userId).maybeSingle();
         const role = (p as any)?.user_type || (p as any)?.role;

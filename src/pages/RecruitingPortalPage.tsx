@@ -41,49 +41,31 @@ export default function RecruitingPortalPage() {
     }
   }, [team?.id]);
 
-  // Get all opted-in athletes for this team
+  // Get all opted-in athletes for this team.
+  //
+  // This used to walk team_members -> athlete_profiles -> profiles directly,
+  // which returned nothing for a logged-out visitor: team_members SELECT is
+  // `user_id = auth.uid() OR is_team_coach(...)`, so anon got zero members and
+  // the page always claimed nobody had opted in. get_recruiting_portal is a
+  // SECURITY DEFINER read that emits only opted-in athletes on a public portal,
+  // so the roster itself is never exposed.
   const { data: athletes = [] } = useQuery({
-    queryKey: ["recruit-portal-athletes", team?.id],
+    queryKey: ["recruit-portal-athletes", slug],
     queryFn: async () => {
-      // Get team members
-      const { data: members } = await supabase
-        .from("team_members")
-        .select("user_id")
-        .eq("team_id", team!.id);
-
-      const memberIds = (members || []).map((m: any) => m.user_id);
-      if (!memberIds.length) return [];
-
-      // Get opted-in athlete profiles
-      const { data: apData } = await supabase
-        .from("athlete_profiles")
-        .select("user_id, is_recruiting, show_on_team_portal")
-        .in("user_id", memberIds)
-        .eq("show_on_team_portal", true)
-        .eq("is_recruiting", true);
-
-      if (!apData || !apData.length) return [];
-
-      const optedInIds = apData.map((a: any) => a.user_id);
-
-      // Get profiles
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, height, weight, age, best_2k_seconds, best_6k_seconds")
-        .in("id", optedInIds);
-
-      // Get academics (grad year, GPA, etc.)
-      const { data: academics } = await supabase
-        .from("athlete_academics")
-        .select("user_id, gpa, class_rank_numerator, class_rank_denominator")
-        .in("user_id", optedInIds);
-
-      return (profiles || []).map((p: any) => ({
-        ...p,
-        academics: academics?.find((a: any) => a.user_id === p.id),
+      const { data, error } = await (supabase as any).rpc("get_recruiting_portal", {
+        p_slug: slug!,
+      });
+      if (error) throw error;
+      return (data || []).map((a: any) => ({
+        ...a,
+        academics: {
+          gpa: a.gpa,
+          class_rank_numerator: a.class_rank_numerator,
+          class_rank_denominator: a.class_rank_denominator,
+        },
       }));
     },
-    enabled: !!team?.id,
+    enabled: !!slug && !!team?.portal_public,
   });
 
   const color = team?.primary_color || "#1A1A2E";

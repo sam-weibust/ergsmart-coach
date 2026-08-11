@@ -545,29 +545,20 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
         ? "60min"
         : matchedDist ? BENCHMARK_DISTANCES[parseInt(matchedDist)] : null;
 
-      if (testType) {
-        const timeSeconds = elapsedCs / 100;
-        const splitSecs = avgSplitCs != null ? avgSplitCs / 100 : null;
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("weight_kg")
-          .eq("id", user.id)
-          .maybeSingle();
-        const watts = avgWatts != null ? Math.round(avgWatts) : null;
-        const wkg = watts && profile?.weight_kg
-          ? watts / profile.weight_kg : null;
-        await (supabase.from("erg_scores") as any).insert({
-          user_id: user.id,
-          test_type: testType,
-          time_seconds: testType === "60min" ? null : Math.round(timeSeconds),
-          total_meters: testType === "60min" ? dist : null,
-          avg_split_seconds: splitSecs,
-          watts,
-          watts_per_kg: wkg,
-          source: "live_erg",
-          is_verified: true,
-          to_leaderboard: true,
+      // Verified leaderboard scores are no longer written straight to
+      // erg_scores: the table now rejects is_verified = true from the client,
+      // because that policy was `auth.uid() IS NOT NULL` and let anyone post a
+      // fabricated world record. submit_verified_erg_score derives the numbers
+      // server-side from the erg_workouts row just saved, so a verified score
+      // can only come from a session that actually exists and belongs to us.
+      if (testType && savedRow?.id) {
+        const { error: scoreErr } = await (supabase as any).rpc("submit_verified_erg_score", {
+          p_workout_id: savedRow.id,
+          p_test_type: testType,
         });
+        // The session itself is already saved — a leaderboard failure should not
+        // read as a lost workout.
+        if (scoreErr) console.error("[LiveErg] verified score submit failed:", scoreErr.message);
       }
     } catch (e: any) {
       autoSavedRef.current = false; // let a retry (Stop / disconnect) through

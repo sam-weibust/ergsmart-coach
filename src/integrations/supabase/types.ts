@@ -6865,6 +6865,22 @@ export type Database = {
       get_avg_verified_2k: { Args: never; Returns: number }
       get_cached_response: { Args: { p_cache_key: string }; Returns: string }
       get_daily_ai_usage: { Args: { p_user_id: string }; Returns: Json }
+      get_recruiting_portal: {
+        Args: { p_slug: string }
+        Returns: {
+          age: number
+          best_2k_seconds: number
+          best_6k_seconds: number
+          class_rank_denominator: number
+          class_rank_numerator: number
+          full_name: string
+          gpa: number
+          height: number
+          id: string
+          username: string
+          weight: number
+        }[]
+      }
       get_total_meters: { Args: never; Returns: number }
       get_user_ad_teams: { Args: never; Returns: string[] }
       get_user_admin_org_ids: { Args: never; Returns: string[] }
@@ -6942,6 +6958,12 @@ export type Database = {
           p_response: string
         }
         Returns: undefined
+      }
+      submit_verified_erg_score: {
+        Args: { p_test_type: string; p_workout_id: string }
+        Returns: {
+          score_id: string
+        }[]
       }
     }
     Enums: {

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, tokensFrom, TTL, hashKey } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, recordUsage, jsonError } from "../_shared/aiGuard.ts";
+import { extractJsonArray } from "../_shared/extractJson.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,17 +173,14 @@ Rules:
     const textContent: string = result.content?.[0]?.text ?? "";
     const usage = result?.usage ?? {};
 
-    // Parse the JSON array from the response (handle any stray markdown)
+    // Balanced-bracket scan, not /\[[\s\S]*\]/ — the greedy span runs to the
+    // LAST "]" in the response, so any trailing prose containing a bracket
+    // makes the slice unparseable and silently yields an empty plan.
     let plan: any[] = [];
     try {
-      const jsonMatch = textContent.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        plan = JSON.parse(jsonMatch[0]);
-      } else {
-        console.error("No JSON array found in response:", textContent);
-      }
+      plan = extractJsonArray(textContent);
     } catch (e) {
-      console.error("Failed to parse plan JSON:", e, textContent);
+      console.error("[parse-workout-image] JSON extraction failed:", e, "raw:", textContent.slice(0, 1000));
     }
 
     const response = { plan };

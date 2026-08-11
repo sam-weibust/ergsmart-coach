@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCached, setCached, logUsage, tokensFrom, hashKey, TTL } from "../_shared/cache.ts";
 import { preflight, recordApiError, recordApiSuccess, jsonError } from "../_shared/aiGuard.ts";
+import { extractJson } from "../_shared/extractJson.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,10 +144,13 @@ Respond with ONLY this JSON:
 
       let didParse = false;
       try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        parsed = JSON.parse(jsonMatch?.[0] || "{}");
+        // Balanced-brace scan, not /\{[\s\S]*\}/ — the greedy span runs to the
+        // LAST "}" in the response, so any closing prose containing a brace
+        // makes the slice unparseable and silently drops us to the fallback.
+        parsed = extractJson(text);
         didParse = true;
-      } catch {
+      } catch (e) {
+        console.error("[generate-weekly-challenge] JSON extraction failed:", e, "raw:", text.slice(0, 1000));
         parsed = {
           challenge_type: season_phase === "base" ? "most_meters" : "fastest_2k_improvement",
           title: season_phase === "base" ? "Volume King Challenge" : "Speed Improvement Challenge",
