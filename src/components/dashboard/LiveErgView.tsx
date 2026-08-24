@@ -1122,7 +1122,7 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
             {/* Row 1 */}
             <Tile label="Split"       value={fmtPace(splitCs)}                                    unit="/500m" color={splitColor} />
             <Tile label="Watts"       value={data.power ? String(Math.round(data.power)) : "—"}   unit="W" />
-            <Tile label="Stroke rate" value={data.strokeRate ? String(Math.round(data.strokeRate)) : "—"} unit="spm" />
+            <Tile label="Stroke rate" value={(data.strokeRate && data.strokeRate > 3) ? String(Math.round(data.strokeRate)) : "—"} unit="spm" />
             {/* Row 2 */}
             <Tile label="Distance"    value={distM > 0 ? distM.toFixed(1) : "—"}                  unit="m" />
             <Tile label="Elapsed"     value={elapsedCs > 0 ? fmtClock(elapsedCs / 100) : "—"}     unit="mm:ss" />

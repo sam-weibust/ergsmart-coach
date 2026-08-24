@@ -57,11 +57,11 @@ export interface InitResult {
   error?: string;
 }
 
-// ── Debug counters (log first 10 strokes per char for field verification) ────
+// ── Debug counters (log first 5 notifications per char for field verification) ─
 const _dbg: Record<string, number> = {};
 function _log(tag: string, dv: DataView, parsed: object) {
   _dbg[tag] = (_dbg[tag] ?? 0) + 1;
-  if (_dbg[tag] > 10) return;
+  if (_dbg[tag] > 5) return;
   const hex = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
     .map(b => b.toString(16).padStart(2, '0')).join(' ');
   console.log(`[PM5 ${tag}] #${_dbg[tag]} hex: ${hex} | parsed:`, parsed);
@@ -101,6 +101,13 @@ export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
     // So splitPace in centiseconds = rawPace × 50
     const rawSplit = dv.getUint8(6) + dv.getUint8(7) * 256;
     const splitPace = Math.round(rawSplit * 50);
+    // Only emit splitPace when PM5 sends a non-zero in-range value.
+    // A zero from 0x0031 must not overwrite a valid value already set by 0x0032.
+    // Valid: 60–300 s/500m → 6 000–30 000 cs.
+    const splitValid = rawSplit > 0 && splitPace >= 6000 && splitPace <= 30000;
+    if (!splitValid && rawSplit !== 0) {
+      console.warn(`[PM5 0031] split out of range: rawSplit=${rawSplit} splitPace=${splitPace}`);
+    }
 
     // Stroke rate: byte 8 as uint8
     const strokeRate = dv.byteLength >= 9 ? dv.getUint8(8) : 0;
@@ -121,14 +128,14 @@ export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
     }
 
     // Range validation
-    if (splitPace > 0) _validateAndLog('split', splitPace / 100, 60, 300);
     if (distance > 0 && distance < _lastDistance && !_distanceWarned) {
       console.warn(`[PM5 SUSPICIOUS distance] decreased ${_lastDistance} -> ${distance}`);
       _distanceWarned = true;
     }
     _lastDistance = Math.max(_lastDistance, distance);
 
-    const parsed: Partial<PM5StreamData> = { elapsedTime, distance, splitPace, strokeRate, heartRate };
+    const parsed: Partial<PM5StreamData> = { elapsedTime, distance, strokeRate, heartRate };
+    if (splitValid) parsed.splitPace = splitPace;
     if (workoutState !== undefined) parsed.workoutState = workoutState;
     _log('0031', dv, parsed);
     return parsed;
@@ -145,18 +152,19 @@ export function parseGeneralStatus(dv: DataView): Partial<PM5StreamData> {
 export function parseAdditionalStatus1(dv: DataView): Partial<PM5StreamData> {
   if (dv.byteLength < 7) return {};
   try {
-    // Split pace: bytes 3-4
+    // Split pace: bytes 3-4 (valid: 60–300 s/500m → 6 000–30 000 cs)
     const rawSplit  = dv.getUint8(3) + dv.getUint8(4) * 256;
     const splitPace = Math.round(rawSplit * 50);
+    const splitValid = rawSplit > 0 && splitPace >= 6000 && splitPace <= 30000;
 
     // Stroke power watts: bytes 5-6 — direct read, NO computation from pace
     const power = dv.getUint8(5) + dv.getUint8(6) * 256;
-    if (power > 2000) {
+    const powerValid = power > 0 && power <= 1500;
+    if (!powerValid && power > 0) {
       const hex = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
         .map(b => b.toString(16).padStart(2, '0')).join(' ');
-      console.warn(`[PM5 SUSPICIOUS power] ${power}W — raw bytes: ${hex}`);
+      console.warn(`[PM5 SUSPICIOUS power] ${power}W — full hex: ${hex}`);
     }
-    _validateAndLog('power', power, 50, 1500);
 
     // Stroke calories: byte 7
     const calories = dv.byteLength >= 8 ? dv.getUint8(7) : 0;
@@ -166,7 +174,9 @@ export function parseAdditionalStatus1(dv: DataView): Partial<PM5StreamData> {
       ? Math.round((dv.getUint8(8) + dv.getUint8(9) * 256) * 50)
       : undefined;
 
-    const parsed: Partial<PM5StreamData> = { splitPace, power, calories };
+    const parsed: Partial<PM5StreamData> = { calories };
+    if (splitValid)         parsed.splitPace  = splitPace;
+    if (powerValid)         parsed.power      = power;
     if (averagePace !== undefined) parsed.averagePace = averagePace;
     _log('0032', dv, parsed);
     return parsed;
