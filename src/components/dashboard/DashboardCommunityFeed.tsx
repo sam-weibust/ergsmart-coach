@@ -48,20 +48,27 @@ export function DashboardCommunityFeed({ navTo }: Props) {
 
   // Realtime: new topics or posts → refresh feed
   useEffect(() => {
-    const channel = supabase
-      .channel("dashboard-community-rt")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "forum_topics" },
-        () => queryClient.invalidateQueries({ queryKey: ["dashboard-forum-feed"] })
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "forum_posts" },
-        () => queryClient.invalidateQueries({ queryKey: ["dashboard-forum-feed"] })
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel("dashboard-community-rt")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "forum_topics" },
+          () => queryClient.invalidateQueries({ queryKey: ["dashboard-forum-feed"] })
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "forum_posts" },
+          () => queryClient.invalidateQueries({ queryKey: ["dashboard-forum-feed"] })
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] community feed subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [queryClient]);
 
   // Community quick stats

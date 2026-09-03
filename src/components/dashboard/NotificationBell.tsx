@@ -49,41 +49,46 @@ export const NotificationBell = () => {
 
   // Subscribe to realtime notifications
   useEffect(() => {
-    const channel = supabase
-      .channel("notifications-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-        },
-        (payload) => {
-          queryClient.invalidateQueries({ queryKey: ["notifications"] });
-          const newNotif = payload.new as any;
-          // In-app toast
-          toast({
-            title: newNotif.title,
-            description: newNotif.body,
-          });
-          // Browser push notification
-          if ("Notification" in window && Notification.permission === "granted") {
-            try {
-              new Notification(newNotif.title, {
-                body: newNotif.body,
-                icon: "/favicon.ico",
-                tag: newNotif.id,
-              });
-            } catch (e) {
-              console.error("Push notification error:", e);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel("notifications-realtime")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+          },
+          (payload) => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+            const newNotif = payload.new as any;
+            // In-app toast
+            toast({
+              title: newNotif.title,
+              description: newNotif.body,
+            });
+            // Browser push notification
+            if ("Notification" in window && Notification.permission === "granted") {
+              try {
+                new Notification(newNotif.title, {
+                  body: newNotif.body,
+                  icon: "/favicon.ico",
+                  tag: newNotif.id,
+                });
+              } catch (e) {
+                console.error("Push notification error:", e);
+              }
             }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] notifications subscription failed, continuing without live updates:", e);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
     };
   }, [queryClient, toast]);
 

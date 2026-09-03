@@ -76,13 +76,20 @@ const ForumTopicView = ({ topicId, topicTitle, onBack }: Props) => {
 
   // Real-time subscription for new posts
   useEffect(() => {
-    const channel = supabase
-      .channel(`forum-posts-${topicId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_posts", filter: `topic_id=eq.${topicId}` }, () => {
-        queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`forum-posts-${topicId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "forum_posts", filter: `topic_id=eq.${topicId}` }, () => {
+          queryClient.invalidateQueries({ queryKey: ["forum-posts", topicId] });
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] forum posts subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [topicId, queryClient]);
 
   const votePost = useMutation({

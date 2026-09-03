@@ -83,18 +83,25 @@ const DirectMessages = ({ teamId, teamMembers, isCoach, profile, safesportMode =
 
   // Realtime
   useEffect(() => {
-    const channel = supabase
-      .channel(`cam-${teamId}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "coach_athlete_messages",
-        filter: `team_id=eq.${teamId}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ["coach-athlete-messages", teamId] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`cam-${teamId}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "coach_athlete_messages",
+          filter: `team_id=eq.${teamId}`,
+        }, () => {
+          queryClient.invalidateQueries({ queryKey: ["coach-athlete-messages", teamId] });
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] direct messages subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [teamId, queryClient]);
 
   useEffect(() => {

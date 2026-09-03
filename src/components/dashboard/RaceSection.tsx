@@ -262,36 +262,41 @@ export default function RaceSection() {
 
   // ── Supabase room subscription ────────────────────────────────
   const subscribeToRoom = useCallback((roomId: string) => {
-    if (channelRef.current) { supabase.removeChannel(channelRef.current); }
+    if (channelRef.current) { try { supabase.removeChannel(channelRef.current); } catch {} }
 
-    channelRef.current = supabase.channel(`race_room_${roomId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "race_rooms", filter: `id=eq.${roomId}` },
-        (payload: any) => {
-          const updated = payload.new as RaceRoom;
-          setRoom(updated);
-          roomRef.current = updated;
-          if (updated.status === "countdown" && appStateRef.current === "waiting") {
-            setAppState("countdown");
-            setCountdown(3);
-          }
-          if (updated.status === "finished" && appStateRef.current === "racing") {
-            fetchAndShowResults(roomId);
-          }
-        })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "race_participants", filter: `room_id=eq.${roomId}` },
-        (payload: any) => {
-          setParticipants(prev => {
-            if (prev.find(p => p.id === payload.new.id)) return prev;
-            return [...prev, payload.new as RaceParticipant];
-          });
-        })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "race_participants", filter: `room_id=eq.${roomId}` },
-        (payload: any) => {
-          setParticipants(prev =>
-            prev.map(p => p.id === payload.new.id ? payload.new as RaceParticipant : p)
-          );
-        })
-      .subscribe();
+    try {
+      channelRef.current = supabase.channel(`race_room_${roomId}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "race_rooms", filter: `id=eq.${roomId}` },
+          (payload: any) => {
+            const updated = payload.new as RaceRoom;
+            setRoom(updated);
+            roomRef.current = updated;
+            if (updated.status === "countdown" && appStateRef.current === "waiting") {
+              setAppState("countdown");
+              setCountdown(3);
+            }
+            if (updated.status === "finished" && appStateRef.current === "racing") {
+              fetchAndShowResults(roomId);
+            }
+          })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "race_participants", filter: `room_id=eq.${roomId}` },
+          (payload: any) => {
+            setParticipants(prev => {
+              if (prev.find(p => p.id === payload.new.id)) return prev;
+              return [...prev, payload.new as RaceParticipant];
+            });
+          })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "race_participants", filter: `room_id=eq.${roomId}` },
+          (payload: any) => {
+            setParticipants(prev =>
+              prev.map(p => p.id === payload.new.id ? payload.new as RaceParticipant : p)
+            );
+          })
+        .subscribe();
+    } catch (e) {
+      channelRef.current = null;
+      console.warn("[Realtime] race room subscription failed, continuing without live updates:", e);
+    }
   }, []);
 
   // ── Create room ───────────────────────────────────────────────
@@ -384,8 +389,9 @@ export default function RaceSection() {
     setAppState("matchmaking");
 
     // Subscribe to queue
-    if (queueChannelRef.current) supabase.removeChannel(queueChannelRef.current);
-    queueChannelRef.current = supabase.channel("race_queue_watch")
+    if (queueChannelRef.current) { try { supabase.removeChannel(queueChannelRef.current); } catch {} }
+    try {
+      queueChannelRef.current = supabase.channel("race_queue_watch")
       .on("postgres_changes", { event: "*", schema: "public", table: "race_queue" }, async () => {
         const { data: queue } = await (supabase.from("race_queue") as any).select("*").order("queued_at", { ascending: true });
         if (!queue || queue.length < 2) { setQueueEntries(queue || []); return; }
@@ -433,10 +439,15 @@ export default function RaceSection() {
         toast({ title: "Match found!", description: `Racing against ${match.display_name}` });
       })
       .subscribe();
+    } catch (e) {
+      queueChannelRef.current = null;
+      console.warn("[Realtime] race queue subscription failed, continuing without matchmaking:", e);
+    }
 
     // Subscribe to race_participants for invitation
-    if (inviteChannelRef.current) supabase.removeChannel(inviteChannelRef.current);
-    inviteChannelRef.current = supabase.channel(`race_invite_${myUserId}`)
+    if (inviteChannelRef.current) { try { supabase.removeChannel(inviteChannelRef.current); } catch {} }
+    try {
+      inviteChannelRef.current = supabase.channel(`race_invite_${myUserId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "race_participants", filter: `user_id=eq.${myUserId}` },
         async (payload: any) => {
           if (appStateRef.current !== "matchmaking") return;
@@ -454,10 +465,14 @@ export default function RaceSection() {
           finishedRef.current = false;
           strokesRef.current = [];
           toast({ title: "Match found!", description: "You've been added to a race!" });
-          if (queueChannelRef.current) { supabase.removeChannel(queueChannelRef.current); queueChannelRef.current = null; }
-          if (inviteChannelRef.current) { supabase.removeChannel(inviteChannelRef.current); inviteChannelRef.current = null; }
+          if (queueChannelRef.current) { try { supabase.removeChannel(queueChannelRef.current); } catch {} queueChannelRef.current = null; }
+          if (inviteChannelRef.current) { try { supabase.removeChannel(inviteChannelRef.current); } catch {} inviteChannelRef.current = null; }
         })
       .subscribe();
+    } catch (e) {
+      inviteChannelRef.current = null;
+      console.warn("[Realtime] race invite subscription failed, continuing without matchmaking invites:", e);
+    }
   }, [myUserId, myName, my2k, ergConnected, subscribeToRoom, toast]);
 
   const leaveMatchmaking = useCallback(async () => {

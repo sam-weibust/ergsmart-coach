@@ -74,19 +74,26 @@ const TeamMessageBoard = ({ teamId, teamName, isCoach, profile }: Props) => {
 
   // Realtime subscription
   useEffect(() => {
-    const channel = supabase
-      .channel(`board-${teamId}`)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "team_board_posts",
-        filter: `team_id=eq.${teamId}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ["team-board-posts", teamId] });
-        queryClient.invalidateQueries({ queryKey: ["team-board-replies", teamId] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`board-${teamId}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "team_board_posts",
+          filter: `team_id=eq.${teamId}`,
+        }, () => {
+          queryClient.invalidateQueries({ queryKey: ["team-board-posts", teamId] });
+          queryClient.invalidateQueries({ queryKey: ["team-board-replies", teamId] });
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] team board subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [teamId, queryClient]);
 
   const postMessage = useMutation({

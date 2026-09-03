@@ -47,17 +47,22 @@ export const MessageBoard = ({ teamId, friendId, currentUserId, title }: Message
     const channelName = teamId ? `team-messages-${teamId}` : `friend-messages-${friendId}`;
     const tableName = teamId ? "team_messages" : "friend_messages";
     
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: tableName },
-        () => refetch()
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: tableName },
+          () => refetch()
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn('[Realtime] subscription failed, continuing without live updates:', e);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
     };
   }, [teamId, friendId, refetch]);
 

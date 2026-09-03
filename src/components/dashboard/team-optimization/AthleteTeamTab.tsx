@@ -101,17 +101,24 @@ const AthleteTeamTab = ({
   // ── Realtime: attendance updates ─────────────────────────────────────────
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`team-attendance-athlete-${teamId}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "attendance",
-        filter: `team_id=eq.${teamId}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ["today-attendance-team", teamId, todayStr] });
-        queryClient.invalidateQueries({ queryKey: ["my-team-checkin", teamId, todayStr, profile?.id] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`team-attendance-athlete-${teamId}`)
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "attendance",
+          filter: `team_id=eq.${teamId}`,
+        }, () => {
+          queryClient.invalidateQueries({ queryKey: ["today-attendance-team", teamId, todayStr] });
+          queryClient.invalidateQueries({ queryKey: ["my-team-checkin", teamId, todayStr, profile?.id] });
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] attendance subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [teamId, todayStr, queryClient, profile?.id]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────

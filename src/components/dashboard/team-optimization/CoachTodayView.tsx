@@ -117,16 +117,23 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
   // ── Realtime: attendance ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`coach-attendance-${teamId}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "attendance",
-        filter: `team_id=eq.${teamId}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ["today-attendance-coach", teamId, todayStr] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`coach-attendance-${teamId}`)
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "attendance",
+          filter: `team_id=eq.${teamId}`,
+        }, () => {
+          queryClient.invalidateQueries({ queryKey: ["today-attendance-coach", teamId, todayStr] });
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("[Realtime] attendance subscription failed, continuing without live updates:", e);
+    }
+    return () => {
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
   }, [teamId, todayStr, queryClient]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
