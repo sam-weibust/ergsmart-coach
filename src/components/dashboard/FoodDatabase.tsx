@@ -1284,7 +1284,7 @@ const FoodDatabase = ({ profile, calorieTarget }: FoodDatabaseProps) => {
       {fourteenDayData.some(d => d.calories > 0) && (
         <div className="space-y-4">
           {[
-            { key: "calories", label: "Calories (14 days)", goal: calorieTarget, color: "hsl(var(--primary))", unit: "kcal" },
+            { key: "calories", label: "Calories (14 days)", goal: calorieTarget, color: "rgb(var(--primary))", unit: "kcal" },
             { key: "protein", label: "Protein (14 days)", goal: proteinGoal, color: MACRO_COLORS.protein, unit: "g" },
             { key: "carbs", label: "Carbs (14 days)", goal: carbsGoal, color: MACRO_COLORS.carbs, unit: "g" },
             { key: "fat", label: "Fat (14 days)", goal: fatGoal, color: MACRO_COLORS.fat, unit: "g" },

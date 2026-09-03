@@ -146,7 +146,7 @@ const MealPlanSection = ({ profile, fullView }: MealPlanSectionProps) => {
             ))}
 
             {mealPlan.dailyTotals && (
-              <div className="p-4 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg border">
+              <div className="p-4 bg-surface-2 rounded-lg border border-border">
                 <h3 className="font-semibold mb-3">Daily Totals</h3>
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="p-2 bg-background rounded">

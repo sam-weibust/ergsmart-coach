@@ -412,7 +412,7 @@ export default function AthleteProfile() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 {profileRole === "coxswain" && (
-                  <Badge className="bg-[hsl(var(--warning))] text-white">COX</Badge>
+                  <Badge className="bg-[rgb(var(--warning))] text-white">COX</Badge>
                 )}
                 {profileRole === "coach" && (
                   <Badge>COACH</Badge>
@@ -421,7 +421,7 @@ export default function AthleteProfile() {
                   <Badge className="bg-primary/10 text-primary border border-primary/20">ATHLETE</Badge>
                 )}
                 {ap.is_recruiting && profileRole !== "coach" && (
-                  <Badge className="bg-[hsl(var(--success))] text-white"><GraduationCap className="h-3 w-3 mr-1" />Actively Recruiting</Badge>
+                  <Badge className="bg-[rgb(var(--success))] text-white"><GraduationCap className="h-3 w-3 mr-1" />Actively Recruiting</Badge>
                 )}
                 {ap.grad_year && profileRole !== "coach" && <Badge variant="outline">Class of {ap.grad_year}</Badge>}
                 {!isOwnProfile && (

@@ -300,7 +300,7 @@ const ErgScoreManager = ({ teamId, teamMembers, isCoach, profile }: Props) => {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="watts" stroke="hsl(var(--primary))" dot strokeWidth={2} name="Watts" />
+                <Line type="monotone" dataKey="watts" stroke="rgb(var(--primary))" dot strokeWidth={2} name="Watts" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>

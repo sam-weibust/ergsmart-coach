@@ -521,7 +521,7 @@ const MealPlanTab = ({ profile }: MealPlanTabProps) => {
               ))}
 
               {generatedPlan.dailyTotals && (
-                <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border">
+                <Card className="bg-surface-2 border border-border">
                   <CardContent className="pt-4">
                     <h3 className="font-semibold mb-3">Daily Totals</h3>
                     <div className="grid grid-cols-4 gap-2 text-center">

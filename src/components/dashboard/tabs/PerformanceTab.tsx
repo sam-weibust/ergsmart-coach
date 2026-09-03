@@ -1,22 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionUser } from "@/lib/getUser";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  Bluetooth, ChevronLeft, ChevronRight, MessageSquare, CalendarClock,
-  Zap, Video, GitCompareArrows, History, Dumbbell, Bot, Sparkles,
-  SplitSquareVertical, Target, Trophy, Radio, Gauge, Weight, GraduationCap,
-  Activity, Layers, PersonStanding, type LucideIcon,
-} from "lucide-react";
+import { Bluetooth, ChevronLeft, ChevronRight } from "lucide-react";
 import type { AthleteTabProps } from "./types";
-import { planCurrentWeekIndex } from "@/lib/planDates";
+import { planCurrentWeekIndex, planDayDate } from "@/lib/planDates";
+import { isLiftSession, sessionZone } from "@/lib/planSchema";
+import { useBle } from "@/context/BleContext";
 
 // Reused existing sections (opened inside a full-screen sheet sub-view).
 import LiveErgView from "@/components/dashboard/LiveErgView";
@@ -25,69 +20,80 @@ import AskSection from "@/components/dashboard/AskSection";
 import { ErgPredictor } from "@/components/dashboard/ErgPredictor";
 import CritiqueSection from "@/components/dashboard/CritiqueSection";
 import ComparisonSection from "@/components/dashboard/ComparisonSection";
-import HistorySection from "@/components/dashboard/HistorySection";
-import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
-import { RecruitingProfileSection } from "@/components/dashboard/RecruitingProfileSection";
 import { CalculatorsSection } from "@/components/dashboard/calculators/CalculatorsSection";
 // Manual logging. These were orphaned before: Dashboard.renderContent() (their
 // only mount point) was never called by the 5-tab shell, so there was no
 // reachable UI for manual erg / multi-piece / strength / cross-training logging.
+// Not named in this screen's redesign brief, but PerformanceTab is still their
+// ONLY reachable entry point anywhere in the app (confirmed by grep — nothing
+// else imports these 4 components), so they stay as a 3rd grouped list below
+// the two the brief specifies rather than silently going dark again.
 import ErgWorkoutSection from "@/components/dashboard/ErgWorkoutSection";
 import MultiPieceSession from "@/components/dashboard/MultiPieceSession";
 import MultiSetStrengthForm from "@/components/dashboard/MultiSetStrengthForm";
 import CrossTrainingSection from "@/components/dashboard/CrossTrainingSection";
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Tool registry. Each tool id maps to a label, icon and the existing
- * component to render in the sub-view sheet. Props are supplied at render
- * time (see renderTool) because some need `profile` / a calculator tab id.
+ * Tool registry. Each tool id maps to a label and the existing component to
+ * render in the sub-view sheet. Props are supplied at render time (see
+ * renderTool) because some need `profile` / a calculator tab id.
+ *
+ * "history" (Erg History), "strength" (Strength Program) and "recruiting"
+ * (Recruiting Profile) used to live here too. They're dropped from this
+ * screen because they're fully reachable elsewhere with the identical
+ * component + props (Me tab → HistorySection / StrengthProgramSection; More
+ * tab → RecruitingProfileSection) — not a loss of functionality, just a
+ * de-duplicated entry point.
  * ──────────────────────────────────────────────────────────────────────── */
 type ToolId =
   | "live-erg" | "plan" | "ask"
   | "log-erg" | "log-multipiece" | "log-strength" | "log-cross"
-  | "predictor" | "critique" | "comparison" | "history" | "strength" | "recruiting"
-  | "calc-split" | "calc-zones" | "calc-race" | "calc-stroke" | "calc-watts" | "calc-weight";
+  | "predictor" | "critique" | "comparison"
+  | "calc-split" | "calc-zones" | "calc-race" | "calc-stroke" | "calc-watts";
 
-/**
- * Manual logging. Lives on the Performance tab rather than Me because
- * Performance is the "do a session" surface (Live Erg, training plan, AI coach,
- * training tools) while Me is the read-only "who am I / how am I doing"
- * summary. Logging a workout is an action, so it belongs next to the other
- * training actions.
- */
-const LOG_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
-  { id: "log-erg",        label: "Log Erg Workout",  desc: "Enter a session by hand",       icon: Activity },
-  { id: "log-multipiece", label: "Multi-Piece",      desc: "Log a session of pieces",        icon: Layers },
-  { id: "log-strength",   label: "Log Strength",     desc: "Sets, reps and weight",          icon: Weight },
-  { id: "log-cross",      label: "Cross Training",   desc: "Runs, rides and swims",          icon: PersonStanding },
+type ToolRow = { id: ToolId; label: string };
+
+// Grouped-list rows exactly as named in the redesign brief, mapped onto real
+// destinations that already exist in this file.
+const AI_TOOLS: ToolRow[] = [
+  { id: "predictor",  label: "2K Predictor" },
+  { id: "critique",   label: "Technique Critique" },
+  { id: "ask",        label: "AI Coach Chat" },
+  { id: "comparison", label: "Workout Comparison" },
 ];
 
-const TRAINING_TOOLS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
-  { id: "predictor",  label: "2K Predictor",        desc: "AI conservative 2K prediction",   icon: Zap },
-  { id: "critique",   label: "Technique Critique",  desc: "Upload a video for AI feedback",  icon: Video },
-  { id: "comparison", label: "Workout Comparison",  desc: "Compare your sessions & trends",  icon: GitCompareArrows },
-  { id: "history",    label: "Erg History",         desc: "Browse & export past workouts",   icon: History },
-  { id: "strength",   label: "Strength Program",    desc: "Follow the rowing lift program",  icon: Dumbbell },
-  { id: "recruiting", label: "Recruiting Profile",   desc: "College recruiting details",       icon: GraduationCap },
+const CALCULATORS: ToolRow[] = [
+  { id: "calc-split",  label: "Split Calculator" },
+  { id: "calc-zones",  label: "Training Zones" },
+  // Brief says "Race Planner" — closest real destination is this app's
+  // existing Race Splits Planner (CalculatorsSection initialTab="race-plan").
+  // Labelled with its real name so it doesn't relabel itself once opened.
+  { id: "calc-race",   label: "Race Splits Planner" },
+  { id: "calc-stroke", label: "Stroke Watch" },
+  { id: "calc-watts",  label: "Watts Calculator" },
 ];
 
-const CALCULATORS: { id: ToolId; label: string; desc: string; icon: LucideIcon }[] = [
-  { id: "calc-split",  label: "Split Calculator",    desc: "Split ↔ total time",        icon: SplitSquareVertical },
-  { id: "calc-zones",  label: "Training Zones",      desc: "UT2–SP zones from your 2K",  icon: Target },
-  { id: "calc-race",   label: "Race Splits Planner", desc: "Plan a 2K 500m by 500m",    icon: Trophy },
-  { id: "calc-stroke", label: "Stroke Watch",        desc: "Live on-water stroke rate",  icon: Radio },
-  { id: "calc-watts",  label: "Watts Calculator",    desc: "Convert split ↔ watts",      icon: Gauge },
-  { id: "calc-weight", label: "Weight Adjustment",   desc: "2K time at target weight",   icon: Weight },
+// Not named in the brief for this screen (which lists 5 calculators only),
+// but this has no dedicated top-level destination elsewhere — kept reachable
+// as the app's manual/multi-piece/strength/cross-training entry point. See
+// the import comment above.
+const LOG_TOOLS: ToolRow[] = [
+  { id: "log-erg",        label: "Log Erg Workout" },
+  { id: "log-multipiece", label: "Multi-Piece Session" },
+  { id: "log-strength",   label: "Log Strength" },
+  { id: "log-cross",      label: "Cross Training" },
 ];
 
-// Calculator tool id → CalculatorsSection `initialTab` (CalcId).
+// Calculator tool id → CalculatorsSection `initialTab` (CalcId). Note: Weight
+// Adjustment ("weight-adj") isn't a top-level row here (not in the brief's
+// 5-item Calculators list) but stays one tap away — CalculatorsSection's own
+// internal tab bar/sidebar lists every calculator, this one included.
 const CALC_TAB: Partial<Record<ToolId, string>> = {
   "calc-split": "split",
   "calc-zones": "zones",
   "calc-race": "race-plan",
   "calc-stroke": "stroke-watch",
   "calc-watts": "pace-watts",
-  "calc-weight": "weight-adj",
 };
 
 const TOOL_TITLES: Record<ToolId, string> = {
@@ -101,15 +107,11 @@ const TOOL_TITLES: Record<ToolId, string> = {
   predictor: "2K Predictor",
   critique: "Technique Critique",
   comparison: "Workout Comparison",
-  history: "Erg History",
-  strength: "Strength Logging",
-  recruiting: "Recruiting Profile",
   "calc-split": "Split Calculator",
   "calc-zones": "Training Zones",
   "calc-race": "Race Splits Planner",
   "calc-stroke": "Stroke Watch",
   "calc-watts": "Watts Calculator",
-  "calc-weight": "Weight Adjustment",
 };
 
 /* ── Active-plan helpers ─────────────────────────────────────────────────── */
@@ -121,78 +123,83 @@ const extractWeeks = (workout_data: any): any[] => {
   return [];
 };
 
-// Pick today's day from a week's `days[]`.
-//
-// Plans are anchored to workout_plans.start_date (always a Monday), so day 0 of
-// every week IS Monday. Index by days-since-Monday first and only fall back to
-// name matching for plans whose JSON is ordered differently.
-function todaysSession(week: any): {
-  label: string;
-  summary: string;
+/** One day-chip's worth of derived display info. */
+type DayChip = {
+  /** Single-letter weekday initial ("M", "T", "W", …), from the plan's real
+   *  calendar date (planDayDate), not an assumed Monday-first array. */
+  letter: string;
+  isToday: boolean;
+  isRest: boolean;
+  /** Training zone, e.g. "UT2" — null for rest/lift/unrecognised days. */
   zone: string | null;
-  pieces: string | null;
-  targetSplit: string | null;
-  optionalLabel: string | null;
-} | null {
-  const days: any[] = Array.isArray(week?.days) ? week.days : [];
-  if (days.length === 0) return null;
+  /** Short bottom-of-chip label: the zone, "OFF", "LIFT", or "—". */
+  abbrev: string;
+};
 
-  const dow = new Date().getDay(); // 0=Sun … 6=Sat
-  const NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const todayName = NAMES[dow];
-  const mondayIndex = (dow + 6) % 7; // Mon=0 … Sun=6
-
-  const day =
-    (mondayIndex < days.length ? days[mondayIndex] : undefined) ??
-    days.find((d) => {
-      const n = (typeof d?.day_name === "string" ? d.day_name : typeof d?.day === "string" ? d.day : "").toLowerCase();
-      return n.includes(todayName);
-    }) ??
-    days[days.length - 1];
-
-  if (!day) return null;
-  const label =
-    typeof day?.day_name === "string" ? day.day_name :
-    typeof day?.day === "string" ? day.day :
-    todayName.charAt(0).toUpperCase() + todayName.slice(1);
-
-  const optionalLabel = day?.optional?.title || day?.optional?.description || null;
-
-  if (day?.is_rest === true) {
-    return { label, summary: "Rest day — recovery.", zone: null, pieces: null, targetSplit: null, optionalLabel };
+/**
+ * Small solid dot per zone, reusing the same hue convention
+ * WorkoutPlanSection's getZoneColor() already established app-wide (green =
+ * easy, blue = steady, amber = threshold, red = hardest), mapped onto this
+ * design system's semantic status tokens instead of raw palette classes.
+ * Zones that file doesn't color either (e.g. "AN") fall back to neutral here
+ * too, for consistency with that existing behavior.
+ */
+function zoneDotClass(zone: string | null, isRest: boolean): string {
+  if (isRest) return "bg-subtle";
+  switch (zone) {
+    case "UT2": return "bg-success";
+    case "UT1": return "bg-primary";
+    case "TR":
+    case "TR1":
+    case "TR2":
+      return "bg-warning";
+    case "AT": return "bg-destructive";
+    default: return "bg-subtle";
   }
+}
 
-  const session = day?.required ?? day?.ergWorkout ?? null;
-  const summary =
-    (typeof day?.workout === "string" && day.workout) ||
-    session?.title || session?.description ||
-    optionalLabel ||
-    "Rest / no session today.";
-
-  const pieceBits: string[] = [];
-  if (session?.duration) pieceBits.push(String(session.duration));
-  if (session?.distance) pieceBits.push(`${session.distance}m`);
-
-  return {
-    label,
-    summary,
-    zone: session?.zone ? String(session.zone) : null,
-    pieces: pieceBits.length ? pieceBits.join(" · ") : null,
-    targetSplit: session?.targetSplit ? String(session.targetSplit) : null,
-    optionalLabel,
-  };
+/**
+ * The current week's 7 days as compact chip data. Anchored to the plan's real
+ * start_date via planDayDate (see src/lib/planDates.ts) so the letters/isToday
+ * line up with real weekdays, and reads zone/lift status via the shared
+ * planSchema.ts readers already used by WorkoutPlanSection for the same JSON.
+ */
+function buildDayChips(
+  plan: { start_date?: string | null; created_at?: string | null },
+  week: any,
+  weekIdx: number,
+): DayChip[] {
+  const days: any[] = Array.isArray(week?.days) ? week.days : [];
+  const todayStr = new Date().toDateString();
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = days[i];
+    const date = planDayDate(plan, weekIdx, i);
+    const letter = date.toLocaleDateString("en-US", { weekday: "narrow" });
+    const isRest = day?.is_rest === true;
+    const session = day?.required ?? day?.ergWorkout ?? null;
+    const zone = isRest ? null : sessionZone(session)?.toUpperCase() ?? null;
+    const isLift = !isRest && !zone && (isLiftSession(session) || !!day?.strengthWorkout);
+    const abbrev = isRest ? "OFF" : zone ? zone : isLift ? "LIFT" : "—";
+    return { letter, isToday: date.toDateString() === todayStr, isRest, zone, abbrev };
+  });
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
  * PERFORMANCE TAB
  * ──────────────────────────────────────────────────────────────────────── */
-export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) {
+export default function PerformanceTab({ profile }: AthleteTabProps) {
   const [openTool, setOpenTool] = useState<ToolId | null>(null);
 
   // iOS native only — Android native + every web platform falls back to info.
   const isIosNative = Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 
-  // Active training plan (most recent) — current week + today's session preview.
+  // Shared BLE connection state (src/context/BleContext.tsx, provided app-wide
+  // in App.tsx) — read-only here. The actual connect/disconnect flow, 10s
+  // timeout and toasts all live inside LiveErgView; this entry point just
+  // reflects state that's already tracked globally.
+  const { ergConnected, ergDeviceName } = useBle();
+
+  // Active training plan (most recent) — current week/phase + a 7-day chip strip.
   const { data: planInfo, isLoading: planLoading } = useQuery({
     queryKey: ["performance-active-plan"],
     queryFn: async () => {
@@ -213,42 +220,14 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
       const weekIdx = planCurrentWeekIndex(data as any, weeks.length);
       const week = weeks[weekIdx];
       return {
-        title: (data as any).title as string,
         weekCount: weeks.length,
-        weekIdx,
-        weekLabel: week?.phase_label || (week?.week ? `Week ${week.week}` : `Week ${weekIdx + 1}`),
-        today: week ? todaysSession(week) : null,
+        weekNumber: week?.week || weekIdx + 1,
+        phase: week?.phase_label || null,
+        chips: buildDayChips(data as any, week, weekIdx),
       };
     },
     staleTime: 5 * 60 * 1000,
   });
-
-  // AI coach last-message preview from chat_messages.
-  const { data: lastChat } = useQuery({
-    queryKey: ["performance-last-chat"],
-    queryFn: async () => {
-      const user = await getSessionUser();
-      if (!user) return null;
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("role, content, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return (data as any) || null;
-    },
-    staleTime: 60 * 1000,
-  });
-
-  const accent = teamColor || "#1A1A2E";
-
-  const lastChatPreview = useMemo(() => {
-    if (!lastChat?.content) return null;
-    const who = lastChat.role === "assistant" ? "Coach" : "You";
-    const text = String(lastChat.content).replace(/\s+/g, " ").trim();
-    return `${who}: ${text.length > 90 ? text.slice(0, 90) + "…" : text}`;
-  }, [lastChat]);
 
   // "Log with PM5" elsewhere in the app dispatches navigate_to_live_erg; the
   // shell switches to this tab and we open the Live Erg sub-view here.
@@ -260,19 +239,16 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
 
   function renderTool(id: ToolId) {
     switch (id) {
-      case "live-erg":   return <LiveErgView />;
-      case "plan":       return <WorkoutPlanSection />;
-      case "ask":        return <AskSection />;
+      case "live-erg":       return <LiveErgView />;
+      case "plan":           return <WorkoutPlanSection />;
+      case "ask":            return <AskSection />;
       case "log-erg":        return <div className="p-4"><ErgWorkoutSection profile={profile} /></div>;
       case "log-multipiece": return <div className="p-4"><MultiPieceSession profile={profile} /></div>;
       case "log-strength":   return <div className="p-4"><MultiSetStrengthForm profile={profile} /></div>;
       case "log-cross":      return <div className="p-4"><CrossTrainingSection profile={profile} /></div>;
-      case "predictor":  return <ErgPredictor />;
-      case "critique":   return <CritiqueSection />;
-      case "comparison": return <ComparisonSection profile={profile} />;
-      case "history":    return <HistorySection profile={profile} />;
-      case "strength":   return <StrengthProgramSection profile={profile} />;
-      case "recruiting": return <RecruitingProfileSection />;
+      case "predictor":      return <ErgPredictor />;
+      case "critique":       return <CritiqueSection />;
+      case "comparison":     return <ComparisonSection profile={profile} />;
       default:
         if (CALC_TAB[id]) {
           return <CalculatorsSection initialTab={CALC_TAB[id]} profile={profile} />;
@@ -283,157 +259,101 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
 
   return (
     <div className="p-4 pb-28 space-y-6">
-      {/* ── 1. Live Erg (hero) ─────────────────────────────────────────── */}
-      {isIosNative ? (
+      {/* ── 1. Live Erg — full-width, not a card ──────────────────────────── */}
+      <section>
+        {!isIosNative ? (
+          <div className="flex items-center gap-3">
+            <span className="h-3 w-3 shrink-0 rounded-full bg-subtle" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xl text-foreground">Live Erg</div>
+              <div className="text-sm text-muted-foreground mt-0.5">Connect via the iOS app</div>
+            </div>
+            <Badge variant="secondary" className="shrink-0">iOS only</Badge>
+          </div>
+        ) : ergConnected ? (
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="h-3 w-3 shrink-0 rounded-full bg-success" />
+              <span className="min-w-0 flex-1 truncate text-xl text-foreground">
+                {ergDeviceName || "Concept2 PM5"}
+              </span>
+            </div>
+            <Button size="lg" className="w-full mt-4" onClick={() => setOpenTool("live-erg")}>
+              Go to Live Erg
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="h-3 w-3 shrink-0 rounded-full bg-subtle" />
+              <span className="text-2xl text-foreground">Connect PM5</span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Tap to connect via Bluetooth</p>
+            <Button size="lg" className="w-full mt-4" onClick={() => setOpenTool("live-erg")}>
+              <Bluetooth className="h-4 w-4" strokeWidth={1.5} />
+              Connect
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* ── 2. Training plan ───────────────────────────────────────────────── */}
+      <section className="space-y-2">
+        <h2 className="label-caption px-1">MY PLAN</h2>
         <button
-          onClick={() => setOpenTool("live-erg")}
-          className="w-full text-left rounded-2xl p-5 text-white shadow-lg active:scale-[0.99] transition-transform"
-          style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)` }}
+          onClick={() => setOpenTool("plan")}
+          className="w-full text-left active:opacity-80 transition-opacity"
         >
-          <div className="flex items-center gap-4">
-            <div className="rounded-xl bg-white/15 p-3">
-              <Bluetooth className="h-7 w-7" />
-            </div>
-            <div className="flex-1">
-              <div className="text-lg font-bold">Live Erg</div>
-              <div className="text-sm text-white/80">Connect your PM5 over Bluetooth and row live</div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-white/70" />
-          </div>
-        </button>
-      ) : (
-        <div className="w-full rounded-2xl border border-dashed p-5 bg-muted/40">
-          <div className="flex items-center gap-4">
-            <div className="rounded-xl bg-muted p-3">
-              <Bluetooth className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div className="flex-1">
-              <div className="text-lg font-bold">Live Erg</div>
-              <div className="text-sm text-muted-foreground">Connect via the iOS app</div>
-            </div>
-            <Badge variant="secondary">iOS only</Badge>
-          </div>
-        </div>
-      )}
-
-      {/* ── 2. AI Training Plan ───────────────────────────────────────────── */}
-      <Card
-        className="cursor-pointer active:scale-[0.99] transition-transform"
-        onClick={() => setOpenTool("plan")}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl p-2.5" style={{ background: `${accent}1a` }}>
-              <CalendarClock className="h-5 w-5" style={{ color: accent }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">AI Training Plan</span>
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+          {planLoading ? (
+            <div className="text-sm text-muted-foreground py-3 px-1">Loading your plan…</div>
+          ) : planInfo ? (
+            <>
+              <div className="flex items-baseline gap-2 px-1">
+                <span className="text-xl text-foreground">
+                  Week {planInfo.weekNumber}
+                  {planInfo.weekCount > 0 ? ` of ${planInfo.weekCount}` : ""}
+                </span>
+                {planInfo.phase && (
+                  <span className="text-sm text-muted-foreground">{planInfo.phase}</span>
+                )}
               </div>
-              {planLoading ? (
-                <Skeleton className="h-4 w-40 mt-2" />
-              ) : planInfo ? (
-                <div className="mt-1 space-y-1">
-                  <div className="text-sm text-muted-foreground truncate">
-                    {planInfo.weekLabel}
-                    {planInfo.weekCount > 0 && ` of ${planInfo.weekCount}`}
-                    {" · "}{planInfo.title}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Today: </span>
-                    <span className="text-muted-foreground">
-                      {planInfo.today ? `${planInfo.today.label} — ${planInfo.today.summary}` : "No session scheduled"}
+              <div className="mt-3 flex items-stretch justify-between gap-1 rounded-lg bg-card px-2 py-3">
+                {planInfo.chips.map((chip, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex flex-1 flex-col items-center gap-1.5 rounded-md py-1",
+                      chip.isToday && "bg-surface-3",
+                    )}
+                  >
+                    <span className={cn("text-xs", chip.isToday ? "text-foreground" : "text-muted-foreground")}>
+                      {chip.letter}
                     </span>
+                    <span className={cn("h-2.5 w-2.5 rounded-full", zoneDotClass(chip.zone, chip.isRest))} />
+                    <span className="text-xs text-subtle">{chip.abbrev}</span>
                   </div>
-                  {planInfo.today && (planInfo.today.zone || planInfo.today.pieces || planInfo.today.targetSplit || planInfo.today.optionalLabel) && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      {planInfo.today.zone && (
-                        <Badge variant="outline" className="text-[10px]">{planInfo.today.zone}</Badge>
-                      )}
-                      {planInfo.today.pieces && (
-                        <span className="text-muted-foreground">{planInfo.today.pieces}</span>
-                      )}
-                      {planInfo.today.targetSplit && (
-                        <span className="font-mono text-muted-foreground">
-                          Target {planInfo.today.targetSplit}
-                        </span>
-                      )}
-                      {planInfo.today.optionalLabel && (
-                        <Badge variant="secondary" className="text-[10px]">+ optional</Badge>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground mt-1">
-                  No active plan yet — tap to generate one.
-                </div>
-              )}
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── 3. AI Coach Chat ──────────────────────────────────────────────── */}
-      <Card
-        className="cursor-pointer active:scale-[0.99] transition-transform"
-        onClick={() => setOpenTool("ask")}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl p-2.5" style={{ background: `${accent}1a` }}>
-              <Bot className="h-5 w-5" style={{ color: accent }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold">AI Coach Chat</div>
-              <div className="text-sm text-muted-foreground truncate mt-0.5">
-                {lastChatPreview ?? "Ask anything about training, technique or racing"}
+                ))}
               </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground py-3 px-1">
+              No active plan yet — tap to generate one.
             </div>
-            <MessageSquare className="h-5 w-5 text-muted-foreground shrink-0" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── 4. Log a Workout ──────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
-          Log a Workout
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          {LOG_TOOLS.map((t) => (
-            <ToolCard key={t.id} tool={t} accent={accent} onClick={() => setOpenTool(t.id)} />
-          ))}
-        </div>
+          )}
+        </button>
       </section>
 
-      {/* ── 5. Training Tools ─────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
-          Training Tools
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          {TRAINING_TOOLS.map((t) => (
-            <ToolCard key={t.id} tool={t} accent={accent} onClick={() => setOpenTool(t.id)} />
-          ))}
-        </div>
-      </section>
+      {/* ── 3. AI Tools ─────────────────────────────────────────────────────── */}
+      <ToolGroup title="AI Tools" rows={AI_TOOLS} onOpen={setOpenTool} />
 
-      {/* ── 6. Calculators ────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
-          Calculators
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          {CALCULATORS.map((t) => (
-            <ToolCard key={t.id} tool={t} accent={accent} onClick={() => setOpenTool(t.id)} />
-          ))}
-        </div>
-      </section>
+      {/* ── 4. Calculators ──────────────────────────────────────────────────── */}
+      <ToolGroup title="Calculators" rows={CALCULATORS} onOpen={setOpenTool} />
 
-      {/* ── Sub-view sheet ────────────────────────────────────────────────── */}
+      {/* ── 5. Log a Workout — not in the redesign brief, kept reachable
+             (see the import comment near the top of this file) ─────────────── */}
+      <ToolGroup title="Log a Workout" rows={LOG_TOOLS} onOpen={setOpenTool} />
+
+      {/* ── Sub-view sheet ───────────────────────────────────────────────────── */}
       <Sheet open={openTool !== null} onOpenChange={(o) => !o && setOpenTool(null)}>
         <SheetContent
           side="right"
@@ -443,7 +363,7 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
             <>
               <div className="flex items-center gap-2 border-b px-3 py-2 shrink-0">
                 <Button variant="ghost" size="sm" className="gap-1 -ml-1" onClick={() => setOpenTool(null)}>
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
                   Back
                 </Button>
                 <span className="font-semibold">{TOOL_TITLES[openTool]}</span>
@@ -459,30 +379,37 @@ export default function PerformanceTab({ profile, teamColor }: AthleteTabProps) 
   );
 }
 
-/* ── Tool grid card ──────────────────────────────────────────────────────── */
-function ToolCard({
-  tool, accent, onClick,
+/* ── Grouped-list pattern: section header + full-width rows ─────────────────
+ * [text-xs uppercase text-tertiary header; each row 48px tall, label
+ * text-base left, ChevronRight 16px text-tertiary right, thin border-bottom
+ * between rows]. One bg-card container per group — never nested. */
+function ToolGroup({
+  title, rows, onOpen,
 }: {
-  tool: { id: ToolId; label: string; desc: string; icon: LucideIcon };
-  accent: string;
-  onClick: () => void;
+  title: string;
+  rows: ToolRow[];
+  onOpen: (id: ToolId) => void;
 }) {
-  const Icon = tool.icon;
+  return (
+    <section className="space-y-2">
+      <h2 className="label-caption px-1">{title}</h2>
+      <div className="overflow-hidden rounded-lg bg-card">
+        {rows.map((row) => (
+          <ToolRowItem key={row.id} label={row.label} onClick={() => onOpen(row.id)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ToolRowItem({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={cn(
-        "rounded-xl border bg-card p-3 text-left active:scale-[0.97] transition-transform",
-        "flex flex-col gap-2 min-h-[96px]",
-      )}
+      className="flex h-12 w-full items-center justify-between gap-3 border-b border-border px-4 text-left last:border-b-0 active:bg-surface-3"
     >
-      <div className="rounded-lg p-2 w-fit" style={{ background: `${accent}1a` }}>
-        <Icon className="h-5 w-5" style={{ color: accent }} />
-      </div>
-      <div>
-        <div className="text-sm font-semibold leading-tight">{tool.label}</div>
-        <div className="text-xs text-muted-foreground leading-snug mt-0.5">{tool.desc}</div>
-      </div>
+      <span className="text-base text-foreground">{label}</span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-subtle" strokeWidth={1.5} />
     </button>
   );
 }

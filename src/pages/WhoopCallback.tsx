@@ -111,7 +111,7 @@ export default function WhoopCallback() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center space-y-4">
         <img src={crewsyncLogo} alt="CrewSync" className="h-12 w-12 rounded-xl mx-auto" />
         {status === "loading" && (

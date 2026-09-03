@@ -1,16 +1,32 @@
+@import './styles/design-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Design system: whoop (skillui-whoop/whoop-design/DESIGN.md)
-   Overrides applied: white background, navy #1A1A2E text + accent,
-   Arial Black headings, light mode only.
-   4px spacing grid · radius from the documented scale · system shadow tokens.
+   Design system: dark (see src/styles/design-tokens.css for the source of
+   truth — canvas/surface-1/2/3, text-primary/secondary/tertiary, accent,
+   status colors, type scale, spacing, radius, motion).
+
+   This file aliases the shadcn-conventional variable names (--background,
+   --foreground, --card, --muted, --primary, --accent, --destructive, ...)
+   that ~150 existing components already consume via bg-background,
+   text-foreground, bg-card, text-muted-foreground etc. Tailwind classes, so
+   the whole app goes dark from this one change rather than a per-component
+   edit. tailwind.config.ts wires each of these through to the matching
+   design-tokens.css variable — see the `colors` block there for the map.
+
+   Previously this file held a deliberate light theme (white background, navy
+   #1A1A2E accent, Proxima Nova/Arial Black) with dark mode disabled outright.
+   That decision is reversed here at the user's explicit direction: this is a
+   full dark redesign of the coach/athlete app experience, not a toggle.
+   src/pages/LandingPage.tsx has its own separate, already-shipped design
+   system and does not consume these variables, so it is unaffected.
    ───────────────────────────────────────────────────────────────────────────── */
 
-/* Body/UI typeface from the design system. Headings use Arial Black.
-   Registered globally so every route can use it, not just the landing page. */
+/* Kept for src/pages/LandingPage.tsx, which still sets these font-families
+   directly and does not go through --font-body/--font-display below. */
 @font-face {
   font-family: 'Proxima Nova';
   src: url('/fonts/proxima-nova-Regular.ttf') format('truetype');
@@ -38,130 +54,109 @@
 
 @layer base {
   :root {
-    /* Team branding — overridden dynamically by TeamBrandingProvider */
-    --team-color: #1a1a2e;
-    --team-color-rgb: 26, 26, 46;
+    /* Team branding — overridden dynamically by TeamBrandingProvider.
+       Default fallback is the design system accent, not a per-team color. */
+    --team-color: #2272FF;
+    --team-color-rgb: 34, 114, 255;
 
-    /* Typography */
-    --font-display: 'Arial Black', 'Arial Bold', Gadget, Arial, sans-serif;
-    --font-body: 'Proxima Nova', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    /* Typography — Space Grotesk only, no separate display face. Hierarchy
+       comes from the type scale (size/weight/line-height), not font mixing. */
+    --font-display: var(--font-sans);
+    --font-body: var(--font-sans);
 
-    /* Page and surface backgrounds */
-    --background: 0 0% 100%;         /* #ffffff */
-    --foreground: 240 28% 14%;       /* #1a1a2e navy */
+    /* Page and surface backgrounds — aliased onto design-tokens.css. */
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
 
-    --card: 0 0% 100%;               /* white cards, separated by border + shadow */
-    --card-foreground: 240 28% 14%;
+    --card: var(--surface-2);
+    --card-foreground: var(--text-primary);
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 28% 14%;
+    --popover: var(--surface-3);
+    --popover-foreground: var(--text-primary);
 
-    /* Brand accent — navy per the override. Single accent, used for CTAs,
-       links, focus rings and active states. */
-    --primary: 240 28% 14%;          /* #1a1a2e */
-    --primary-foreground: 0 0% 100%;
+    --primary: var(--accent);
+    --primary-foreground: var(--text-primary);
 
-    --secondary: 240 20% 94%;        /* light navy-tinted surface */
-    --secondary-foreground: 240 28% 14%;
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text-primary);
 
-    --muted: 240 20% 96%;
-    --muted-foreground: 240 10% 46%; /* navy at reduced weight, 5.8:1 on white */
+    --muted: var(--surface-2);
+    --muted-foreground: var(--text-secondary);
 
-    /* NOTE: in shadcn, --accent is the subtle hover/active *surface*, not the
-       brand accent (that is --primary). Keeping it a light tint preserves
-       usable hover states; solid navy here would turn every menu hover into a
-       filled block. */
-    --accent: 240 20% 94%;
-    --accent-foreground: 240 28% 14%;
+    /* NOTE: shadcn's own --accent is the subtle hover/active/selected
+       *surface* that Select/DropdownMenu/Command etc. paint on focus — it is
+       NOT the brand accent (that's --primary, above, aliased to the design
+       system's --accent blue). Deliberately NOT reusing the --accent
+       variable name here to avoid colliding with design-tokens.css's own
+       --accent — tailwind.config.ts points this shadcn color key straight at
+       --surface-3 instead, which the design system already defines for
+       exactly this purpose (hover / active / selected states). */
 
-    /* Status colors kept at their existing accessible values — the extracted
-       palette's #41ff31 / #ff0026 are unreadable on white. */
-    --destructive: 1 73% 59%;        /* #e24b4a */
-    --destructive-foreground: 0 0% 100%;
+    --destructive: var(--danger);
+    --destructive-foreground: var(--text-primary);
 
-    --success: 160 84% 39%;          /* #10b981 */
-    --success-foreground: 0 0% 100%;
+    /* button.tsx's "success" variant reads these directly. */
+    --success-foreground: var(--text-primary);
+    --warning-foreground: var(--canvas);
 
-    --warning: 38 92% 50%;           /* #f59e0b */
-    --warning-foreground: 0 0% 100%;
+    /* --border itself is NOT redeclared here — design-tokens.css already
+       defines it (0.07-alpha "default separator") and this :root block would
+       silently win the cascade and overwrite it if it repeated the name. */
+    --input: var(--border-strong);
+    --ring: var(--accent);
 
-    --border: 240 14% 90%;
-    --input: 240 14% 90%;
-    --ring: 240 28% 14%;
-
-    /* .375rem so the derived ladder all lands on the documented radius scale:
-       rounded-lg 6px · rounded-md 4px · rounded-sm 2px (the system default). */
+    /* .375rem so rounded-lg/md/sm land on the old calc ladder; the redesigned
+       screens and the new xl/lg/md/sm keys in tailwind.config.ts use the
+       explicit --radius-* tokens instead, which is the scale that actually
+       matches the spec (4/6/8/12px). */
     --radius: 0.375rem;
 
-    /* Gradients — "for emphasis, not decoration". Collapsed to flat navy or
-       near-white; the old multi-hue dark gradients are gone. */
-    --gradient-primary: linear-gradient(135deg, #1a1a2e, #1a1a2e);
-    --gradient-hero: linear-gradient(135deg, #1a1a2e, #1a1a2e);
-    --gradient-card: linear-gradient(145deg, #ffffff, #ffffff);
-    --gradient-subtle: linear-gradient(180deg, #ffffff, #f7f7fa);
-    --gradient-warm: linear-gradient(135deg, #1a1a2e, #1a1a2e);
-    --gradient-energetic: linear-gradient(135deg, #1a1a2e, #1a1a2e);
+    /* Gradients — "for emphasis, not decoration" per the design system.
+       Flattened to solid dark-canvas colors; nothing here is a true gradient. */
+    --gradient-primary: linear-gradient(135deg, #08121F, #08121F);
+    --gradient-hero: linear-gradient(135deg, #08121F, #08121F);
+    --gradient-card: linear-gradient(145deg, #132036, #132036);
+    --gradient-subtle: linear-gradient(180deg, #08121F, #0D1929);
+    --gradient-warm: linear-gradient(135deg, #08121F, #08121F);
+    --gradient-energetic: linear-gradient(135deg, #08121F, #08121F);
 
-    /* Shadows — system tokens from DESIGN.md §6 only */
-    --shadow-raised: 0 .25rem 1.25rem 0 rgba(0,0,0,.2);
-    --shadow-floating: 0 4px 20px 0 hsla(0,0%,87%,.2);
-    --shadow-floating-strong: 0 0 20px 0 hsla(0,0%,78%,.25);
-    --shadow-overlay: 0 4.75px 23.75px 0 hsla(0,0%,85%,.1);
+    /* Shadows — dark UIs communicate elevation mainly through the
+       surface-1/2/3 step and borders, not shadow. These exist for the few
+       elements that do float above everything (modals, dropdowns). */
+    --shadow-raised: 0 4px 12px 0 rgba(0, 0, 0, 0.3);
+    --shadow-floating: 0 8px 24px 0 rgba(0, 0, 0, 0.4);
+    --shadow-floating-strong: 0 8px 24px 0 rgba(0, 0, 0, 0.5);
+    --shadow-overlay: 0 16px 48px 0 rgba(0, 0, 0, 0.5);
 
-    /* Legacy aliases mapped onto the system tokens above */
-    --shadow-glow: var(--shadow-raised);
+    /* Legacy aliases mapped onto the tokens above */
+    --shadow-glow: 0 0 24px 0 rgba(34, 114, 255, 0.25);
     --shadow-glow-secondary: var(--shadow-floating-strong);
     --shadow-soft: var(--shadow-floating);
     --shadow-medium: var(--shadow-floating-strong);
     --shadow-card: var(--shadow-floating);
     --shadow-card-hover: var(--shadow-raised);
 
-    /* Transitions — default easing from the motion tokens */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Transitions — mapped onto the design system's duration tokens. */
+    --transition-smooth: all var(--duration-base) var(--ease-default);
+    --transition-bounce: all var(--duration-slow) var(--ease-default);
+    --transition-fast: all var(--duration-fast) var(--ease-default);
 
-    /* Sidebar — light surface, navy ink */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 240 28% 14%;
-    --sidebar-primary: 240 28% 14%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 20% 96%;
-    --sidebar-accent-foreground: 240 28% 14%;
-    --sidebar-border: 240 14% 90%;
-    --sidebar-ring: 240 28% 14%;
+    /* Sidebar — not used by the tab-based app shell today, but kept
+       consistent with the rest of the dark palette in case anything renders it. */
+    --sidebar-background: var(--surface-1);
+    --sidebar-foreground: var(--text-primary);
+    --sidebar-primary: var(--accent);
+    --sidebar-primary-foreground: var(--text-primary);
+    --sidebar-accent: var(--surface-3);
+    --sidebar-accent-foreground: var(--text-primary);
+    --sidebar-border: var(--border-strong);
+    --sidebar-ring: var(--accent);
   }
 
-  /* Light mode only. `.dark` is never applied (no theme toggle exists in the
-     app), and this block deliberately mirrors the light tokens so that adding
-     the class cannot resurrect the old dark theme. Any remaining `dark:`
-     utility variants in components are inert for the same reason. */
-  .dark {
-    --background: 0 0% 100%;
-    --foreground: 240 28% 14%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 240 28% 14%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 28% 14%;
-
-    --primary: 240 28% 14%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 20% 94%;
-    --secondary-foreground: 240 28% 14%;
-
-    --muted: 240 20% 96%;
-    --muted-foreground: 240 10% 46%;
-
-    --accent: 240 20% 94%;
-    --accent-foreground: 240 28% 14%;
-
-    --border: 240 14% 90%;
-    --input: 240 14% 90%;
-    --ring: 240 28% 14%;
-  }
+  /* No theme toggle exists in the app — :root above is the only theme, and it
+     is dark. This intentionally does not define a .dark override block: a
+     stray `dark:` utility variant left on some component has nothing to
+     override and is inert, rather than resurrecting a second palette. */
 }
 
 @layer base {
@@ -183,13 +178,12 @@
     font-family: var(--font-body);
   }
 
-  /* Headings use Arial Black per the override. It runs much wider than a
-     normal bold, so tighten tracking and keep the heading line-height at 1.2
-     from the type rules. */
+  /* Headings use the same Space Grotesk family as everything else — hierarchy
+     comes from the type scale (see design-tokens.css / tailwind fontSize),
+     not a separate display face. */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
-    font-weight: 900;
-    letter-spacing: -0.02em;
+    font-weight: 700;
     line-height: 1.2;
   }
 }
@@ -250,8 +244,8 @@
     color: hsl(var(--primary));
   }
 
-  /* Was frosted glass. The design system lists blur/backdrop-blur as an
-     anti-pattern, so these are solid surfaces with a border now. */
+  /* The design system lists blur/backdrop-blur as an anti-pattern: solid
+     surfaces with a border instead of frosted glass. */
   .glass {
     @apply bg-card border border-border;
   }
@@ -264,8 +258,7 @@
   /* Display type utility for non-heading elements (card titles, stat values) */
   .font-display {
     font-family: var(--font-display);
-    font-weight: 900;
-    letter-spacing: -0.02em;
+    font-weight: 700;
   }
 
   /* Animations */
@@ -343,7 +336,7 @@
   }
 
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent, rgba(26,26,46,0.10), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
   }

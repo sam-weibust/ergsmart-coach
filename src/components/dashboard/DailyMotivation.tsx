@@ -94,7 +94,7 @@ export function DailyMotivation() {
   if (dismissed || !message) return null;
 
   return (
-    <div className="relative rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 p-4 mb-4 animate-fade-in">
+    <div className="relative rounded-xl border border-primary/20 bg-surface-2 p-4 mb-4 animate-fade-in">
       <button
         onClick={handleDismiss}
         className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"

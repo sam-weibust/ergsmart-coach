@@ -38,7 +38,7 @@ const getRatingLabel = (rating: string) => {
 
 export const WorkoutFeedback = ({ feedback, onDismiss }: WorkoutFeedbackProps) => {
   return (
-    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent animate-in slide-in-from-top duration-300">
+    <Card className="border-primary/30 bg-primary/5 animate-in slide-in-from-top duration-300">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg">

@@ -804,7 +804,7 @@ function InsightsTab({ profile }: { profile: any }) {
         </CardContent>
       </Card>
 
-      <Card className="border-0 bg-gradient-to-br from-[#0f1e3a] to-[#162b50]">
+      <Card className="border-0 bg-surface-2">
         <CardContent className="p-5">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">

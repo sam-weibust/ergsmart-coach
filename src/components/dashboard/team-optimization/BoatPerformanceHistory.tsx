@@ -232,7 +232,7 @@ const BoatPerformanceHistory = ({ teamId, isCoach, boats, seasonId }: Props) => 
                     <Line
                       type="monotone"
                       dataKey="split"
-                      stroke="hsl(var(--primary))"
+                      stroke="rgb(var(--primary))"
                       strokeWidth={2}
                       dot={{ r: 4 }}
                       activeDot={{ r: 6 }}

@@ -412,7 +412,7 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
               {Object.entries(ergPRs).map(([type, score]) => (
                 <div
                   key={type}
-                  className="p-4 rounded-lg border bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20"
+                  className="p-4 rounded-lg border bg-warning/10 border-warning/20"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600">{type}</Badge>
@@ -463,11 +463,11 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={powerCurveData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }} />
                   <YAxis
                     domain={["dataMin - 10", "dataMax + 10"]}
                     className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }}
                     tickFormatter={(v) => `${v}W`}
                   />
                   <Tooltip
@@ -486,9 +486,9 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
                   <Line
                     type="monotone"
                     dataKey="watts"
-                    stroke="hsl(var(--primary))"
+                    stroke="rgb(var(--primary))"
                     strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 0, r: 4 }}
+                    dot={{ fill: "rgb(var(--primary))", strokeWidth: 0, r: 4 }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
@@ -526,13 +526,13 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={splitTrendData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <XAxis dataKey="date" className="text-xs" tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }} />
                   <YAxis
                     reversed
                     tickFormatter={(v) => formatSplitSeconds(v)}
                     domain={["dataMin - 3", "dataMax + 3"]}
                     className="text-xs"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -550,9 +550,9 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
                   <Line
                     type="monotone"
                     dataKey="splitSeconds"
-                    stroke="hsl(var(--primary))"
+                    stroke="rgb(var(--primary))"
                     strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 0, r: 3 }}
+                    dot={{ fill: "rgb(var(--primary))", strokeWidth: 0, r: 3 }}
                     activeDot={{ r: 5 }}
                   />
                 </LineChart>
@@ -605,11 +605,11 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={wkgData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <XAxis dataKey="date" tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }} />
                   <YAxis
                     domain={["dataMin - 0.1", "dataMax + 0.1"]}
                     tickFormatter={(v) => `${Number(v).toFixed(1)}`}
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -627,9 +627,9 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
                   <Line
                     type="monotone"
                     dataKey="wkg"
-                    stroke="hsl(var(--primary))"
+                    stroke="rgb(var(--primary))"
                     strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 0, r: 4 }}
+                    dot={{ fill: "rgb(var(--primary))", strokeWidth: 0, r: 4 }}
                     activeDot={{ r: 6 }}
                   />
                 </LineChart>
@@ -667,8 +667,8 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={trainingLoadData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="label" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `${v}km`} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <XAxis dataKey="label" tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `${v}km`} tick={{ fill: "rgb(var(--muted-foreground))", fontSize: 11 }} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
@@ -683,7 +683,7 @@ const PerformanceSection = ({ profile }: PerformanceSectionProps) => {
                       );
                     }}
                   />
-                  <Bar dataKey="erg" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} name="Erg" stackId="a" />
+                  <Bar dataKey="erg" fill="rgb(var(--primary))" radius={[0, 0, 0, 0]} name="Erg" stackId="a" />
                   <Bar dataKey="ow" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} name="On-water" stackId="a" />
                 </BarChart>
               </ResponsiveContainer>

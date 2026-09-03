@@ -637,7 +637,7 @@ export default function RaceSection() {
         <div className="text-center">
           <p className="text-muted-foreground text-lg mb-4 uppercase tracking-widest">Race starts in</p>
           <div className="text-[12rem] font-black tabular-nums leading-none text-foreground drop-shadow-2xl">
-            {countdown > 0 ? countdown : <span className="text-[hsl(var(--success))]">GO!</span>}
+            {countdown > 0 ? countdown : <span className="text-[rgb(var(--success))]">GO!</span>}
           </div>
           <p className="text-muted-foreground mt-6">{room?.distance}m — {participants.length} athletes</p>
         </div>
@@ -658,9 +658,9 @@ export default function RaceSection() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3">
-            <Swords className="h-5 w-5 text-[hsl(var(--success))]" />
+            <Swords className="h-5 w-5 text-[rgb(var(--success))]" />
             <span className="font-bold">{raceDist}m Race</span>
-            <Badge variant="outline" className="text-[hsl(var(--success))] border-green-400/50 text-xs">{participants.length} athletes</Badge>
+            <Badge variant="outline" className="text-[rgb(var(--success))] border-green-400/50 text-xs">{participants.length} athletes</Badge>
           </div>
           <div className="flex items-center gap-2">
             {(iFinished || allFinished) && (
@@ -668,8 +668,8 @@ export default function RaceSection() {
                 <Flag className="h-3 w-3 mr-1" /> Results
               </Button>
             )}
-            <div className={`flex items-center gap-1.5 text-xs ${ergConnected ? "text-[hsl(var(--success))]" : "text-destructive"}`}>
-              <div className={`w-2 h-2 rounded-full ${ergConnected ? "bg-[hsl(var(--success))] animate-pulse" : "bg-destructive"}`} />
+            <div className={`flex items-center gap-1.5 text-xs ${ergConnected ? "text-[rgb(var(--success))]" : "text-destructive"}`}>
+              <div className={`w-2 h-2 rounded-full ${ergConnected ? "bg-[rgb(var(--success))] animate-pulse" : "bg-destructive"}`} />
               {ergConnected ? "PM5" : "Disconnected"}
             </div>
           </div>
@@ -689,14 +689,14 @@ export default function RaceSection() {
                 key={p.user_id}
                 className={`rounded-lg border p-3 ${
                   isMe
-                    ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10"
+                    ? "border-[rgb(var(--success))]/40 bg-[rgb(var(--success))]/10"
                     : "border-border bg-muted/50"
                 }`}
               >
                 <div className="flex items-center gap-3 mb-2">
                   {/* Position */}
                   <span className={`text-xs font-bold w-6 text-center tabular-nums ${
-                    isLeader ? "text-[hsl(var(--warning))]" : "text-muted-foreground"
+                    isLeader ? "text-[rgb(var(--warning))]" : "text-muted-foreground"
                   }`}>
                     {isLeader ? <Crown className="h-4 w-4" /> : ordinal(idx + 1)}
                   </span>
@@ -705,7 +705,7 @@ export default function RaceSection() {
                   <span className={`font-semibold text-sm flex-1 ${isMe ? "text-green-300" : "text-foreground"}`}>
                     {p.display_name}
                     {isMe && <span className="ml-1 text-xs text-green-500">(you)</span>}
-                    {finished && <span className="ml-1 text-xs text-[hsl(var(--warning))]">✓ Finished</span>}
+                    {finished && <span className="ml-1 text-xs text-[rgb(var(--warning))]">✓ Finished</span>}
                   </span>
 
                   {/* Stats */}
@@ -729,8 +729,8 @@ export default function RaceSection() {
                 <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      finished ? "bg-[hsl(var(--warning))]" :
-                      isLeader ? "bg-[hsl(var(--success))]" :
+                      finished ? "bg-[rgb(var(--warning))]" :
+                      isLeader ? "bg-[rgb(var(--success))]" :
                       isMe ? "bg-blue-400" : "bg-gray-500"
                     }`}
                     style={{ width: `${progress}%` }}
@@ -754,7 +754,7 @@ export default function RaceSection() {
             ].map(s => (
               <div key={s.label}>
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</div>
-                <div className="font-mono font-bold text-[hsl(var(--success))] text-lg leading-tight">{s.value}</div>
+                <div className="font-mono font-bold text-[rgb(var(--success))] text-lg leading-tight">{s.value}</div>
               </div>
             ))}
           </div>
@@ -773,7 +773,7 @@ export default function RaceSection() {
       <div className="min-h-screen bg-background text-foreground flex flex-col">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-[hsl(var(--warning))]" />
+            <Trophy className="h-5 w-5 text-[rgb(var(--warning))]" />
             <span className="font-bold text-lg">Race Results</span>
           </div>
           <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => {
@@ -795,7 +795,7 @@ export default function RaceSection() {
                 <div
                   key={p.user_id}
                   className={`flex items-center gap-4 p-4 rounded-lg border ${
-                    isMe ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10" : "border-border bg-muted/50"
+                    isMe ? "border-[rgb(var(--success))]/40 bg-[rgb(var(--success))]/10" : "border-border bg-muted/50"
                   }`}
                 >
                   <div className="text-2xl w-8 text-center">
@@ -813,7 +813,7 @@ export default function RaceSection() {
                       </div>
                     )}
                   </div>
-                  {!isDNF && <div className="font-mono font-bold text-[hsl(var(--success))]">{fmtTime(p.finish_time)}</div>}
+                  {!isDNF && <div className="font-mono font-bold text-[rgb(var(--success))]">{fmtTime(p.finish_time)}</div>}
                 </div>
               );
             })}
@@ -955,18 +955,18 @@ export default function RaceSection() {
             <div className="space-y-2">
               {participants.map((p, idx) => (
                 <div key={p.user_id} className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  p.user_id === myUserId ? "border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/10" : "border-border bg-muted/50"
+                  p.user_id === myUserId ? "border-[rgb(var(--success))]/40 bg-[rgb(var(--success))]/10" : "border-border bg-muted/50"
                 }`}>
                   <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold" style={{ color: ATHLETE_COLORS[idx % ATHLETE_COLORS.length] }}>
                     {p.display_name.charAt(0).toUpperCase()}
                   </div>
                   <span className={`flex-1 text-sm font-medium ${p.user_id === myUserId ? "text-green-300" : "text-foreground"}`}>
                     {p.display_name}
-                    {p.user_id === room.creator_id && <span className="ml-1.5 text-[10px] text-[hsl(var(--warning))] bg-[hsl(var(--warning))]/10 px-1.5 py-0.5 rounded">HOST</span>}
+                    {p.user_id === room.creator_id && <span className="ml-1.5 text-[10px] text-[rgb(var(--warning))] bg-[rgb(var(--warning))]/10 px-1.5 py-0.5 rounded">HOST</span>}
                     {p.user_id === myUserId && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}
                   </span>
                   {p.erg_score_2k && <span className="text-xs text-muted-foreground font-mono">{fmtPace(p.erg_score_2k)}</span>}
-                  <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                  <CheckCircle2 className="h-4 w-4 text-[rgb(var(--success))]" />
                 </div>
               ))}
             </div>
@@ -1009,13 +1009,13 @@ export default function RaceSection() {
       </div>
 
       {/* BLE Connection */}
-      <Card className={`border ${ergConnected ? "border-[hsl(var(--success))]/40 bg-green-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
+      <Card className={`border ${ergConnected ? "border-[rgb(var(--success))]/40 bg-green-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${ergConnected ? "bg-[hsl(var(--success))] animate-pulse" : "bg-amber-400"}`} />
+              <div className={`w-3 h-3 rounded-full ${ergConnected ? "bg-[rgb(var(--success))] animate-pulse" : "bg-amber-400"}`} />
               <div>
-                <p className={`font-semibold text-sm ${ergConnected ? "text-green-600 dark:text-[hsl(var(--success))]" : "text-amber-600 dark:text-amber-400"}`}>
+                <p className={`font-semibold text-sm ${ergConnected ? "text-green-600 dark:text-[rgb(var(--success))]" : "text-amber-600 dark:text-amber-400"}`}>
                   {ergConnected ? "Erg Connected — Ready to Race" : "Erg Not Connected"}
                 </p>
                 <p className="text-xs text-muted-foreground">

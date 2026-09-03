@@ -83,16 +83,16 @@ interface AIFeedback {
 // Chart tokens — every value traces back to a design token in src/index.css.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const INK = "hsl(var(--foreground))";        // navy — the single series hue
-const HR_RED = "hsl(var(--destructive))";    // HR is required to read red
-const AXIS = "hsl(var(--muted-foreground))";
-const GRID = "hsl(var(--border))";
-const SURFACE = "hsl(var(--background))";
+const INK = "rgb(var(--foreground))";        // navy — the single series hue
+const HR_RED = "rgb(var(--destructive))";    // HR is required to read red
+const AXIS = "rgb(var(--muted-foreground))";
+const GRID = "var(--border)";
+const SURFACE = "rgb(var(--background))";
 
 const axisTick = { fill: AXIS, fontSize: 11 } as const;
 const tooltipStyle = {
   background: SURFACE,
-  border: "1px solid hsl(var(--border))",
+  border: "1px solid var(--border)",
   borderRadius: 6,
   fontSize: 12,
   color: INK,
@@ -348,7 +348,7 @@ function MetricCell({
   tone?: "default" | "good" | "warn";
 }) {
   const color =
-    tone === "good" ? "hsl(var(--success))" : tone === "warn" ? "hsl(var(--warning))" : INK;
+    tone === "good" ? "rgb(var(--success))" : tone === "warn" ? "rgb(var(--warning))" : INK;
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

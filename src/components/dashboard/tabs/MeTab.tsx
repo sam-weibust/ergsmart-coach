@@ -1,43 +1,21 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionUser } from "@/lib/getUser";
 import type { AthleteTabProps } from "./types";
 
-import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import {
-  Activity,
-  ChevronRight,
-  Flame,
-  Moon,
-  Trophy,
-  Utensils,
-  Weight,
-  Zap,
-  Gauge,
-  Ruler,
-} from "lucide-react";
+import { recoveryColor } from "@/lib/design-system";
 
-import RecoveryDashboard from "@/components/dashboard/RecoveryDashboard";
-import MealPlanTab from "@/components/dashboard/MealPlanTab";
-import HistorySection from "@/components/dashboard/HistorySection";
-import StrengthProgramSection from "@/components/dashboard/StrengthProgramSection";
 // The "More" surface (regattas, recruiting, connected apps, achievements,
-// challenges, nutrition detail, H2H history) now lives in its own always-visible
-// bottom-bar tab — see ./MoreTab.tsx.
+// challenges, nutrition detail, H2H history) lives in its own always-visible
+// bottom-bar tab — see ./MoreTab.tsx. Erg history and the strength program
+// each have their own entry point on the Performance tab, and full
+// recovery/nutrition detail live on the Team tab, so this screen stays a
+// read-only "how am I doing today" snapshot: header, headline stats,
+// recovery, nutrition, and recent workouts — no drill-in sheets.
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Watts from a 2K time in seconds. C2 power formula: P = 2.80 / (split/500)^3 */
-function wattsFrom2kSeconds(totalSeconds: number | null | undefined): number | null {
-  if (!totalSeconds || totalSeconds <= 0) return null;
-  const splitSeconds = totalSeconds / 4; // 500m split from 2K time
-  return Math.round(2.8 / Math.pow(splitSeconds / 500, 3));
-}
 
 /** Seconds → "M:SS" (or "H:MM:SS" for long pieces). */
 function fmtTime(secs: number | null | undefined): string {
@@ -82,76 +60,31 @@ function workoutTypeLabel(type: string | null | undefined): string {
   return labels[type] ?? type.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
 }
 
+/** One-line recovery status blurb, matching the recoveryColor tiers (>70 / 40-70 / <40). */
+function recoveryBlurb(score: number): string {
+  if (score > 70) return "Well recovered — good to push today.";
+  if (score >= 40) return "Moderate recovery — listen to your body.";
+  return "Low recovery — prioritize rest today.";
+}
+
 const today = () => new Date().toISOString().split("T")[0];
 const nDaysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().split("T")[0];
 
-// ─── Section shell ───────────────────────────────────────────────────────────
+// ─── Stats strip item ────────────────────────────────────────────────────────
 
-function SectionCard({
-  title,
-  icon: Icon,
-  onOpen,
-  children,
-}: {
-  title: string;
-  icon: React.ElementType;
-  onOpen?: () => void;
-  children: React.ReactNode;
-}) {
+function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Card className="border border-border">
-      <CardContent className="p-4">
-        <button
-          onClick={onOpen}
-          disabled={!onOpen}
-          className="w-full flex items-center justify-between mb-3 group disabled:cursor-default"
-        >
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Icon className="h-4 w-4 text-primary" />
-            {title}
-          </h3>
-          {onOpen && (
-            <span className="text-xs text-primary flex items-center gap-0.5 group-hover:underline">
-              View <ChevronRight className="h-3.5 w-3.5" />
-            </span>
-          )}
-        </button>
-        {children}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  icon: Icon,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  icon?: React.ElementType;
-}) {
-  return (
-    <div className="text-center">
-      <div className="flex items-center justify-center gap-1">
-        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-        <p className="text-xl font-bold text-foreground leading-none">{value}</p>
-      </div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1.5">{label}</p>
-      {sub && <p className="text-[10px] text-muted-foreground/70">{sub}</p>}
+    <div className="text-center px-2">
+      <p className="text-xs uppercase text-subtle">{label}</p>
+      <p className="text-xl text-foreground data-value mt-1">{value}</p>
     </div>
   );
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-type DetailView = "recovery" | "nutrition" | "history" | "strength" | null;
-
 export default function MeTab(props: AthleteTabProps) {
-  const { userId, profile, teamColor } = props;
-  const [detail, setDetail] = useState<DetailView>(null);
+  const { userId, profile } = props;
 
   // Athlete profile (avatar, school, grad year) — same source as DashboardHome.
   const { data: ap } = useQuery({
@@ -370,74 +303,14 @@ export default function MeTab(props: AthleteTabProps) {
     },
   });
 
-  // Last strength session + current program (day-based; no Wendler cycle in schema).
-  const { data: strength, isLoading: strengthLoading } = useQuery({
-    queryKey: ["me-strength", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const user = await getSessionUser();
-      if (!user) return null;
-      const [logRes, workoutRes, programRes] = await Promise.all([
-        supabase
-          .from("strength_program_logs")
-          .select("day_key, session_date")
-          .eq("user_id", user.id)
-          .order("session_date", { ascending: false })
-          .limit(1),
-        supabase
-          .from("strength_workouts")
-          .select("exercise, workout_date")
-          .eq("user_id", user.id)
-          .order("workout_date", { ascending: false })
-          .limit(1),
-        supabase
-          .from("default_strength_programs")
-          .select("name")
-          .eq("is_default", true)
-          .maybeSingle(),
-      ]);
-      const lastLog = logRes.data?.[0] ?? null;
-      const lastWorkout = workoutRes.data?.[0] ?? null;
-      // Use whichever strength record is most recent.
-      let lastDate: string | null = null;
-      let lastLabel: string | null = null;
-      if (lastLog && lastWorkout) {
-        if (lastLog.session_date >= lastWorkout.workout_date) {
-          lastDate = lastLog.session_date;
-          lastLabel = (lastLog.day_key || "").replace("day_", "Day ").toUpperCase();
-        } else {
-          lastDate = lastWorkout.workout_date;
-          lastLabel = lastWorkout.exercise;
-        }
-      } else if (lastLog) {
-        lastDate = lastLog.session_date;
-        lastLabel = (lastLog.day_key || "").replace("day_", "Day ").toUpperCase();
-      } else if (lastWorkout) {
-        lastDate = lastWorkout.workout_date;
-        lastLabel = lastWorkout.exercise;
-      }
-      return {
-        lastDate,
-        lastLabel,
-        programName: programRes.data?.name ?? null,
-      };
-    },
-  });
-
   // ── Derived display values ───────────────────────────────────────────────
 
   const name = profile?.full_name || profile?.username || "Athlete";
   const avatarUrl = ap?.avatar_url || profile?.avatar_url || undefined;
-  const school = ap?.school || profile?.school || null;
   const gradYear = ap?.grad_year || null;
   const programName = profile?.experience_level
     ? profile.experience_level.charAt(0).toUpperCase() + profile.experience_level.slice(1)
     : null;
-
-  // W/kg from verified best 2K watts and bodyweight.
-  const best2kWatts = bests?.best2kWatts ?? wattsFrom2kSeconds(bests?.best2k);
-  const weightKg = profile?.weight || null;
-  const wkg = best2kWatts && weightKg ? (best2kWatts / weightKg).toFixed(1) : null;
 
   const totalKm = ergStats ? (ergStats.totalMeters / 1000).toFixed(1) : null;
 
@@ -446,241 +319,137 @@ export default function MeTab(props: AthleteTabProps) {
       ? Math.min(100, Math.round((nutrition.calories / nutrition.goal) * 100))
       : 0;
 
-  const recoveryColor = (s: number) => (s >= 75 ? "#10b981" : s >= 50 ? "#f59e0b" : "#ef4444");
-
   return (
-    <div className="space-y-4 pb-24">
+    <div className="divide-y divide-border pb-24">
       {/* 1 ── Profile header ─────────────────────────────────────────────── */}
-      <Card className="overflow-hidden border-0" style={{ background: teamColor }}>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-16 w-16 ring-2 ring-white/20">
-              <AvatarImage src={avatarUrl} />
-              <AvatarFallback className="text-xl bg-white/20 text-white">
-                {name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="font-bold text-white text-lg leading-tight truncate">{name}</p>
-              <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                {programName && (
-                  <Badge variant="secondary" className="text-[10px] bg-white/15 text-white border-0">
-                    {programName}
-                  </Badge>
-                )}
-                {gradYear && (
-                  <Badge variant="secondary" className="text-[10px] bg-white/15 text-white border-0">
-                    Class of {gradYear}
-                  </Badge>
-                )}
-              </div>
-              {school && <p className="text-[11px] text-white/60 mt-1 truncate">{school}</p>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 2 ── Personal bests ─────────────────────────────────────────────── */}
-      <SectionCard title="Personal Bests" icon={Trophy}>
-        {bestsLoading ? (
-          <div className="grid grid-cols-3 gap-2">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <Stat label="Best 2K" value={fmtTime(bests?.best2k)} />
-            <Stat label="Best 6K" value={fmtTime(bests?.best6k)} />
-            <Stat
-              label="Best 60min"
-              value={bests?.best60Meters ? `${bests.best60Meters.toLocaleString()}m` : "—"}
-            />
-          </div>
-        )}
-        <p className="text-[10px] text-muted-foreground/70 text-center mt-2">Verified scores only</p>
-      </SectionCard>
-
-      {/* 3 ── Erg stats ──────────────────────────────────────────────────── */}
-      <SectionCard title="Erg Stats" icon={Activity}>
-        {ergLoading ? (
-          <div className="grid grid-cols-4 gap-2">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-2">
-            <Stat icon={Ruler} label="Total" value={totalKm ? `${totalKm}k` : "—"} sub="meters" />
-            <Stat label="Workouts" value={ergStats?.totalWorkouts ?? "—"} />
-            <Stat icon={Flame} label="Streak" value={streak} sub="days" />
-            <Stat icon={Gauge} label="W/kg" value={wkg ?? "—"} />
-          </div>
-        )}
-      </SectionCard>
-
-      {/* 4 ── Recovery ───────────────────────────────────────────────────── */}
-      <SectionCard title="Recovery" icon={Moon} onOpen={() => setDetail("recovery")}>
-        {recoveryLoading ? (
-          <Skeleton className="h-12 w-full" />
-        ) : recovery?.score != null ? (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold" style={{ color: recoveryColor(recovery.score) }}>
-                {recovery.score}
-              </span>
-              <span className="text-xs text-muted-foreground">/100</span>
-              {recovery.fromWhoop && (
-                <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-[#e63946]/10 text-[#e63946]">
-                  Whoop
-                </span>
-              )}
-            </div>
-            <div className="flex gap-4 text-right">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {recovery.sleepHours != null ? `${recovery.sleepHours}h` : "—"}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Sleep</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {recovery.sleepQuality != null ? `${recovery.sleepQuality}/10` : "—"}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Quality</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Log your morning check-in to see today's score.</p>
-        )}
-      </SectionCard>
-
-      {/* 5 ── Nutrition ──────────────────────────────────────────────────── */}
-      <SectionCard title="Nutrition" icon={Utensils} onOpen={() => setDetail("nutrition")}>
-        {nutritionLoading ? (
-          <Skeleton className="h-16 w-full" />
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <p className="text-sm">
-                <span className="text-xl font-bold text-foreground">
-                  {nutrition?.calories ? Math.round(nutrition.calories).toLocaleString() : 0}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {" "}/ {nutrition?.goal ? nutrition.goal.toLocaleString() : "—"} kcal
-                </span>
+      <div className="flex items-center justify-between gap-4 px-4 py-5">
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar className="h-12 w-12 shrink-0">
+            <AvatarImage src={avatarUrl} />
+            <AvatarFallback className="bg-surface-2 text-foreground text-lg font-semibold">
+              {name.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="text-xl text-foreground truncate">{name}</p>
+            {(programName || gradYear) && (
+              <p className="text-sm text-muted-foreground truncate mt-0.5">
+                {[programName, gradYear ? `Class of ${gradYear}` : null].filter(Boolean).join(" · ")}
               </p>
-              <span className="text-xs text-muted-foreground">{calPct}%</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${calPct}%`, background: teamColor }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
-              <span>P {nutrition ? Math.round(nutrition.protein) : 0}g</span>
-              <span>C {nutrition ? Math.round(nutrition.carbs) : 0}g</span>
-              <span>F {nutrition ? Math.round(nutrition.fats) : 0}g</span>
-            </div>
+            )}
           </div>
-        )}
-      </SectionCard>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-xs uppercase text-subtle">Best 2K</p>
+          <p className="text-lg font-semibold text-primary data-value mt-1">
+            {bestsLoading ? "—" : fmtTime(bests?.best2k)}
+          </p>
+        </div>
+      </div>
 
-      {/* 6 ── Workout history ────────────────────────────────────────────── */}
-      <SectionCard title="Recent Workouts" icon={Activity} onOpen={() => setDetail("history")}>
+      {/* 2 ── Stats strip ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 divide-x divide-border px-4 py-5">
+        <StatItem label="Total Meters" value={ergLoading ? "—" : totalKm ? `${totalKm}k` : "0k"} />
+        <StatItem label="Total Workouts" value={ergLoading ? "—" : ergStats?.totalWorkouts ?? 0} />
+        <StatItem label="Current Streak" value={ergLoading ? "—" : streak} />
+      </div>
+
+      {/* 3 ── Recovery ───────────────────────────────────────────────────── */}
+      <div className="px-4 py-5">
+        <h2 className="label-caption mb-3">Recovery</h2>
+        {recoveryLoading ? (
+          <div className="flex items-center gap-4">
+            <span className="text-3xl text-subtle data-value">—</span>
+            <p className="text-sm text-muted-foreground">Loading today's recovery…</p>
+          </div>
+        ) : recovery?.score != null ? (
+          <div className="flex items-center gap-4">
+            <span className="text-3xl data-value" style={{ color: recoveryColor(recovery.score) }}>
+              {recovery.score}
+            </span>
+            <p className="text-sm text-muted-foreground flex-1">{recoveryBlurb(recovery.score)}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Log your morning check-in to see today's score.</p>
+        )}
+      </div>
+
+      {/* 4 ── Nutrition ──────────────────────────────────────────────────── */}
+      <div className="px-4 py-5">
+        <h2 className="label-caption mb-3">Nutrition</h2>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl text-foreground data-value">
+              {nutritionLoading
+                ? "—"
+                : nutrition?.calories
+                ? Math.round(nutrition.calories).toLocaleString()
+                : "0"}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              / {nutritionLoading ? "—" : nutrition?.goal ? nutrition.goal.toLocaleString() : "—"} kcal
+            </span>
+          </div>
+          <span className="text-sm text-muted-foreground">{nutritionLoading ? "—" : `${calPct}%`}</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-surface-2 overflow-hidden">
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${calPct}%` }} />
+        </div>
+        <div className="flex justify-between text-sm text-muted-foreground pt-3">
+          <span>P {nutritionLoading ? "—" : Math.round(nutrition?.protein ?? 0)}g</span>
+          <span>C {nutritionLoading ? "—" : Math.round(nutrition?.carbs ?? 0)}g</span>
+          <span>F {nutritionLoading ? "—" : Math.round(nutrition?.fats ?? 0)}g</span>
+        </div>
+      </div>
+
+      {/* 5 ── Workout history ────────────────────────────────────────────── */}
+      <div className="px-4 py-5">
+        <h2 className="label-caption mb-3">Workout History</h2>
         {recentLoading ? (
-          <div className="space-y-2">
+          <div>
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 py-3 border-b border-border last:border-0"
+              >
+                <span className="text-sm text-subtle w-16 shrink-0">—</span>
+                <span className="text-base text-subtle flex-1 text-center">—</span>
+                <span className="text-base text-subtle data-value w-16 shrink-0 text-right">—</span>
+              </div>
             ))}
           </div>
         ) : (recentWorkouts?.length ?? 0) === 0 ? (
-          <p className="text-xs text-muted-foreground">No workouts logged yet.</p>
+          <p className="text-sm text-muted-foreground">No workouts logged yet.</p>
         ) : (
-          <div className="space-y-1.5">
-            {(recentWorkouts as any[]).map((w) => (
-              <div key={w.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">
-                    {w.distance ? `${(w.distance / 1000).toFixed(1)}k` : workoutTypeLabel(w.workout_type)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
+          <div>
+            {(recentWorkouts as any[]).map((w) => {
+              const distanceStr = w.distance ? `${(w.distance / 1000).toFixed(1)}k` : null;
+              const typeLabel = workoutTypeLabel(w.workout_type);
+              return (
+                <div
+                  key={w.id}
+                  className="flex items-center justify-between gap-3 py-3 border-b border-border last:border-0"
+                >
+                  <span className="text-sm text-subtle w-16 shrink-0">
                     {w.workout_date
                       ? new Date(w.workout_date).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
                         })
-                      : ""}
-                  </p>
+                      : "—"}
+                  </span>
+                  <span className="text-base text-foreground flex-1 text-center truncate px-2">
+                    {distanceStr ? `${typeLabel} · ${distanceStr}` : typeLabel}
+                  </span>
+                  <span className="text-base font-semibold text-foreground data-value w-16 shrink-0 text-right">
+                    {fmtInterval(w.avg_split)}
+                  </span>
                 </div>
-                <p className="text-xs font-mono font-semibold text-foreground">
-                  {fmtInterval(w.avg_split)}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-      </SectionCard>
-
-      {/* 7 ── Strength ───────────────────────────────────────────────────── */}
-      <SectionCard title="Strength" icon={Weight} onOpen={() => setDetail("strength")}>
-        {strengthLoading ? (
-          <Skeleton className="h-10 w-full" />
-        ) : (
-          <div className="space-y-1.5">
-            {strength?.programName && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3.5 w-3.5 text-primary" />
-                {strength.programName}
-              </div>
-            )}
-            {strength?.lastDate ? (
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-foreground truncate">
-                  Last: {strength.lastLabel || "Session"}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {new Date(strength.lastDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">No strength sessions logged yet.</p>
-            )}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* ── Detail drawers (reuse full existing components) ─────────────────── */}
-      <Sheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)}>
-        <SheetContent
-          side="bottom"
-          className="h-[92vh] overflow-y-auto p-4"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)" }}
-        >
-          <SheetHeader className="mb-3">
-            <SheetTitle>
-              {detail === "recovery"
-                ? "Recovery"
-                : detail === "nutrition"
-                ? "Nutrition"
-                : detail === "history"
-                ? "Workout History"
-                : detail === "strength"
-                ? "Strength"
-                : ""}
-            </SheetTitle>
-          </SheetHeader>
-          {detail === "recovery" && <RecoveryDashboard profile={profile} />}
-          {detail === "nutrition" && <MealPlanTab profile={profile} />}
-          {detail === "history" && <HistorySection profile={profile} />}
-          {detail === "strength" && <StrengthProgramSection profile={profile} />}
-        </SheetContent>
-      </Sheet>
+      </div>
     </div>
   );
 }

@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Edit2, Send, ChevronDown, ChevronUp, Ship, Users,
-  MessageSquare, MoreHorizontal, Loader2, Plus, X, Save,
+  Pencil, Send, ChevronRight, Plus, X, Save, Loader2, MoreHorizontal,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -278,8 +275,6 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
 
   const attendanceByUser = Object.fromEntries(todayAttendance.map((a: any) => [a.user_id, a]));
   const confirmedCount = todayAttendance.filter((a: any) => a.status === "present").length;
-  const absentCount = todayAttendance.filter((a: any) => a.status === "absent").length;
-  const noResponseCount = teamMembers.length - confirmedCount - absentCount;
 
   const draftText = (workoutDraft as any)?.draft_text as string | undefined;
   const hasDraft = !!draftText;
@@ -293,172 +288,191 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
   })).sort((a, b) => a.name.localeCompare(b.name));
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  // Header (team name left / today's date right, thin border-bottom, no logo)
+  // lives in the parent CoachApp.tsx shell, not here — see the header comment
+  // there. Rendering it again in this file would duplicate it.
 
   return (
-    <div className="space-y-4">
+    <div>
 
       {/* ── Section 1: Workout ─────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              Today's Workout
-              {hasDraft && !editingWorkout && (
-                <Badge className="bg-yellow-500/20 text-yellow-700 border-yellow-500/40 text-[10px]">Draft</Badge>
-              )}
-            </CardTitle>
-            {!editingWorkout && (
-              <Button
-                size="icon" variant="ghost" className="h-7 w-7 shrink-0"
-                onClick={() => {
-                  setWorkoutEditText(draftText || (practiceEntry as any)?.workout_description || "");
-                  setEditingWorkout(true);
-                }}
-              >
-                <Edit2 className="h-3.5 w-3.5" />
-              </Button>
+      <section className="group/workout pb-4 border-b border-border">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="label-caption">Workout</span>
+            {hasDraft && !editingWorkout && (
+              <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                DRAFT
+              </span>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {editingWorkout ? (
-            <div className="space-y-2">
-              <Textarea
-                value={workoutEditText}
-                onChange={e => setWorkoutEditText(e.target.value)}
-                placeholder="Describe today's workout..."
-                rows={4}
-                className="text-sm resize-none"
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm" variant="outline" className="gap-1.5 h-8 text-xs"
-                  onClick={() => saveDraft.mutate(workoutEditText)}
-                  disabled={saveDraft.isPending || !workoutEditText.trim()}
-                >
-                  {saveDraft.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  Save Draft
-                </Button>
-                <Button
-                  size="sm" className="gap-1.5 h-8 text-xs"
-                  onClick={() => publishWorkout.mutate(workoutEditText)}
-                  disabled={publishWorkout.isPending || !workoutEditText.trim()}
-                >
-                  {publishWorkout.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                  Publish
-                </Button>
-                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingWorkout(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : hasDraft ? (
-            <div className="space-y-3">
-              <p className="text-sm text-foreground/70 whitespace-pre-wrap italic">{draftText}</p>
-              {hasPublished && (
-                <p className="text-xs text-muted-foreground">
-                  Published: {(practiceEntry as any).workout_description?.slice(0, 60)}…
-                </p>
-              )}
-              <Button
-                size="sm" className="gap-1.5 h-8 text-xs"
-                onClick={() => publishWorkout.mutate(draftText!)}
-                disabled={publishWorkout.isPending}
-              >
-                <Send className="h-3 w-3" />Publish to Athletes
-              </Button>
-            </div>
-          ) : hasPublished ? (
-            <p className="text-sm text-foreground whitespace-pre-wrap">{(practiceEntry as any).workout_description}</p>
-          ) : (
+          {!editingWorkout && (hasDraft || hasPublished) && (
             <button
-              className="w-full text-left text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl p-4 hover:border-primary/40 transition-colors"
-              onClick={() => { setWorkoutEditText(""); setEditingWorkout(true); }}
+              type="button"
+              aria-label="Edit workout"
+              className="p-3.5 -m-3.5 shrink-0 text-subtle opacity-0 transition-opacity duration-fast hover:text-foreground focus-visible:opacity-100 group-hover/workout:opacity-100 group-focus-within/workout:opacity-100"
+              onClick={() => {
+                setWorkoutEditText(draftText || (practiceEntry as any)?.workout_description || "");
+                setEditingWorkout(true);
+              }}
             >
-              + Write today's workout
+              <Pencil size={16} strokeWidth={1.5} />
             </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {editingWorkout ? (
+          <div className="space-y-2">
+            <Textarea
+              value={workoutEditText}
+              onChange={e => setWorkoutEditText(e.target.value)}
+              placeholder="Describe today's workout..."
+              rows={4}
+              className="text-sm resize-none"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm" variant="outline" className="h-11 gap-1.5"
+                onClick={() => saveDraft.mutate(workoutEditText)}
+                disabled={saveDraft.isPending || !workoutEditText.trim()}
+              >
+                {saveDraft.isPending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} strokeWidth={1.5} />}
+                Save Draft
+              </Button>
+              <Button
+                size="sm" className="h-11 gap-1.5"
+                onClick={() => publishWorkout.mutate(workoutEditText)}
+                disabled={publishWorkout.isPending || !workoutEditText.trim()}
+              >
+                {publishWorkout.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} strokeWidth={1.5} />}
+                Publish
+              </Button>
+              <Button size="sm" variant="ghost" className="h-11" onClick={() => setEditingWorkout(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : hasDraft ? (
+          <div className="space-y-3 pl-3 border-l-2 border-warning">
+            <p className="text-base text-foreground whitespace-pre-wrap">{draftText}</p>
+            {hasPublished && (
+              <p className="text-sm text-muted-foreground">
+                Currently published: {(practiceEntry as any).workout_description?.slice(0, 60)}…
+              </p>
+            )}
+            <Button
+              size="sm" variant="outline"
+              className="h-11 gap-1.5 border-warning text-warning hover:border-warning hover:bg-warning/10 hover:text-warning"
+              onClick={() => publishWorkout.mutate(draftText!)}
+              disabled={publishWorkout.isPending}
+            >
+              {publishWorkout.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} strokeWidth={1.5} />}
+              Publish to Athletes
+            </Button>
+          </div>
+        ) : hasPublished ? (
+          <p className="pl-3 border-l-2 border-success text-base text-foreground whitespace-pre-wrap">
+            {(practiceEntry as any).workout_description}
+          </p>
+        ) : (
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border p-4 text-sm text-subtle transition-colors duration-fast hover:border-primary/40 hover:text-muted-foreground"
+            onClick={() => { setWorkoutEditText(""); setEditingWorkout(true); }}
+          >
+            <Plus size={16} strokeWidth={1.5} />
+            Write today's workout
+          </button>
+        )}
+      </section>
 
       {/* ── Section 2: Lineups ─────────────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Ship className="h-4 w-4 text-primary" />Lineups
-          </h3>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => onNavigate("lineups")}>
-            <Plus className="h-3 w-3" />New
-          </Button>
+      <section className="py-4 border-b border-border">
+        <div className="flex items-center justify-between mb-3">
+          <span className="label-caption">Lineups</span>
+          <button
+            type="button"
+            className="-mr-2 flex min-h-11 items-center gap-1 px-2 text-sm text-primary"
+            onClick={() => onNavigate("lineups")}
+          >
+            <Plus size={16} strokeWidth={1.5} />
+            New
+          </button>
         </div>
 
         {lineupsLoading ? (
-          <p className="text-xs text-muted-foreground py-2">Loading...</p>
+          <div className="divide-y divide-border">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="py-4 space-y-2 first:pt-0">
+                <div className="h-5 w-32 rounded-sm bg-surface-2 animate-pulse-soft" />
+                <div className="h-4 w-48 rounded-sm bg-surface-2 animate-pulse-soft" />
+              </div>
+            ))}
+          </div>
         ) : todayLineups.length === 0 ? (
-          <Card>
-            <CardContent className="py-6 text-center space-y-3">
-              <p className="text-sm text-muted-foreground">No lineups for today.</p>
-              <Button size="sm" variant="outline" className="text-xs" onClick={() => onNavigate("lineups")}>
-                Create Lineup
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="py-6 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">No lineups for today.</p>
+            <Button size="sm" variant="outline" className="h-11" onClick={() => onNavigate("lineups")}>
+              Create Lineup
+            </Button>
+          </div>
         ) : (
-          todayLineups.map((lineup: any) => {
-            const isPublished = !!lineup.published_at;
-            const edits = lineupEdits[lineup.id] || {};
-            const hasEdits = Object.keys(edits).length > 0;
-            const rawSeats: any[] = Array.isArray(lineup.seats) ? lineup.seats : [];
-            const boat = boats.find((b: any) => b.id === lineup.boat_id);
+          <div className="divide-y divide-border">
+            {todayLineups.map((lineup: any) => {
+              const isPublished = !!lineup.published_at;
+              const edits = lineupEdits[lineup.id] || {};
+              const hasEdits = Object.keys(edits).length > 0;
+              const rawSeats: any[] = Array.isArray(lineup.seats) ? lineup.seats : [];
+              const boat = boats.find((b: any) => b.id === lineup.boat_id);
 
-            // Build merged display seats in C, 8..1 order
-            const knownSeatNums = new Set([
-              ...rawSeats.map((s: any) => s.seat_number),
-              ...Object.keys(edits).map(Number),
-            ]);
-            const displayOrder = SEAT_ORDER.filter(n => knownSeatNums.has(n));
+              // Build merged display seats in C, 8..1 order
+              const knownSeatNums = new Set([
+                ...rawSeats.map((s: any) => s.seat_number),
+                ...Object.keys(edits).map(Number),
+              ]);
+              const displayOrder = SEAT_ORDER.filter(n => knownSeatNums.has(n));
 
-            const displaySeats = displayOrder.map(seatNum => {
-              if (seatNum in edits) {
-                const ed = edits[seatNum];
-                return { seat_number: seatNum, user_id: ed?.user_id || null, name: ed?.name || null, _edited: true };
-              }
-              const fromDb = rawSeats.find((s: any) => s.seat_number === seatNum);
-              return fromDb || { seat_number: seatNum, user_id: null, name: null };
-            });
+              const displaySeats = displayOrder.map(seatNum => {
+                if (seatNum in edits) {
+                  const ed = edits[seatNum];
+                  return { seat_number: seatNum, user_id: ed?.user_id || null, name: ed?.name || null, _edited: true };
+                }
+                const fromDb = rawSeats.find((s: any) => s.seat_number === seatNum);
+                return fromDb || { seat_number: seatNum, user_id: null, name: null };
+              });
 
-            return (
-              <Card key={lineup.id} className={cn(hasEdits && "ring-1 ring-yellow-500/30")}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground flex-1">
+              return (
+                <div key={lineup.id} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-lg font-semibold text-foreground">
                       {boat?.name || lineup.name}
                     </span>
-                    <Badge variant="outline" className="text-[10px]">{lineup.boat_class}</Badge>
+                    <span className="text-sm text-muted-foreground">{lineup.boat_class}</span>
                     {!isPublished && (
-                      <Badge className="bg-yellow-500/20 text-yellow-700 border-yellow-500/40 text-[10px]">Draft</Badge>
+                      <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                        UNPUBLISHED
+                      </span>
                     )}
                     {hasEdits && (
-                      <Badge className="bg-yellow-500/20 text-yellow-700 border-yellow-500/40 text-[10px]">Unsaved edits</Badge>
+                      <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                        UNSAVED EDITS
+                      </span>
                     )}
-                    {isPublished && !hasEdits && (
-                      <Badge className="bg-green-500/15 text-green-700 border-green-500/40 text-[10px]">Published</Badge>
-                    )}
+                    <div className="flex-1" />
                     {(!isPublished || hasEdits) && (
                       <Button
-                        size="sm" className="h-7 text-xs shrink-0 gap-1"
+                        size="sm" variant="outline" className="h-11 shrink-0 gap-1.5"
                         onClick={() => handlePublishLineup(lineup)}
                         disabled={publishLineup.isPending}
                       >
-                        <Send className="h-3 w-3" />Publish
+                        {publishLineup.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} strokeWidth={1.5} />}
+                        Publish
                       </Button>
                     )}
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-0.5">
+                  <div>
                     {displaySeats.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2 text-center">
+                      <p className="text-sm text-muted-foreground py-2">
                         No seats configured.{" "}
                         <button className="text-primary underline" onClick={() => onNavigate("lineups")}>
                           Open builder
@@ -469,97 +483,99 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
                         key={seat.seat_number}
                         onClick={() => setSeatDialog({ lineupId: lineup.id, seatNumber: seat.seat_number })}
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left w-full transition-colors",
-                          seat.user_id ? "hover:bg-muted/50" : "border border-dashed border-border/60 hover:border-primary/40 hover:bg-primary/5",
-                          (seat as any)._edited && "bg-yellow-500/10"
+                          "flex min-h-11 w-full items-center gap-3 rounded-md py-2 text-left transition-colors duration-fast hover:bg-surface-3 active:bg-surface-3",
+                          (seat as any)._edited && "bg-warning/10"
                         )}
                       >
-                        <span className="text-xs text-muted-foreground w-8 shrink-0 font-mono">
-                          {seat.seat_number === 0 ? "Cox" : `S${seat.seat_number}`}
+                        <span className="w-5 shrink-0 text-xs text-subtle">
+                          {seat.seat_number === 0 ? "Cox" : seat.seat_number}
                         </span>
                         {seat.user_id ? (
-                          <span className="text-foreground">{seat.name || "Unknown"}</span>
+                          <span className="text-base text-foreground">{seat.name || "Unknown"}</span>
                         ) : (
-                          <span className="text-muted-foreground/60 italic text-xs">Tap to assign</span>
+                          <span className="rounded-md border border-dashed border-border-strong px-2 py-1 text-sm italic text-subtle">
+                            Tap to assign
+                          </span>
                         )}
                       </button>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })
+                </div>
+              );
+            })}
+          </div>
         )}
-      </div>
+      </section>
 
-      {/* ── Section 3: Roster (collapsed) ───────────────────────────────────────── */}
+      {/* ── Section 3: Roster (collapsed by default) ────────────────────────────── */}
       <Collapsible open={rosterOpen} onOpenChange={setRosterOpen}>
-        <Card>
+        <section className="py-4 border-b border-border">
           <CollapsibleTrigger asChild>
-            <CardHeader className="pb-3 cursor-pointer select-none">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Users className="h-4 w-4 text-primary" />
-                  Roster
-                  <span className="text-xs text-muted-foreground font-normal">
-                    · {confirmedCount} confirmed · {absentCount} absent · {noResponseCount} no response
-                  </span>
-                </CardTitle>
-                {rosterOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            <button type="button" className="flex min-h-11 w-full items-center justify-between gap-2 text-left">
+              <div>
+                <div className="label-caption">Roster</div>
+                <div className="mt-0.5 text-sm text-muted-foreground">
+                  {confirmedCount} of {teamMembers.length} confirmed
+                </div>
               </div>
-            </CardHeader>
+              <ChevronRight
+                size={16} strokeWidth={1.5}
+                className={cn("shrink-0 text-subtle transition-transform duration-fast", rosterOpen && "rotate-90")}
+              />
+            </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="pt-0 space-y-1 pb-4">
+            <div className="mt-3 divide-y divide-border">
               {teamMembers.map((m: any) => {
                 const att = attendanceByUser[m.user_id];
                 const status = att?.status;
                 return (
-                  <div key={m.id} className="flex items-center gap-2 py-1 text-sm">
-                    <span className={cn(
-                      "h-2.5 w-2.5 rounded-full shrink-0",
-                      status === "present" ? "bg-green-500" :
-                      status === "absent" ? "bg-red-500" :
-                      "bg-muted-foreground/30"
-                    )} />
-                    <span className="text-foreground flex-1 truncate">
+                  <div key={m.id} className="flex items-center gap-2 min-h-11 py-2">
+                    <span className="flex-1 truncate text-base text-foreground">
                       {m.profile?.full_name || m.profile?.username || "Unnamed"}
                     </span>
-                    <span className="text-xs text-muted-foreground capitalize shrink-0">
-                      {status === "present" ? "confirmed" : status === "absent" ? "absent" : "—"}
+                    <span className={cn(
+                      "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                      status === "present" ? "bg-success/15 text-success" :
+                      status === "absent" ? "bg-destructive/15 text-destructive" :
+                      "bg-surface-3 text-muted-foreground"
+                    )}>
+                      {status === "present" ? "Confirmed" : status === "absent" ? "Absent" : "No response"}
                     </span>
                   </div>
                 );
               })}
               {teamMembers.length === 0 && (
-                <p className="text-xs text-muted-foreground py-2">No team members.</p>
+                <p className="text-sm text-muted-foreground py-2">No team members.</p>
               )}
-            </CardContent>
+            </div>
           </CollapsibleContent>
-        </Card>
+        </section>
       </Collapsible>
 
-      {/* ── Section 4: Messages (collapsed) ────────────────────────────────────── */}
+      {/* ── Section 4: Messages (collapsed by default) ──────────────────────────── */}
       <Collapsible open={messagesOpen} onOpenChange={setMessagesOpen}>
-        <Card>
+        <section className="py-4">
           <CollapsibleTrigger asChild>
-            <CardHeader className="pb-3 cursor-pointer select-none">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2 min-w-0">
-                  <MessageSquare className="h-4 w-4 text-primary shrink-0" />
-                  Messages
-                  {latestMessage && !messagesOpen && (
-                    <span className="text-xs text-muted-foreground font-normal truncate">
-                      · {latestMessage.author?.full_name || "Coach"}: {String(latestMessage.content || "").slice(0, 50)}
-                    </span>
-                  )}
-                </CardTitle>
-                {messagesOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-left">
+              <div className="min-w-0 flex-1">
+                <div className="label-caption">Messages</div>
+                {!messagesOpen && (
+                  <div className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {latestMessage
+                      ? `${latestMessage.author?.full_name || "Coach"}: ${String(latestMessage.content || "").slice(0, 50)}`
+                      : "No messages yet"}
+                  </div>
+                )}
               </div>
-            </CardHeader>
+              <ChevronRight
+                size={16} strokeWidth={1.5}
+                className={cn("shrink-0 text-subtle transition-transform duration-fast", messagesOpen && "rotate-90")}
+              />
+            </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="pt-0 pb-4">
+            <div className="mt-3">
               <TeamMessageBoard
                 teamId={teamId}
                 teamName={teamName}
@@ -570,16 +586,18 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
                 boats={boats}
                 onNavigate={onNavigate}
               />
-            </CardContent>
+            </div>
           </CollapsibleContent>
-        </Card>
+        </section>
       </Collapsible>
 
       {/* ── More Tools button ─────────────────────────────────────────────────── */}
-      <Button variant="outline" className="w-full gap-2" onClick={() => setMoreOpen(true)}>
-        <MoreHorizontal className="h-4 w-4" />
-        More Tools
-      </Button>
+      <div className="pt-4">
+        <Button variant="outline" className="h-11 w-full gap-2" onClick={() => setMoreOpen(true)}>
+          <MoreHorizontal size={16} strokeWidth={1.5} />
+          More Tools
+        </Button>
+      </div>
 
       {/* ── Seat Assignment Dialog ───────────────────────────────────────────── */}
       <Dialog open={!!seatDialog} onOpenChange={open => !open && setSeatDialog(null)}>
@@ -591,22 +609,23 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
           </DialogHeader>
           <div className="overflow-y-auto flex-1 px-2 pb-4 space-y-0.5">
             <button
-              className="w-full text-left px-3 py-3 rounded-lg text-sm hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-3 text-left text-sm text-destructive transition-colors duration-fast hover:bg-destructive/10 active:bg-destructive/10"
               onClick={() => seatDialog && assignSeat(seatDialog.lineupId, seatDialog.seatNumber, null)}
             >
-              <X className="h-3.5 w-3.5" />Clear seat
+              <X size={16} strokeWidth={1.5} />
+              Clear seat
             </button>
             {teamMemberList.map(member => (
               <button
                 key={member.user_id}
-                className="w-full text-left px-3 py-3 rounded-lg text-sm hover:bg-muted transition-colors"
+                className="flex min-h-11 w-full items-center rounded-md px-3 py-3 text-left text-sm transition-colors duration-fast hover:bg-surface-3 active:bg-surface-3"
                 onClick={() => seatDialog && assignSeat(seatDialog.lineupId, seatDialog.seatNumber, member)}
               >
                 {member.name}
               </button>
             ))}
             {teamMemberList.length === 0 && (
-              <p className="text-xs text-muted-foreground px-3 py-2">No team members found.</p>
+              <p className="text-sm text-muted-foreground px-3 py-2">No team members found.</p>
             )}
           </div>
         </DialogContent>
@@ -614,7 +633,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
 
       {/* ── More Tools Sheet ─────────────────────────────────────────────────── */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto rounded-t-2xl">
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto rounded-t-xl">
           <SheetHeader>
             <SheetTitle>Coach Tools</SheetTitle>
           </SheetHeader>
@@ -622,7 +641,7 @@ const CoachTodayView = ({ teamId, teamName, teamMembers, profile, boats, seasonI
             {moreSections.map(item => (
               <button
                 key={item.key}
-                className="flex items-center gap-2 px-3 py-3 rounded-xl border border-border text-sm text-left hover:bg-muted transition-colors"
+                className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-3 text-left text-sm transition-colors duration-fast hover:bg-surface-3 active:bg-surface-3"
                 onClick={() => { onNavigate(item.key); setMoreOpen(false); }}
               >
                 <span className="text-foreground font-medium">{item.label}</span>

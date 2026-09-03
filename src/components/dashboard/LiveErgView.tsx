@@ -26,6 +26,7 @@ import {
   Bluetooth, Heart, Loader2, AlertTriangle, Square, ListPlus, Send, Minimize2, Maximize2,
 } from "lucide-react";
 import { getSessionUser } from "@/lib/getUser";
+import { colors } from "@/lib/design-system";
 // Owned by other agents — imported, never created here.
 import WorkoutBuilderModal from "./WorkoutBuilderModal";
 import PostWorkoutScreen from "./PostWorkoutScreen";
@@ -41,15 +42,16 @@ const C2_GEN_STATUS   = "ce060031-43e5-11e4-916c-0800200c9a66"; // primary statu
 const C2_ADD_STATUS   = "ce060032-43e5-11e4-916c-0800200c9a66"; // power & calories
 const C2_ADD_STATUS2  = "ce060033-43e5-11e4-916c-0800200c9a66"; // drive metrics
 
-// ── Design tokens (whoop design system, dark live-erg surface) ─────────────
-const INK      = "#000000"; // screen background
-const NAVY     = "#1a1a2e"; // tile surface — the system navy
-const BORDER   = "#4c4c4c";
-const MUTED    = "#999999";
-const WHITE    = "#ffffff";
-const SUCCESS  = "#41ff31";
-const DANGER   = "#ff0026";
-const CURVE    = "#2272FF"; // force curve accent, per live-erg spec
+// ── Chart colors ─────────────────────────────────────────────────────────
+// Everything else on this screen is styled with the app-wide design-token
+// Tailwind classes (bg-background, text-foreground, text-muted-foreground,
+// text-subtle, border-border, etc. — see src/styles/design-tokens.css and
+// tailwind.config.ts). Recharts stroke/fill/tick props take raw color
+// strings, not Tailwind classes, so only the force-curve chart below reads
+// literal values, straight from the design system's TS mirror.
+const CHART_LINE  = colors.accent;        // force curve line + fill
+const CHART_AXIS  = colors.textTertiary;  // Y-axis tick labels
+const CHART_GRID  = colors.border;        // Y-axis line
 
 // ── Types ──────────────────────────────────────────────────────
 interface LiveData {
@@ -124,7 +126,7 @@ export default function LiveErgView(props: LiveErgViewProps) {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center p-8">
-          <Bluetooth className="h-12 w-12 mx-auto mb-4" style={{ color: CURVE }} />
+          <Bluetooth className="h-12 w-12 mx-auto mb-4 text-primary" strokeWidth={1.5} />
           <p className="text-lg font-semibold mb-2">Connect via the iOS app for live erg tracking</p>
           <p className="text-sm text-muted-foreground">
             Live BLE connection to your PM5 requires the native iOS app, or Chrome/Edge on desktop.
@@ -137,27 +139,23 @@ export default function LiveErgView(props: LiveErgViewProps) {
 }
 
 // ── Metric tile ────────────────────────────────────────────────
+// No card background, no border — the 3×3 grid lives directly on the
+// canvas per the live-erg spec. `primary` bumps the value up a step for the
+// top-row metrics (Split / Watts / Stroke rate).
 function Tile({
-  label, value, unit, color,
-}: { label: string; value: string; unit: string; color?: string }) {
+  label, value, unit, tone, primary,
+}: { label: string; value: string; unit: string; tone?: "good" | "bad"; primary?: boolean }) {
+  const valueColor =
+    tone === "good" ? "text-success" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
-    <div
-      className="flex flex-col items-center justify-center overflow-hidden rounded-md border px-2 py-2 min-h-0"
-      style={{ background: NAVY, borderColor: BORDER }}
-    >
+    <div className="flex flex-col items-center justify-center text-center min-h-0">
+      <span className="text-xs uppercase text-subtle leading-none">{label}</span>
       <span
-        className="uppercase leading-none tracking-widest text-center"
-        style={{ fontSize: 11, color: MUTED }}
-      >
-        {label}
-      </span>
-      <span
-        className="font-bold tabular-nums leading-none text-center"
-        style={{ fontSize: 36, color: color ?? WHITE, marginTop: 8, marginBottom: 4 }}
+        className={`data-value leading-none mt-1.5 mb-1 ${primary ? "text-display" : "text-3xl"} ${valueColor}`}
       >
         {value}
       </span>
-      <span className="leading-none" style={{ fontSize: 12, color: MUTED }}>{unit}</span>
+      <span className="text-xs text-subtle leading-none">{unit}</span>
     </div>
   );
 }
@@ -165,8 +163,9 @@ function Tile({
 function StatusDot({ on, warn }: { on: boolean; warn?: boolean }) {
   return (
     <span
-      className={`inline-block rounded-full ${on || warn ? "animate-pulse" : ""}`}
-      style={{ width: 8, height: 8, background: on ? SUCCESS : warn ? "#f59e0b" : MUTED }}
+      className={`inline-block h-2 w-2 rounded-full ${on || warn ? "animate-pulse" : ""} ${
+        on ? "bg-success" : warn ? "bg-warning" : "bg-muted-foreground"
+      }`}
     />
   );
 }
@@ -851,9 +850,9 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
   const hasSessionData = distM > 0 && elapsedCs > 0;
   const canBuild = !ergConnected || !hasSessionData;
 
-  const splitColor = targetCs && splitCs > 0
-    ? (splitCs <= targetCs ? SUCCESS : DANGER)
-    : WHITE;
+  const splitTone: "good" | "bad" | undefined = targetCs && splitCs > 0
+    ? (splitCs <= targetCs ? "good" : "bad")
+    : undefined;
 
   return (
     // Landscape shell. Fixed + overflow-hidden: everything is on screen at once,
@@ -862,45 +861,38 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
     <div
       className={
         immersive
-          ? "fixed inset-0 z-50 flex flex-col overflow-hidden"
-          : "relative w-full flex flex-col overflow-hidden rounded-md border"
+          ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-background text-foreground"
+          : "relative w-full flex flex-col overflow-hidden rounded-md border border-border bg-background text-foreground"
       }
-      style={{
-        background: INK,
-        color: WHITE,
-        fontFamily: "var(--font-body)",
-        borderColor: immersive ? undefined : BORDER,
-        height: immersive ? undefined : "80vh",
-      }}
+      style={{ height: immersive ? undefined : "80vh" }}
     >
-      {/* ── Top bar ── */}
-      <div
-        className="flex items-center justify-between gap-2 px-3 border-b shrink-0"
-        style={{ borderColor: BORDER, height: 44 }}
-      >
+      {/* ── Top bar — PM5 status left, HR status alongside it. Kept to a
+             tight 44px (the touch-target floor for the buttons at its right,
+             see below) rather than the spec's literal 32px. ── */}
+      <div className="flex items-center justify-between gap-2 px-3 border-b border-border shrink-0 h-11">
         <div className="flex items-center gap-4 min-w-0">
           <span className="flex items-center gap-2">
             <StatusDot on={ergConnected} warn={disconnected} />
-            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+            <span className="text-xs uppercase text-muted-foreground">
               {ergConnected ? `PM5 ${STATE_LABELS[state] ?? "--"}` : disconnected ? "Reconnecting" : "PM5 offline"}
             </span>
           </span>
           <span className="flex items-center gap-2">
             <StatusDot on={hrConnected} />
-            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+            <span className="text-xs uppercase text-muted-foreground">
               {hrConnected ? "Strap" : "No strap"}
             </span>
           </span>
           {forceCurveUuid && (
-            <span className="hidden md:inline uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>
+            <span className="hidden md:inline text-xs uppercase text-subtle">
               FC {forceCurveUuid.slice(0, 8)}
             </span>
           )}
           {saved && (
-            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: SUCCESS }}>Saved</span>
+            <span className="text-xs uppercase text-success">Saved</span>
           )}
           {!saved && isFinished && (
-            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Saving…</span>
+            <span className="text-xs uppercase text-muted-foreground">Saving…</span>
           )}
         </div>
 
@@ -912,50 +904,46 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-3"
-              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              className="h-11 px-4 text-sm"
               onClick={() => setBuilderOpen(true)}
             >
-              <Send className="h-3.5 w-3.5 mr-1.5" /> Send to PM5
+              <Send className="h-4 w-4 mr-1.5" strokeWidth={1.5} /> Send to PM5
             </Button>
           )}
           {canBuild && !ergConnected && (
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-3"
-              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              className="h-11 px-4 text-sm"
               onClick={() => setBuilderOpen(true)}
             >
-              <ListPlus className="h-3.5 w-3.5 mr-1.5" /> Build Workout
+              <ListPlus className="h-4 w-4 mr-1.5" strokeWidth={1.5} /> Build Workout
             </Button>
           )}
           {!hrConnected && btSupported && (
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-3"
-              style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: WHITE }}
+              className="h-11 px-4 text-sm"
               onClick={connectHR}
               disabled={hrConnecting}
             >
               {hrConnecting
-                ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                : <Heart className="h-3.5 w-3.5 mr-1.5" />}
+                ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" strokeWidth={1.5} />
+                : <Heart className="h-4 w-4 mr-1.5" strokeWidth={1.5} />}
               Connect Heart Rate Monitor
             </Button>
           )}
           {ergConnected ? (
             hasSessionData ? (
-              <Button size="sm" variant="destructive" className="h-8 px-3" style={{ fontSize: 12 }} onClick={stopSession}>
-                <Square className="h-3.5 w-3.5 mr-1.5" /> Stop &amp; save
+              <Button size="sm" variant="destructive" className="h-11 px-4 text-sm" onClick={stopSession}>
+                <Square className="h-4 w-4 mr-1.5" strokeWidth={1.5} /> Stop &amp; save
               </Button>
             ) : (
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-3"
-                style={{ fontSize: 12, background: "transparent", borderColor: BORDER, color: MUTED }}
+                className="h-11 px-4 text-sm text-muted-foreground"
                 onClick={disconnectErg}
               >
                 Disconnect
@@ -964,14 +952,13 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
           ) : (
             <Button
               size="sm"
-              className="h-8 px-3"
-              style={{ fontSize: 12, background: CURVE, color: WHITE }}
+              className="h-11 px-4 text-sm"
               onClick={connectErg}
               disabled={ergConnecting || !btSupported}
             >
               {ergConnecting
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Connecting…</>
-                : <><Bluetooth className="h-3.5 w-3.5 mr-1.5" />Connect PM5</>}
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" strokeWidth={1.5} />Connecting…</>
+                : <><Bluetooth className="h-4 w-4 mr-1.5" strokeWidth={1.5} />Connect PM5</>}
             </Button>
           )}
           {/* Collapsing releases the landscape lock and hands the dashboard
@@ -979,71 +966,65 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2"
-            style={{ background: "transparent", borderColor: BORDER, color: MUTED }}
+            className="h-11 w-11 px-0 text-muted-foreground"
             onClick={() => setImmersive(v => !v)}
             aria-label={immersive ? "Exit full screen" : "Full screen"}
           >
-            {immersive ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {immersive ? <Minimize2 className="h-4 w-4" strokeWidth={1.5} /> : <Maximize2 className="h-4 w-4" strokeWidth={1.5} />}
           </Button>
         </div>
       </div>
 
-      {/* ── Pre-session setup strip (targets). Gone once the piece is running. ── */}
+      {/* ── Pre-session setup strip (targets). Gone once the piece is running.
+             General token treatment only — the 42/58 panel spec below is for
+             the active session view, not this setup strip. ── */}
       {canBuild && (
-        <div
-          className="flex items-center gap-2 px-3 border-b shrink-0"
-          style={{ borderColor: BORDER, height: 40 }}
-        >
-          <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Target split</span>
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-border shrink-0">
+          <span className="text-xs uppercase text-subtle">Target split</span>
           <TimeInput
             value={targetInput}
             onChange={setTargetInput}
-            className="h-8"
+            className="h-11"
           />
           <Button
-            size="sm" variant="outline" className="h-7 px-2"
-            style={{ fontSize: 11, background: "transparent", borderColor: BORDER, color: WHITE }}
+            size="sm" variant="outline" className="h-11 px-4 text-sm"
             onClick={applyTarget}
           >Set</Button>
           {targetCs && (
-            <span className="tabular-nums" style={{ fontSize: 12, color: SUCCESS }}>{fmtPace(targetCs)}/500m</span>
+            <span className="text-sm tabular-nums text-success">{fmtPace(targetCs)}/500m</span>
           )}
-          <span style={{ color: BORDER }}>|</span>
-          <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Target distance</span>
+          <span className="text-subtle">|</span>
+          <span className="text-xs uppercase text-subtle">Target distance</span>
           <Input
             value={targetDistInput}
             onChange={e => setTargetDistInput(e.target.value)}
             placeholder="2000"
-            className="h-7 w-20 tabular-nums"
-            style={{ fontSize: 12 }}
+            className="h-11 w-24 tabular-nums text-sm"
           />
           <Button
-            size="sm" variant="outline" className="h-7 px-2"
-            style={{ fontSize: 11, background: "transparent", borderColor: BORDER, color: WHITE }}
+            size="sm" variant="outline" className="h-11 px-4 text-sm"
             onClick={applyTargetDist}
           >Set</Button>
           {effTargetDist && (
-            <span className="tabular-nums" style={{ fontSize: 12, color: CURVE }}>{effTargetDist}m</span>
+            <span className="text-sm tabular-nums text-primary">{effTargetDist}m</span>
           )}
           {disconnected && (
-            <span className="ml-auto flex items-center gap-2" style={{ fontSize: 12, color: "#f59e0b" }}>
-              <AlertTriangle className="h-3.5 w-3.5" /> Connection lost — data preserved, reconnecting…
+            <span className="ml-auto flex items-center gap-2 text-sm text-warning">
+              <AlertTriangle className="h-4 w-4" strokeWidth={1.5} /> Connection lost — data preserved, reconnecting…
             </span>
           )}
         </div>
       )}
 
-      {/* ── Landscape body: 40% force curve · 60% metrics ── */}
-      <div className="flex-1 min-h-0 flex gap-2 p-2">
-        {/* LEFT — force curve */}
-        <div
-          className="flex flex-col min-h-0 rounded-md border p-2"
-          style={{ width: "40%", background: NAVY, borderColor: BORDER }}
-        >
-          <div className="flex items-center justify-between shrink-0" style={{ marginBottom: 4 }}>
-            <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Force curve</span>
-            <span className="tabular-nums" style={{ fontSize: 11, color: MUTED }}>
+      {/* ── Landscape body: 42% force curve · 58% metrics, per the live-erg
+             spec's two-panel layout for the active session view. ── */}
+      <div className="flex-1 min-h-0 flex">
+        {/* LEFT — force curve. Flat canvas panel (no card chrome) with a
+            subtle border-right as the only separator, per spec. */}
+        <div className="flex flex-col min-h-0 w-[42%] bg-background border-r border-border px-3 py-2">
+          <div className="flex items-center justify-between shrink-0 mb-1">
+            <span className="text-xs uppercase text-subtle">Force curve</span>
+            <span className="text-xs tabular-nums text-muted-foreground">
               {strokeCurveCount ? `${strokeCurveCount} strokes` : "waiting"}
             </span>
           </div>
@@ -1055,74 +1036,73 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
                 <YAxis
                   domain={[0, axisMax]}
                   width={36}
-                  tick={{ fill: MUTED, fontSize: 10 }}
-                  axisLine={{ stroke: BORDER }}
+                  tick={{ fill: CHART_AXIS, fontSize: 10 }}
+                  axisLine={{ stroke: CHART_GRID }}
                   tickLine={false}
                 />
                 {/* Two strokes ago — faintest */}
                 <Area
-                  type="monotone" dataKey="p2" stroke={CURVE} strokeOpacity={0.2}
-                  fill={CURVE} fillOpacity={0.05} strokeWidth={2}
+                  type="monotone" dataKey="p2" stroke={CHART_LINE} strokeOpacity={0.2}
+                  fill={CHART_LINE} fillOpacity={0.05} strokeWidth={2}
                   dot={false} isAnimationActive={false} connectNulls={false}
                 />
                 {/* Previous stroke */}
                 <Area
-                  type="monotone" dataKey="p1" stroke={CURVE} strokeOpacity={0.4}
-                  fill={CURVE} fillOpacity={0.1} strokeWidth={2}
+                  type="monotone" dataKey="p1" stroke={CHART_LINE} strokeOpacity={0.4}
+                  fill={CHART_LINE} fillOpacity={0.1} strokeWidth={2}
                   dot={false} isAnimationActive={false} connectNulls={false}
                 />
                 {/* Current stroke — solid */}
                 <Area
-                  type="monotone" dataKey="cur" stroke={CURVE}
-                  fill={CURVE} fillOpacity={0.22} strokeWidth={2}
+                  type="monotone" dataKey="cur" stroke={CHART_LINE}
+                  fill={CHART_LINE} fillOpacity={0.22} strokeWidth={2}
                   dot={false} isAnimationActive={false} connectNulls={false}
                 />
                 {peak > 0 && (
-                  <ReferenceDot
-                    x={peakIdx} y={peak} r={3} fill={CURVE} stroke="none"
-                    isFront
-                    label={{ value: `${Math.round(peak)} N`, position: "top", fill: WHITE, fontSize: 12 }}
-                  />
+                  <ReferenceDot x={peakIdx} y={peak} r={3} fill={CHART_LINE} stroke="none" isFront />
                 )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
+          {/* Peak force read-out — its own text-sm/semibold line per spec,
+              distinct from the small on-chart marker above. */}
+          <div className="flex items-baseline gap-1.5 shrink-0 mt-1">
+            <span className="text-xs uppercase text-subtle">Peak</span>
+            <span className="text-sm font-semibold data-value text-foreground">
+              {peak > 0 ? Math.round(peak) : "—"}
+            </span>
+            <span className="text-xs text-subtle">N</span>
+          </div>
+
           {/* Drive quality read-outs */}
-          <div className="flex items-center justify-between shrink-0" style={{ marginTop: 4 }}>
-            <span className="flex items-baseline gap-2">
-              <span className="uppercase tracking-widest" style={{ fontSize: 11, color: MUTED }}>Drive efficiency</span>
-              <span className="font-bold tabular-nums" style={{ fontSize: 20, color: WHITE }}>
-                {efficiency == null ? "—" : efficiency}
-              </span>
-              <span style={{ fontSize: 11, color: MUTED }}>/100</span>
+          <div className="flex items-center justify-between shrink-0 mt-1 text-xs text-muted-foreground">
+            <span>
+              Drive efficiency <span className="data-value">{efficiency == null ? "—" : efficiency}</span>/100
             </span>
             <span
-              className="uppercase tracking-widest rounded-sm px-2 py-1"
-              style={{
-                fontSize: 11,
-                color: slipRatio == null ? MUTED : slipping ? DANGER : SUCCESS,
-                border: `1px solid ${BORDER}`,
-              }}
+              className={`uppercase rounded-sm px-2 py-1 border border-border ${
+                slipRatio == null ? "text-muted-foreground" : slipping ? "text-destructive" : "text-success"
+              }`}
             >
               {slipRatio == null ? "Catch —" : slipping ? "Catch slip" : "Clean catch"}
             </span>
           </div>
 
           {forceCurveSupported === false && (
-            <p className="text-center shrink-0" style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>
+            <p className="text-center shrink-0 text-xs text-subtle mt-1">
               Force curve not available on this PM5 firmware.
             </p>
           )}
         </div>
 
-        {/* RIGHT — 3×3 metric grid */}
-        <div className="flex flex-col min-h-0 gap-2" style={{ width: "60%" }}>
-          <div className="grid flex-1 min-h-0 gap-2" style={{ gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(3, 1fr)" }}>
-            {/* Row 1 */}
-            <Tile label="Split"       value={fmtPace(splitCs)}                                    unit="/500m" color={splitColor} />
-            <Tile label="Watts"       value={data.power ? String(Math.round(data.power)) : "—"}   unit="W" />
-            <Tile label="Stroke rate" value={(data.strokeRate && data.strokeRate > 3) ? String(Math.round(data.strokeRate)) : "—"} unit="spm" />
+        {/* RIGHT — 3×3 metric grid. No grid lines, no per-metric card backgrounds. */}
+        <div className="flex flex-col min-h-0 gap-2 w-[58%] px-3 py-2">
+          <div className="grid grid-cols-3 grid-rows-3 flex-1 min-h-0 gap-2">
+            {/* Row 1 — primary metrics, larger values */}
+            <Tile primary label="Split"       value={fmtPace(splitCs)}                                    unit="/500m" tone={splitTone} />
+            <Tile primary label="Watts"       value={data.power ? String(Math.round(data.power)) : "—"}   unit="W" />
+            <Tile primary label="Stroke rate" value={(data.strokeRate && data.strokeRate > 3) ? String(Math.round(data.strokeRate)) : "—"} unit="spm" />
             {/* Row 2 */}
             <Tile label="Distance"    value={distM > 0 ? distM.toFixed(1) : "—"}                  unit="m" />
             <Tile label="Elapsed"     value={elapsedCs > 0 ? fmtClock(elapsedCs / 100) : "—"}     unit="mm:ss" />
@@ -1133,10 +1113,13 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
             <Tile label="Calories"    value={data.calories ? String(Math.round(data.calories)) : "—"} unit="cal" />
           </div>
 
-          {/* Progress toward the target — 4px, hidden when there is no target */}
+          {/* Progress toward the target — hidden when there is no target */}
           {progress != null && (
-            <div className="shrink-0 w-full overflow-hidden rounded-sm" style={{ height: 4, background: NAVY }}>
-              <div style={{ height: 4, width: `${progress * 100}%`, background: CURVE, transition: "width 300ms cubic-bezier(.4,0,.2,1)" }} />
+            <div className="shrink-0 w-full h-1 overflow-hidden rounded-sm bg-surface-2">
+              <div
+                className="h-full bg-primary transition-[width] duration-slow ease-in-out"
+                style={{ width: `${progress * 100}%` }}
+              />
             </div>
           )}
         </div>
@@ -1144,11 +1127,11 @@ function LiveErgViewNative({ coachWorkout }: LiveErgViewProps) {
 
       {/* ── Bluetooth unavailable ── */}
       {!btSupported && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.95)" }}>
+        <div className="absolute inset-0 flex items-center justify-center bg-background/95">
           <div className="text-center p-8">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-4" style={{ color: "#f59e0b" }} />
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-warning" strokeWidth={1.5} />
             <p className="text-lg font-semibold mb-2">Bluetooth unavailable</p>
-            <p style={{ fontSize: 14, color: MUTED }}>
+            <p className="text-sm text-muted-foreground">
               Use Chrome or Edge on desktop, or the CrewSync iOS app, to connect your PM5.
             </p>
           </div>

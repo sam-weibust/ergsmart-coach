@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Dumbbell, Utensils, ChevronDown, ChevronUp, Trash2, Upload } from "lucide-react";
 import { SpreadsheetUpload } from "./SpreadsheetUpload";
@@ -248,8 +247,8 @@ export const TeamWorkoutPlanSection = ({ teamId, teamName, profile }: TeamWorkou
 
       {plansLoading && (
         <div className="space-y-3">
-          {[1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 w-full rounded-md border border-border bg-surface-2" />
           ))}
         </div>
       )}

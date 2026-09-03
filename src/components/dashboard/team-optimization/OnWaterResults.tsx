@@ -300,7 +300,7 @@ const OnWaterResults = ({ teamId, isCoach, profile, teamMembers, seasonId, boats
                 <YAxis dataKey="water_split" name="Water Split (s)" tick={{ fontSize: 11 }} label={{ value: "Water Split", angle: -90, position: "insideLeft" }} />
                 <Tooltip cursor={{ strokeDasharray: "3 3" }} />
                 <Legend />
-                <Scatter name="2K Pieces" data={scatterData} fill="hsl(var(--primary))" />
+                <Scatter name="2K Pieces" data={scatterData} fill="rgb(var(--primary))" />
               </ScatterChart>
             </ResponsiveContainer>
           </CardContent>

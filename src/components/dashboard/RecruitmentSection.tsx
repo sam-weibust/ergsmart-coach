@@ -409,7 +409,7 @@ const RecruitmentSection = ({ profile }: RecruitmentSectionProps) => {
   return (
     <div className="space-y-6">
       {/* Header Card */}
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>

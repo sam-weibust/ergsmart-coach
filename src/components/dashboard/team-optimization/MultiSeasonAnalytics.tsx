@@ -221,11 +221,11 @@ export default function MultiSeasonAnalytics({ teamId, teamMembers, isCoach }: P
                 <p className="text-sm font-semibold mb-3">Season Comparison</p>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={comparisonData} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="metric" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }}
                       formatter={(v, n) => [`${v}`, n]}
                     />
                     <Legend />
@@ -262,11 +262,11 @@ export default function MultiSeasonAnalytics({ teamId, teamMembers, isCoach }: P
                 </p>
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={athleteProgression} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="season" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }}
                       formatter={(v: number) => [`${(v / 1000).toFixed(1)}k m`, "Total Meters"]}
                     />
                     <Line type="monotone" dataKey="totalMeters" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 4 }} />

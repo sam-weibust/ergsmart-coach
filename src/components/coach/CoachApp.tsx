@@ -16,7 +16,6 @@ import { AppStoreBanner } from "@/components/AppStoreBanner";
 import { Button } from "@/components/ui/button";
 import { Home, Grid3X3, Settings } from "lucide-react";
 import { format } from "date-fns";
-import crewsyncLogo from "@/assets/crewsync-logo-icon.jpg";
 import { Loader2 } from "lucide-react";
 
 type CoachTab = "today" | "more" | "settings";
@@ -29,7 +28,7 @@ const CoachApp = ({ profile }: Props) => {
   const [activeTab, setActiveTab] = useState<CoachTab>("today");
   const [moreSection, setMoreSection] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const { logoUrl, primaryColor, teamName } = useTeamBranding();
+  const { primaryColor, teamName } = useTeamBranding();
 
   const today = format(new Date(), "EEEE, MMMM d");
 
@@ -237,22 +236,16 @@ const CoachApp = ({ profile }: Props) => {
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       <AppStoreBanner />
 
-      {/* Header */}
+      {/* Header — team name left, today's date right. No logo, no avatar, no
+          extra chrome: a thin border-bottom is the only separator. */}
       <header
-        className="border-b border-white/10 z-20 shadow-sm shrink-0"
+        className="border-b border-white/10 z-20 shrink-0"
         style={{ background: primaryColor, paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={logoUrl || crewsyncLogo}
-              alt={displayTeamName}
-              className="h-9 w-9 rounded-xl object-cover shrink-0 border border-white/20 bg-white/10"
-            />
-            <span className="font-bold text-base text-white truncate">{displayTeamName}</span>
-          </div>
+          <span className="font-semibold text-lg text-white truncate min-w-0">{displayTeamName}</span>
           {activeTab === "today" && (
-            <span className="text-white/70 text-xs shrink-0">{today}</span>
+            <span className="text-white/70 text-base shrink-0">{today}</span>
           )}
         </div>
       </header>
@@ -304,17 +297,18 @@ const CoachApp = ({ profile }: Props) => {
               >
                 <Icon
                   className="h-5 w-5"
-                  style={{ color: isActive ? primaryColor : undefined }}
+                  strokeWidth={1.5}
+                  style={{ color: isActive ? primaryColor : "rgb(var(--text-tertiary))" }}
                 />
                 <span
-                  className="text-[11px] font-medium"
-                  style={isActive ? { color: primaryColor } : { color: "var(--muted-foreground)" }}
+                  className="text-xs font-medium"
+                  style={{ color: isActive ? primaryColor : "rgb(var(--text-tertiary))" }}
                 >
                   {tab.label}
                 </span>
                 {isActive && (
                   <div
-                    className="absolute bottom-0 w-8 h-[2px] rounded-t-full"
+                    className="absolute top-0 w-8 h-[2px] rounded-b-full"
                     style={{ background: primaryColor }}
                   />
                 )}

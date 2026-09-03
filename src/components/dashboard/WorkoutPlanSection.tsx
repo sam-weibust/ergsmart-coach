@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   CalendarDays, ChevronDown, ChevronUp, Download, Dumbbell,
@@ -761,15 +760,9 @@ const PlanList = ({
     return (
       <Card>
         <CardHeader><CardTitle>Your Training Plans</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          {[1, 2].map((i) => (
-            <div key={i} className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-5 w-48" />
-                <Skeleton className="h-4 w-24" />
-              </div>
-              <Skeleton className="h-20 w-full" />
-            </div>
+        <CardContent className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded-md border border-border bg-surface-2" />
           ))}
         </CardContent>
       </Card>

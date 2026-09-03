@@ -136,7 +136,7 @@ const ProgramDepth = ({ teamId, teamMembers }: Props) => {
                   {gradChartData.map((entry, i) => (
                     <Cell
                       key={i}
-                      fill={entry.yearsLeft <= 1 ? "hsl(var(--destructive))" : entry.yearsLeft <= 2 ? "#f59e0b" : "hsl(var(--primary))"}
+                      fill={entry.yearsLeft <= 1 ? "rgb(var(--destructive))" : entry.yearsLeft <= 2 ? "#f59e0b" : "rgb(var(--primary))"}
                     />
                   ))}
                 </Bar>
@@ -214,7 +214,7 @@ const ProgramDepth = ({ teamId, teamMembers }: Props) => {
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Bar dataKey="count" name="Athletes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Athletes" fill="rgb(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

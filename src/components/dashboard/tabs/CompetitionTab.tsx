@@ -5,16 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import type { AthleteTabProps } from "./types";
 import RaceSection from "@/components/dashboard/RaceSection";
 import { RegattasSection } from "@/components/dashboard/regattas/RegattasSection";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Trophy, Medal, Award, ShieldCheck, Bluetooth, Swords, AlertCircle, TrendingUp,
+  Trophy, ShieldCheck, Bluetooth, Swords, AlertCircle, TrendingUp,
 } from "lucide-react";
 
 /**
@@ -24,8 +19,10 @@ import {
  *  1. Global Leaderboard — VERIFIED scores only (erg_scores.is_verified=true,
  *     to_leaderboard=true, source in {concept2_sync, live_erg}, profile opted-in).
  *     Filters: distance (2K/5K/6K/10K/60min), gender, age group, weight class.
- *     The athlete's own row is highlighted; their rank + percentile shown at the
- *     TOP. Verified-only logic mirrors src/pages/LeaderboardPage.tsx exactly.
+ *     Rendered as plain bordered rows (no cards/table) with a sticky header
+ *     showing the athlete's own rank + split in accent color; their own row
+ *     carries an accent left border. Verified-only logic mirrors
+ *     src/pages/LeaderboardPage.tsx exactly.
  *  2. Head-to-Head Racing — reuses <RaceSection /> (create/join room + matchmaking).
  *
  * Props: see AthleteTabProps in ./types.ts (uses userId + profile for highlight).
@@ -70,16 +67,6 @@ function fmtTime(secs: number | null): string {
   return `${m}:${s.padStart(4, "0")}`;
 }
 
-function getAgeGroup(age: number | null): string {
-  if (!age) return "Senior";
-  if (age < 18) return "Junior";
-  if (age < 23) return "U23";
-  if (age < 40) return "Senior";
-  if (age < 50) return "Masters 40+";
-  if (age < 60) return "Masters 50+";
-  return "Masters 60+";
-}
-
 function getAgeGroupKey(age: number | null): string {
   if (!age) return "senior";
   if (age < 18) return "junior";
@@ -96,26 +83,39 @@ function isLightweight(gender: string | null, weightKg: number | null): boolean 
   return weightKg < 72.5;
 }
 
-function getInitials(name: string | null, username: string | null): string {
-  const n = name || username || "?";
-  return n.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2);
-}
-
-function RankIcon({ rank }: { rank: number }) {
-  if (rank === 1) return <Trophy className="h-5 w-5 text-yellow-500" />;
-  if (rank === 2) return <Medal className="h-5 w-5 text-gray-400" />;
-  if (rank === 3) return <Award className="h-5 w-5 text-amber-600" />;
-  return <span className="text-sm font-bold text-muted-foreground w-5 text-center">{rank}</span>;
+// Primary display metric for a score row: total time for distance tests,
+// meters for the 60-minute test. This is the value the row spec calls "split".
+function scoreLabel(
+  testType: string,
+  entry: { time_seconds?: number | null; total_meters?: number | null } | null | undefined,
+): string {
+  if (!entry) return "—";
+  if (testType === "60min") {
+    return entry.total_meters ? `${entry.total_meters}m` : "—";
+  }
+  return fmtTime(entry.time_seconds ?? null);
 }
 
 function VerifiedSourceBadge({ source }: { source: string }) {
   if (source === "concept2_sync") {
-    return <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-label="Verified via Concept2 Logbook" />;
+    return (
+      <ShieldCheck
+        className="h-4 w-4 text-subtle shrink-0"
+        strokeWidth={1.5}
+        aria-label="Verified via Concept2 Logbook"
+      />
+    );
   }
-  return <Bluetooth className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-label="Verified via Live PM5" />;
+  return (
+    <Bluetooth
+      className="h-4 w-4 text-subtle shrink-0"
+      strokeWidth={1.5}
+      aria-label="Verified via live PM5"
+    />
+  );
 }
 
-// ── Rank + percentile summary (TOP of leaderboard) ────────────────────────────
+// ── Sticky "my rank + split" header ────────────────────────────────────────────
 function MyRankSummary({
   testType,
   sorted,
@@ -163,61 +163,88 @@ function MyRankSummary({
 
   if (!score) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex items-center gap-3 p-4">
-          <div className="p-2 rounded-full bg-muted text-muted-foreground">
-            <TrendingUp className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-medium">You're not ranked yet</p>
-            <p className="text-xs text-muted-foreground">
-              Sync a verified {DISTANCES.find((d) => d.value === testType)?.label} from
-              Concept2 or race a live PM5 to appear on the leaderboard.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="sticky top-0 z-10 -mx-4 flex items-center gap-3 border-b border-border bg-background px-4 py-3">
+        <TrendingUp className="h-4 w-4 shrink-0 text-subtle" strokeWidth={1.5} />
+        <div className="min-w-0">
+          <p className="text-sm text-foreground">You're not ranked yet</p>
+          <p className="text-sm text-muted-foreground">
+            Sync a verified {DISTANCES.find((d) => d.value === testType)?.label} from
+            Concept2 or race a live PM5 to appear on the leaderboard.
+          </p>
+        </div>
+      </div>
     );
   }
 
-  const pctColor =
-    percentile != null && percentile >= 75
-      ? "text-green-600 bg-green-500/10 border-green-500/20"
-      : percentile != null && percentile >= 40
-      ? "text-yellow-600 bg-yellow-500/10 border-yellow-500/20"
-      : "text-primary bg-primary/5 border-primary/20";
-
   return (
-    <Card className={`border ${pctColor}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-full ${pctColor}`}>
-            <TrendingUp className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">My Rank</p>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mt-1">
-              <span className="text-2xl font-bold font-mono">
-                {rank ? `#${rank}` : "—"}
-              </span>
-              <span className="text-sm text-muted-foreground">of {total}</span>
-              {percentile != null && (
-                <span className="text-lg font-semibold">
-                  Top {Math.max(1, 100 - percentile)}%
-                </span>
-              )}
-              <span className="text-sm font-mono ml-auto">
-                {testType === "60min"
-                  ? score.total_meters
-                    ? `${score.total_meters}m`
-                    : "—"
-                  : fmtTime(score.time_seconds)}
-              </span>
-            </div>
-          </div>
+    <div className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="data-value shrink-0 text-2xl text-primary">
+          {rank ? `#${rank}` : "—"}
+        </span>
+        <span className="shrink-0 text-sm text-muted-foreground">of {total}</span>
+        {percentile != null && (
+          <span className="shrink-0 text-sm text-primary">
+            Top {Math.max(1, 100 - percentile)}%
+          </span>
+        )}
+      </div>
+      <span className="data-value shrink-0 text-lg text-primary">
+        {scoreLabel(testType, score)}
+      </span>
+    </div>
+  );
+}
+
+// ── One leaderboard row ────────────────────────────────────────────────────────
+function LeaderboardRow({
+  entry,
+  rank,
+  isMe,
+  testType,
+}: {
+  entry: any;
+  rank: number;
+  isMe: boolean;
+  testType: string;
+}) {
+  const p = entry.profiles;
+  return (
+    <Link
+      to={`/athlete/${p?.username || ""}`}
+      className={`flex min-h-[44px] items-center gap-3 border-b border-l-4 border-border py-2.5 pl-3 pr-1 transition-colors hover:bg-surface-1 ${
+        isMe ? "border-l-primary bg-primary/5" : "border-l-transparent"
+      }`}
+    >
+      <span className="w-8 shrink-0 text-center text-sm text-subtle">{rank}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-base text-foreground">
+            {p?.full_name || p?.username || "Anonymous"}
+          </span>
+          {isMe && <span className="shrink-0 text-sm text-primary">(you)</span>}
+          <VerifiedSourceBadge source={entry.source} />
         </div>
-      </CardContent>
-    </Card>
+        {p?.country && (
+          <span className="text-sm text-muted-foreground">{p.country}</span>
+        )}
+      </div>
+      <span className="data-value shrink-0 text-base text-right text-foreground">
+        {scoreLabel(testType, entry)}
+      </span>
+    </Link>
+  );
+}
+
+function LeaderboardRowSkeleton() {
+  return (
+    <div className="flex min-h-[44px] items-center gap-3 border-b border-l-4 border-border border-l-transparent py-2.5 pl-3 pr-1">
+      <div className="h-3.5 w-4 shrink-0 animate-pulse rounded bg-surface-2" />
+      <div className="min-w-0 flex-1">
+        <div className="h-4 w-32 max-w-full animate-pulse rounded bg-surface-2" />
+      </div>
+      <div className="h-4 w-14 shrink-0 animate-pulse rounded bg-surface-2" />
+    </div>
   );
 }
 
@@ -281,22 +308,22 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Rank + split summary, sticky at the top */}
+      <MyRankSummary testType={testType} sorted={sorted} userId={userId} />
+
       {/* Integrity note */}
-      <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900 text-sm text-emerald-800 dark:text-emerald-300">
-        <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
+      <div className="flex items-start gap-2 text-sm text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-subtle" strokeWidth={1.5} />
         <span>
           All times verified via Concept2 Logbook sync or live PM5 connection.
           Manual entries are not eligible.
         </span>
       </div>
 
-      {/* Rank + percentile summary at the TOP */}
-      <MyRankSummary testType={testType} sorted={sorted} userId={userId} />
-
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg border border-border">
+      <div className="flex flex-wrap gap-2">
         <Select value={testType} onValueChange={setTestType}>
-          <SelectTrigger className="w-[100px] h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-11 w-[108px] text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {DISTANCES.map((d) => (
               <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
@@ -304,7 +331,7 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
           </SelectContent>
         </Select>
         <Select value={gender} onValueChange={setGender}>
-          <SelectTrigger className="w-[90px] h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-11 w-[100px] text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {GENDERS.map((g) => (
               <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
@@ -312,7 +339,7 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
           </SelectContent>
         </Select>
         <Select value={ageGroup} onValueChange={setAgeGroup}>
-          <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-11 w-[150px] text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {AGE_GROUPS.map((a) => (
               <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
@@ -320,7 +347,7 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
           </SelectContent>
         </Select>
         <Select value={weightClass} onValueChange={setWeightClass}>
-          <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-11 w-[140px] text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {WEIGHT_CLASSES.map((w) => (
               <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
@@ -329,103 +356,38 @@ function GlobalVerifiedLeaderboard({ userId }: { userId: string }) {
         </Select>
       </div>
 
-      {/* Table */}
+      {/* Rows — no card/table, thin border-bottom between rows */}
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading leaderboard…</div>
+        <div>
+          <LeaderboardRowSkeleton />
+          <LeaderboardRowSkeleton />
+          <LeaderboardRowSkeleton />
+        </div>
+      ) : displayed.length === 0 ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          No verified scores found for this filter.
+        </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-12">Rank</TableHead>
-                <TableHead>Athlete</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead className="hidden sm:table-cell">W/kg</TableHead>
-                <TableHead className="hidden md:table-cell">Split</TableHead>
-                <TableHead className="hidden lg:table-cell">Age Group</TableHead>
-                <TableHead className="hidden lg:table-cell">Class</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayed.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                    No verified scores found for this filter.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                displayed.map((entry, i) => {
-                  const isMe = entry.user_id === userId;
-                  const p = entry.profiles;
-                  const ageGrp = getAgeGroup(p?.age ?? null);
-                  const lw = isLightweight(p?.gender, p?.weight_kg);
-                  return (
-                    <TableRow
-                      key={entry.id}
-                      className={`${i < 3 ? "bg-primary/5" : ""} ${isMe ? "ring-1 ring-inset ring-primary bg-primary/10" : ""}`}
-                    >
-                      <TableCell>
-                        <div className="flex items-center justify-center">
-                          <RankIcon rank={i + 1} />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold shrink-0">
-                            {getInitials(p?.full_name, p?.username)}
-                          </div>
-                          <div className="min-w-0">
-                            <Link
-                              to={`/athlete/${p?.username || ""}`}
-                              className="font-medium hover:underline text-sm leading-tight block truncate"
-                            >
-                              {p?.full_name || p?.username || "Anonymous"}
-                              {isMe && <span className="ml-1 text-xs text-primary">(you)</span>}
-                            </Link>
-                            {p?.country && (
-                              <span className="text-xs text-muted-foreground">{p.country}</span>
-                            )}
-                          </div>
-                          <VerifiedSourceBadge source={entry.source} />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono font-bold">
-                          {testType === "60min"
-                            ? entry.total_meters ? `${entry.total_meters}m` : "—"
-                            : fmtTime(entry.time_seconds)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm">
-                        {entry.watts_per_kg ? parseFloat(entry.watts_per_kg).toFixed(2) : "—"}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-sm">
-                        {fmtTime(entry.avg_split_seconds)}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <Badge variant="secondary" className="text-xs">{ageGrp}</Badge>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <Badge variant="outline" className="text-xs">{lw ? "LW" : "Open"}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-              {userId && !userInTop && displayed.length >= 100 && (
-                <TableRow className="ring-1 ring-inset ring-primary bg-primary/5 border-t-2 border-primary/20">
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-2">
-                    Your row is outside the top 100 — see "My Rank" card above
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <div>
+          {displayed.map((entry, i) => (
+            <LeaderboardRow
+              key={entry.id}
+              entry={entry}
+              rank={i + 1}
+              isMe={entry.user_id === userId}
+              testType={testType}
+            />
+          ))}
+          {userId && !userInTop && displayed.length >= 100 && (
+            <div className="border-t border-border py-3 text-center text-sm text-muted-foreground">
+              Your row is outside the top 100 — see your rank above.
+            </div>
+          )}
         </div>
       )}
 
       {sorted.length > 0 && (
-        <p className="text-xs text-muted-foreground text-center">
+        <p className="text-center text-sm text-muted-foreground">
           Showing {displayed.length} of {sorted.length} verified athletes
         </p>
       )}
@@ -442,26 +404,26 @@ export default function CompetitionTab({ userId, profile }: AthleteTabProps) {
   return (
     <div className="p-4 pb-28 space-y-4 max-w-5xl mx-auto">
       {/* Segmented control */}
-      <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-xl">
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
         <button
           onClick={() => setView("leaderboard")}
-          className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ${
             view === "leaderboard"
-              ? "bg-background shadow-sm text-foreground"
+              ? "bg-surface-3 text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Trophy className="h-4 w-4" /> Leaderboard
+          <Trophy className="h-5 w-5" strokeWidth={1.5} /> Leaderboard
         </button>
         <button
           onClick={() => setView("race")}
-          className={`flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ${
             view === "race"
-              ? "bg-background shadow-sm text-foreground"
+              ? "bg-surface-3 text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Swords className="h-4 w-4" /> Race (H2H)
+          <Swords className="h-5 w-5" strokeWidth={1.5} /> Race (H2H)
         </button>
       </div>
 
@@ -469,16 +431,13 @@ export default function CompetitionTab({ userId, profile }: AthleteTabProps) {
         userId ? (
           <GlobalVerifiedLeaderboard userId={userId} />
         ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <AlertCircle className="h-4 w-4" /> Sign in required
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
+          <div className="flex flex-col items-center gap-1.5 py-12 text-center">
+            <AlertCircle className="h-6 w-6 text-subtle" strokeWidth={1.5} />
+            <p className="text-base text-foreground">Sign in required</p>
+            <p className="text-sm text-muted-foreground">
               Sign in to view the global leaderboard.
-            </CardContent>
-          </Card>
+            </p>
+          </div>
         )
       ) : (
         // Head-to-Head racing.

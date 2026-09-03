@@ -334,7 +334,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
             </div>
             <div className="px-3 py-2 text-center" style={{ background: "#FFFFFF" }}>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoothness</p>
-              <p className={`text-sm font-bold font-mono ${selectedStats.smooth >= 7 ? "text-[hsl(var(--success))]" : selectedStats.smooth >= 5 ? "text-[hsl(var(--warning))]" : "text-destructive"}`}>
+              <p className={`text-sm font-bold font-mono ${selectedStats.smooth >= 7 ? "text-[rgb(var(--success))]" : selectedStats.smooth >= 5 ? "text-[rgb(var(--warning))]" : "text-destructive"}`}>
                 {selectedStats.smooth}/10
               </p>
             </div>
@@ -370,7 +370,7 @@ export default function ForceCurvePostWorkout({ forceCurves }: ForceCurvePostWor
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setScrubIdx(bestIdx)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-yellow-700/40 text-[hsl(var(--warning))] hover:bg-yellow-900/30 transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded border border-yellow-700/40 text-[rgb(var(--warning))] hover:bg-yellow-900/30 transition-colors"
                 >
                   Best
                 </button>

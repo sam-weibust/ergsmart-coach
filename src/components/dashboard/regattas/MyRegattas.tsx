@@ -166,7 +166,7 @@ export default function MyRegattas({ profile }: { profile: any }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                 <YAxis
                   tick={{ fontSize: 10 }}
@@ -184,7 +184,7 @@ export default function MyRegattas({ profile }: { profile: any }) {
                     return [`${m}:${String(s).padStart(2, "0")}`, "Finish Time"];
                   }}
                 />
-                <Line type="monotone" dataKey="timeSec" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="timeSec" stroke="rgb(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>

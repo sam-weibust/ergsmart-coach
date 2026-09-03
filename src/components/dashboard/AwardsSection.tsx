@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, Flame, Target, Dumbbell, Timer, Users, Calendar, Zap, Award, Star, Medal } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import { StreakFreeze } from "./StreakFreeze";
 import { getSessionUser } from '@/lib/getUser';
 import { getLocalDate } from "@/lib/dateUtils";
@@ -330,8 +329,8 @@ export const AwardsSection = ({ profile }: AwardsSectionProps) => {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-32 w-full rounded-md border border-border bg-surface-2" />
             ))}
           </div>
         </CardContent>

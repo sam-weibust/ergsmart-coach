@@ -1,0 +1,113 @@
+/* ============================================================================
+   CrewSync Design System — Dark
+   ----------------------------------------------------------------------------
+   Single source of truth for color, type, spacing, radius and motion tokens
+   for the coach + athlete app experience (dashboard, tabs, Live Erg).
+
+   NOT applied to src/pages/LandingPage.tsx, which carries its own separate,
+   already-shipped light design system and does not consume these tokens.
+
+   Consumption:
+   - tailwind.config.ts aliases its shadcn color/fontSize/radius theme keys to
+     these variables, so existing bg-background / text-foreground / bg-card /
+     text-sm / rounded-lg utility classes across the whole app pick these up
+     automatically — that is what turns ~150 untouched components dark too.
+   - New/redesigned components (Coach Today, More, Settings; athlete Team, Me,
+     Performance, Competition; Live Erg) reference the semantic names below
+     directly (var(--surface-2), var(--text-tertiary), etc.) per the redesign
+     spec, since shadcn's generic background/foreground/card/muted naming
+     doesn't carry enough distinct steps for that spec's 3-tier surface system.
+   - src/lib/design-system.ts is the TypeScript-side mirror, for inline styles
+     and value-driven color logic (e.g. recovery score thresholds, chart fills).
+     Keep the two in sync by hand — there is no generator between them.
+   ============================================================================ */
+
+:root {
+  /* ---- Surfaces --------------------------------------------------------
+     Stored as "R G B" (space-separated, no commas, no rgb() wrapper) so
+     Tailwind can compose them as rgb(var(--x) / <alpha-value>) and support
+     opacity modifiers (e.g. bg-canvas/50). Border tokens already carry a
+     fixed alpha per spec, so those two stay literal rgba() strings instead. */
+  --canvas: 8 18 31;              /* #08121F — base background, never on elements */
+  --surface-1: 13 25 41;          /* #0D1929 — slightly lifted, large sections */
+  --surface-2: 19 32 54;          /* #132036 — contained elements that genuinely need containment */
+  --surface-3: 26 44 71;          /* #1A2C47 — hover states, active states, selected states */
+  --border: rgba(255, 255, 255, 0.07);        /* default separator */
+  --border-strong: rgba(255, 255, 255, 0.14); /* emphasized separator */
+
+  /* ---- Text -------------------------------------------------------------- */
+  --text-primary: 255 255 255;    /* #FFFFFF */
+  --text-secondary: 138 159 187;  /* #8A9FBB */
+  --text-tertiary: 78 101 128;    /* #4E6580 */
+
+  /* ---- Accent & status ----------------------------------------------------
+     One blue, used with intention, never decoratively. Status colors mark
+     state, not decoration. */
+  --accent: 34 114 255;           /* #2272FF */
+  --accent-hover: 58 128 255;     /* #3A80FF */
+  --success: 34 197 94;           /* #22C55E */
+  --warning: 245 158 11;          /* #F59E0B */
+  --danger: 239 68 68;            /* #EF4444 */
+  --danger-subtle: rgba(239, 68, 68, 0.12);
+
+  /* ---- Typography ----------------------------------------------------------
+     Space Grotesk only, for the app experience (index.html already loads
+     weights 300–700). Data values (splits, watts, meters, stroke rate) use
+     weight 700 with tabular figures — numbers should read like a sports
+     display, not body copy. */
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ---- Spacing — 4px base unit, multiples only ----------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radius — never 9999px except status pills ---------------------------- */
+  --radius-sm: 4px;   /* inputs, small badges */
+  --radius-md: 6px;   /* buttons, contained elements */
+  --radius-lg: 8px;   /* sections that need containment */
+  --radius-xl: 12px;  /* modals, bottom sheets */
+  --radius-pill: 9999px;
+
+  /* ---- Motion ----------------------------------------------------------------- */
+  --duration-fast: 120ms;   /* hover, active states */
+  --duration-base: 200ms;   /* panels, reveals */
+  --duration-slow: 300ms;   /* modals, full-screen transitions */
+  --ease-default: ease;
+}
+
+/* ---- Type scale utilities -------------------------------------------------
+   The xs–3xl steps are ALSO mirrored into tailwind.config.ts's
+   theme.extend.fontSize, so the existing text-xs..text-3xl utility classes
+   already used across the app pick these exact sizes/weights/line-heights up
+   automatically. `.text-display` is defined only here since Tailwind's
+   default scale has no slot for it. */
+.text-display {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Section label pattern used throughout the redesigned screens:
+   WORKOUT / LINEUPS / ROSTER / MESSAGES / MY PLAN / etc. */
+.label-caption {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--text-tertiary));
+}
+
+/* Data values — splits, watts, meters, stroke rate, force. Tabular figures so
+   digits don't jitter the layout as they update live. */
+.data-value {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

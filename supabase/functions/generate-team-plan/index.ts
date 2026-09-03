@@ -395,12 +395,12 @@ never omit a week or a day.`;
         parseError: string | null;
       };
 
-      const runChunk = async (start: number, end: number): Promise<ChunkOutcome> => {
+      const attemptChunk = async (start: number, end: number, attempt: number): Promise<ChunkOutcome> => {
         const label = `weeks ${start}-${end}`;
         const expected = end - start + 1;
         const empty = tokensFrom(null);
 
-        console.log(`${FN}: dispatching chunk ${label} of ${weekCount}`);
+        console.log(`${FN}: dispatching chunk ${label} of ${weekCount} (attempt ${attempt})`);
 
         const resp = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -445,7 +445,12 @@ never omit a week or a day.`;
         try {
           // Balanced-brace extractor: tolerant of markdown fences and trailing
           // prose, and it reports truncation as truncation instead of an opaque
-          // "Unexpected end of JSON input".
+          // "Unexpected end of JSON input". It does NOT repair invalid JSON
+          // *inside* the balanced braces (e.g. a stray unescaped quote in a
+          // description) — that surfaces here as a JSON.parse error even
+          // though the response was complete (stop_reason "end_turn"). That
+          // case is retried by the caller rather than "fixed" here: patching
+          // arbitrary malformed JSON is unreliable, a fresh sample is not.
           parsed = extractJson<any>(rawText);
         } catch (e: any) {
           return {
@@ -493,8 +498,40 @@ never omit a week or a day.`;
         // right numbers, but the combine step must not depend on it getting
         // them right — position within a fixed window is authoritative.
         const weeksOut = got.map((w: any, i: number) => ({ ...w, week: start + i }));
-        console.log(`${FN}: chunk ${label} ok — ${weeksOut.length} week(s)`);
+        console.log(`${FN}: chunk ${label} ok — ${weeksOut.length} week(s) (attempt ${attempt})`);
         return { start, end, weeks: weeksOut, tok, httpError: null, parseError: null };
+      };
+
+      // A chunk that comes back with a parseError (malformed-but-complete
+      // JSON, wrong week count, or a hollow week) had a normal HTTP response
+      // — the model just produced bad content on that sample. Observed live:
+      // weeks 5-8 of a 12-week plan came back with stop_reason "end_turn" (not
+      // truncated) but JSON.parse still failed mid-object, most likely an
+      // unescaped quote inside a session description. One retry against a
+      // fresh sample clears this most of the time. HTTP errors are NOT
+      // retried here — those already have their own failure path below.
+      const MAX_ATTEMPTS_PER_CHUNK = 2;
+      const runChunk = async (start: number, end: number): Promise<ChunkOutcome> => {
+        let outcome = await attemptChunk(start, end, 1);
+        let attempt = 1;
+        while (outcome.parseError && attempt < MAX_ATTEMPTS_PER_CHUNK) {
+          attempt++;
+          console.warn(
+            `${FN}: chunk weeks ${start}-${end} attempt ${attempt - 1} failed (${outcome.parseError}) — retrying (attempt ${attempt}/${MAX_ATTEMPTS_PER_CHUNK})`,
+          );
+          const retryOutcome = await attemptChunk(start, end, attempt);
+          // Token usage from every attempt counts toward accounting, even a
+          // discarded failed one — it was still real API spend.
+          retryOutcome.tok = {
+            input_tokens: outcome.tok.input_tokens + retryOutcome.tok.input_tokens,
+            output_tokens: outcome.tok.output_tokens + retryOutcome.tok.output_tokens,
+            cache_creation_input_tokens:
+              outcome.tok.cache_creation_input_tokens + retryOutcome.tok.cache_creation_input_tokens,
+            cache_read_input_tokens: outcome.tok.cache_read_input_tokens + retryOutcome.tok.cache_read_input_tokens,
+          };
+          outcome = retryOutcome;
+        }
+        return outcome;
       };
 
       // All chunks in flight at once: wall time is the slowest chunk, not the

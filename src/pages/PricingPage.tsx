@@ -233,7 +233,7 @@ const ORG_PLAN = {
   price: 899,
   betaPrice: 719,
   badge: "Multi-Program",
-  badgeColor: "bg-[hsl(var(--warning))]",
+  badgeColor: "bg-[rgb(var(--warning))]",
   cta: "Subscribe to Organization",
   ctaHref: null,
   maxAthletes: "Up to 5 teams · 500 athletes",

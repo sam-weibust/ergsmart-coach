@@ -455,10 +455,10 @@ export default function AthleticDirectorDashboard({ profile }: Props) {
                 <p className="text-sm font-semibold mb-3">Attendance Rate by Program</p>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={comparisonChartData()} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                    <Tooltip contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }} />
                     <Bar dataKey="Attendance %" fill="#1A1A2E" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -467,10 +467,10 @@ export default function AthleticDirectorDashboard({ profile }: Props) {
                 <p className="text-sm font-semibold mb-3">Weekly Meters by Program</p>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={comparisonChartData()} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                    <Tooltip contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }} />
                     <Bar dataKey="Meters (k)" fill="#6366f1" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -674,10 +674,10 @@ function ProgramDetail({ team, tab, setTab, ergData, attendanceData, alerts, onB
               <p className="text-sm font-semibold mb-3">Team Avg 2K Split Trend (seconds)</p>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={avg2kTrend} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="week" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                  <Tooltip contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }}
                     formatter={(v: number) => [formatSplit(v), "Avg 2K"]} />
                   <Line type="monotone" dataKey="avg2k" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 3 }} />
                 </LineChart>
@@ -709,10 +709,10 @@ function ProgramDetail({ team, tab, setTab, ergData, attendanceData, alerts, onB
               <p className="text-sm font-semibold mb-3">Weekly Attendance Rate</p>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={attChartData} margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="week" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                  <Tooltip contentStyle={{ background: "rgb(var(--card))", border: "1px solid var(--border)", borderRadius: 8 }}
                     formatter={(v: number) => [`${v}%`, "Attendance"]} />
                   <Line type="monotone" dataKey="rate" stroke="#1A1A2E" strokeWidth={2} dot={{ fill: "#1A1A2E", r: 3 }} />
                 </LineChart>

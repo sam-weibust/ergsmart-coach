@@ -6,7 +6,7 @@ import { useTeamBranding } from "@/context/TeamBrandingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -21,8 +21,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Palette, Upload, Users, Settings, Bell, User, PlusCircle,
-  Trash2, Copy, Check, RefreshCw, UserMinus, LogOut, ChevronDown,
+  Upload, PlusCircle, Copy, Check, RefreshCw, UserMinus, LogOut,
+  ChevronRight, ChevronLeft,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ChangeRoleSection from "@/components/dashboard/ChangeRoleSection";
@@ -32,14 +32,42 @@ interface Props {
   coachTeam: any;
 }
 
+// Root list (Settings home) vs. a drilled-into detail screen — same idiom as
+// the athlete Settings tab's root/sub-view split, since this component has no
+// router destination of its own to hand off to.
+type ViewId =
+  | "root"
+  | "branding"
+  | "training-philosophy"
+  | "staff"
+  | "team-settings"
+  | "my-profile"
+  | "notifications"
+  | "connected-apps";
+
+// Two of the spec's named rows (Training Philosophy, Connected Apps) have no
+// real feature behind them in this file — see the report for details. Each
+// still gets its own view id (and its own back-header title) so the screen
+// title always matches the row the coach tapped, even though the content
+// underneath is the closest existing real screen rather than a dedicated one.
+const VIEW_TITLES: Record<Exclude<ViewId, "root">, string> = {
+  branding: "Team Branding",
+  "training-philosophy": "Training Philosophy",
+  staff: "Coaching Staff",
+  "team-settings": "Team Settings",
+  "my-profile": "My Profile",
+  notifications: "Notifications",
+  "connected-apps": "Connected Apps",
+};
+
 const CoachSettings = ({ profile, coachTeam }: Props) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { logoUrl, primaryColor } = useTeamBranding();
 
-  // Section expansion state
-  const [openSection, setOpenSection] = useState<string | null>("team-settings");
+  // Root list vs. drilled-into detail screen.
+  const [view, setView] = useState<ViewId>("root");
 
   // Team branding state
   const [newColor, setNewColor] = useState(primaryColor || "#1A1A2E");
@@ -80,8 +108,6 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
     },
     enabled: !!coachTeam?.id,
   });
-
-  const toggle = (id: string) => setOpenSection((prev) => (prev === id ? null : id));
 
   const saveTeamSettings = useMutation({
     mutationFn: async () => {
@@ -241,298 +267,74 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
     navigate("/auth");
   };
 
-  const SectionHeader = ({ id, label, icon: Icon }: { id: string; label: string; icon: React.ElementType }) => (
+  // Grouped-list row: full-width, 48px, label left / chevron right.
+  const ListRow = ({ label, onClick }: { label: string; onClick: () => void }) => (
     <button
-      onClick={() => toggle(id)}
-      className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/70 transition-colors rounded-xl"
+      onClick={onClick}
+      className="w-full h-12 min-h-[44px] flex items-center justify-between px-4 text-left hover:bg-surface-3/50 active:bg-surface-3/70 transition-colors"
     >
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">{label}</span>
-      </div>
-      <ChevronDown
-        className="h-4 w-4 text-muted-foreground transition-transform"
-        style={{ transform: openSection === id ? "rotate(180deg)" : "rotate(0deg)" }}
-      />
+      <span className="text-base text-foreground">{label}</span>
+      <ChevronRight className="h-4 w-4 text-subtle shrink-0" strokeWidth={1.5} />
     </button>
   );
 
-  return (
-    <div className="space-y-3 pb-6">
-      <h2 className="text-base font-bold text-foreground px-1">Settings</h2>
+  // Detail-screen header: back to the root list + the tapped row's title.
+  const BackHeader = ({ title }: { title: string }) => (
+    <div className="space-y-1">
+      <button
+        onClick={() => setView("root")}
+        className="inline-flex items-center gap-1 min-h-[44px] -ml-1 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+        Settings
+      </button>
+      <h2 className="text-xl font-semibold text-foreground px-1">{title}</h2>
+    </div>
+  );
 
-      {/* Team Branding */}
-      {coachTeam && (
-        <div>
-          <SectionHeader id="branding" label="Team Branding" icon={Palette} />
-          {openSection === "branding" && (
-            <Card className="mt-1 rounded-t-none">
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="h-16 w-16 rounded-xl overflow-hidden border border-border bg-muted flex items-center justify-center shrink-0">
-                    {logoUrl
-                      ? <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
-                      : <span className="text-2xl font-bold text-muted-foreground">{coachTeam.name?.[0] || "T"}</span>}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <Label className="text-xs">Team Logo</Label>
-                    <label className="cursor-pointer">
-                      <Button variant="outline" size="sm" className="pointer-events-none" disabled={logoUploading}>
-                        <Upload className="h-3.5 w-3.5 mr-1.5" />
-                        {logoUploading ? "Uploading…" : "Upload Logo"}
-                      </Button>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                    </label>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Primary Color</Label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={newColor}
-                      onChange={(e) => setNewColor(e.target.value)}
-                      className="h-9 w-16 rounded-lg border border-border cursor-pointer p-0.5"
-                    />
-                    <span className="text-sm font-mono text-muted-foreground">{newColor}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        if (!coachTeam?.id) return;
-                        const { error } = await supabase
-                          .from("teams")
-                          .update({ primary_color: newColor } as any)
-                          .eq("id", coachTeam.id);
-                        if (!error) {
-                          toast({ title: "Color saved" });
-                          queryClient.invalidateQueries({ queryKey: ["team-branding"] });
-                        }
-                      }}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
+  // ── Root: grouped list ─────────────────────────────────────────────────
+  if (view === "root") {
+    return (
+      <div className="space-y-6 pb-6">
+        <h1 className="text-xl font-semibold text-foreground px-1">Settings</h1>
+
+        {coachTeam && (
+          <div className="space-y-2">
+            <h2 className="text-xs uppercase text-subtle px-1">Team</h2>
+            <Card className="overflow-hidden">
+              <CardContent className="p-0 divide-y divide-border">
+                <ListRow label="Team Branding" onClick={() => setView("branding")} />
+                <ListRow label="Training Philosophy" onClick={() => setView("training-philosophy")} />
+                <ListRow label="Coaching Staff" onClick={() => setView("staff")} />
+                <ListRow label="Team Settings" onClick={() => setView("team-settings")} />
               </CardContent>
             </Card>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Team Settings */}
-      {coachTeam && (
-        <div>
-          <SectionHeader id="team-settings" label="Team Settings" icon={Settings} />
-          {openSection === "team-settings" && (
-            <Card className="mt-1 rounded-t-none">
-              <CardContent className="pt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Team Name</Label>
-                  <Input value={teamNameEdit} onChange={(e) => setTeamNameEdit(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Location</Label>
-                  <Input
-                    placeholder="City, State"
-                    value={teamLocation}
-                    onChange={(e) => setTeamLocation(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => saveTeamSettings.mutate()}
-                  disabled={saveTeamSettings.isPending}
-                >
-                  Save Changes
-                </Button>
-
-                {coachTeam.join_code && (
-                  <div className="border border-border rounded-xl p-4 space-y-2 bg-muted/30">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Join Code</p>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-mono font-bold tracking-widest text-foreground">
-                        {coachTeam.join_code}
-                      </span>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => {
-                          navigator.clipboard.writeText(coachTeam.join_code);
-                          setCopiedCode(true);
-                          setTimeout(() => setCopiedCode(false), 2000);
-                        }}
-                      >
-                        {copiedCode ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => regenerateCode.mutate()}
-                        disabled={regenerateCode.isPending}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Share with athletes to join your team.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Coaching Staff */}
-      {coachTeam && (
-        <div>
-          <SectionHeader id="staff" label="Coaching Staff" icon={Users} />
-          {openSection === "staff" && (
-            <Card className="mt-1 rounded-t-none">
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Email address"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => inviteCoach.mutate()}
-                    disabled={inviteCoach.isPending || !inviteEmail.trim()}
-                  >
-                    Invite
-                  </Button>
-                </div>
-                {(coachStaff as any[]).length > 0 && (
-                  <div className="space-y-2">
-                    {(coachStaff as any[]).map((s: any) => (
-                      <div key={s.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                        <div>
-                          <p className="text-sm font-medium">{s.profile?.full_name || s.profile?.email || "Coach"}</p>
-                          <p className="text-xs text-muted-foreground">{s.profile?.email}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-[10px]">{s.role || "coach"}</Badge>
-                          {isHeadCoach && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button size="icon" variant="ghost" className="h-7 w-7">
-                                  <UserMinus className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Remove Coach</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Remove {s.profile?.full_name || "this coach"} from the staff?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => removeCoach.mutate(s.id)}>Remove</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(coachStaff as any[]).length === 0 && (
-                  <p className="text-xs text-muted-foreground">No additional coaches yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Notifications */}
-      <div>
-        <SectionHeader id="notifications" label="Notifications" icon={Bell} />
-        {openSection === "notifications" && (
-          <Card className="mt-1 rounded-t-none">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">
-                Push notification preferences coming soon.
-              </p>
+        <div className="space-y-2">
+          <h2 className="text-xs uppercase text-subtle px-1">Account</h2>
+          <Card className="overflow-hidden">
+            <CardContent className="p-0 divide-y divide-border">
+              <ListRow label="My Profile" onClick={() => setView("my-profile")} />
+              <ListRow label="Notifications" onClick={() => setView("notifications")} />
+              <ListRow label="Connected Apps" onClick={() => setView("connected-apps")} />
             </CardContent>
           </Card>
-        )}
-      </div>
-
-      {/* My Profile */}
-      <div>
-        <SectionHeader id="my-profile" label="My Profile" icon={User} />
-        {openSection === "my-profile" && (
-          <Card className="mt-1 rounded-t-none">
-            <CardContent className="pt-4 space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Full Name</Label>
-                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Email</Label>
-                <Input value={(profile as any)?.email || ""} disabled className="bg-muted/40" />
-              </div>
-              <Button size="sm" onClick={saveProfile} disabled={savingProfile}>
-                {savingProfile ? "Saving…" : "Save Profile"}
-              </Button>
-
-              <div className="pt-2 border-t border-border">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Role</p>
-                <ChangeRoleSection profile={profile} accentColor={primaryColor || "#1A1A2E"} />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Create New Team — only when no team */}
-      {!coachTeam && (
-        <div>
-          <SectionHeader id="create-team" label="Create New Team" icon={PlusCircle} />
-          {openSection === "create-team" && (
-            <Card className="mt-1 rounded-t-none">
-              <CardContent className="pt-4 space-y-3">
-                <Input
-                  placeholder="Team name"
-                  value={newTeamName}
-                  onChange={(e) => setNewTeamName(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={createTeam}
-                  disabled={creatingTeam || !newTeamName.trim()}
-                >
-                  {creatingTeam ? "Creating…" : "Create Team"}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </div>
-      )}
 
-      {/* Danger Zone */}
-      {coachTeam && (
-        <div>
-          <SectionHeader id="danger" label="Danger Zone" icon={Trash2} />
-          {openSection === "danger" && (
-            <Card className="mt-1 rounded-t-none border-destructive/30">
-              <CardContent className="pt-4 space-y-3">
+        {coachTeam && (
+          <div className="space-y-2">
+            <h2 className="text-xs uppercase text-subtle px-1">Danger Zone</h2>
+            <Card className="overflow-hidden border-destructive/30">
+              <CardContent className="p-0 divide-y divide-border">
                 {!isHeadCoach && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full border-destructive text-destructive hover:bg-destructive/10">
-                        Leave Team
-                      </Button>
+                      <button className="w-full h-12 min-h-[44px] flex items-center justify-between px-4 text-left hover:bg-destructive/10 transition-colors">
+                        <span className="text-base text-destructive">Leave Team</span>
+                        <ChevronRight className="h-4 w-4 text-destructive shrink-0" strokeWidth={1.5} />
+                      </button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -551,9 +353,10 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
                 {isHeadCoach && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" className="w-full">
-                        Delete Team
-                      </Button>
+                      <button className="w-full h-12 min-h-[44px] flex items-center justify-between px-4 text-left hover:bg-destructive/10 transition-colors">
+                        <span className="text-base text-destructive">Delete Team</span>
+                        <ChevronRight className="h-4 w-4 text-destructive shrink-0" strokeWidth={1.5} />
+                      </button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -576,22 +379,267 @@ const CoachSettings = ({ profile, coachTeam }: Props) => {
                 )}
               </CardContent>
             </Card>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Sign Out */}
-      <div className="pt-2">
+        {/* Create New Team — only when no team. A standalone CTA, not a list item. */}
+        {!coachTeam && (
+          <div className="px-1">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button className="w-full min-h-[44px]">
+                  <PlusCircle className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                  Create New Team
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Create New Team</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-3">
+                      <p>Give your new team a name to get started.</p>
+                      <Input
+                        placeholder="Team name"
+                        value={newTeamName}
+                        onChange={(e) => setNewTeamName(e.target.value)}
+                      />
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={createTeam} disabled={creatingTeam || !newTeamName.trim()}>
+                    Create Team
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+
         <Button
           variant="ghost"
-          size="sm"
-          className="w-full text-muted-foreground hover:text-foreground"
+          className="w-full min-h-[44px] text-muted-foreground hover:text-foreground"
           onClick={handleLogout}
         >
-          <LogOut className="h-4 w-4 mr-2" />
+          <LogOut className="h-4 w-4 mr-2" strokeWidth={1.5} />
           Sign Out
         </Button>
       </div>
+    );
+  }
+
+  // ── Detail screens ───────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4 pb-6">
+      <BackHeader title={VIEW_TITLES[view]} />
+
+      {view === "branding" && coachTeam && (
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-xl overflow-hidden border border-border bg-muted flex items-center justify-center shrink-0">
+                {logoUrl
+                  ? <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
+                  : <span className="text-2xl font-bold text-muted-foreground">{coachTeam.name?.[0] || "T"}</span>}
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs">Team Logo</Label>
+                <label className="inline-block cursor-pointer">
+                  <Button variant="outline" className="pointer-events-none min-h-[44px]" disabled={logoUploading}>
+                    <Upload className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                    {logoUploading ? "Uploading…" : "Upload Logo"}
+                  </Button>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                </label>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Primary Color</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={newColor}
+                  onChange={(e) => setNewColor(e.target.value)}
+                  className="h-11 w-16 rounded-lg border border-border cursor-pointer p-0.5"
+                />
+                <span className="text-sm font-mono text-muted-foreground">{newColor}</span>
+                <Button
+                  variant="outline"
+                  className="min-h-[44px]"
+                  onClick={async () => {
+                    if (!coachTeam?.id) return;
+                    const { error } = await supabase
+                      .from("teams")
+                      .update({ primary_color: newColor } as any)
+                      .eq("id", coachTeam.id);
+                    if (!error) {
+                      toast({ title: "Color saved" });
+                      queryClient.invalidateQueries({ queryKey: ["team-branding"] });
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(view === "team-settings" || view === "training-philosophy") && coachTeam && (
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Team Name</Label>
+              <Input value={teamNameEdit} onChange={(e) => setTeamNameEdit(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Location</Label>
+              <Input
+                placeholder="City, State"
+                value={teamLocation}
+                onChange={(e) => setTeamLocation(e.target.value)}
+              />
+            </div>
+            <Button
+              className="min-h-[44px]"
+              onClick={() => saveTeamSettings.mutate()}
+              disabled={saveTeamSettings.isPending}
+            >
+              Save Changes
+            </Button>
+
+            {coachTeam.join_code && (
+              <div className="border border-border rounded-xl p-4 space-y-2 bg-muted/30">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Join Code</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-mono font-bold tracking-widest text-foreground">
+                    {coachTeam.join_code}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-11 w-11"
+                    onClick={() => {
+                      navigator.clipboard.writeText(coachTeam.join_code);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                  >
+                    {copiedCode ? <Check className="h-4 w-4 text-success" strokeWidth={1.5} /> : <Copy className="h-4 w-4" strokeWidth={1.5} />}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-11 w-11"
+                    onClick={() => regenerateCode.mutate()}
+                    disabled={regenerateCode.isPending}
+                  >
+                    <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">Share with athletes to join your team.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {view === "staff" && coachTeam && (
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Email address"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                className="min-h-[44px]"
+                onClick={() => inviteCoach.mutate()}
+                disabled={inviteCoach.isPending || !inviteEmail.trim()}
+              >
+                Invite
+              </Button>
+            </div>
+            {(coachStaff as any[]).length > 0 && (
+              <div className="space-y-2">
+                {(coachStaff as any[]).map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div>
+                      <p className="text-sm font-medium">{s.profile?.full_name || s.profile?.email || "Coach"}</p>
+                      <p className="text-sm text-muted-foreground">{s.profile?.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">{s.role || "coach"}</Badge>
+                      {isHeadCoach && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-11 w-11">
+                              <UserMinus className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remove Coach</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Remove {s.profile?.full_name || "this coach"} from the staff?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => removeCoach.mutate(s.id)}>Remove</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(coachStaff as any[]).length === 0 && (
+              <p className="text-sm text-muted-foreground">No additional coaches yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {view === "my-profile" && (
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <Input value={(profile as any)?.email || ""} disabled className="bg-muted/40" />
+            </div>
+            <Button className="min-h-[44px]" onClick={saveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving…" : "Save Profile"}
+            </Button>
+
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs uppercase text-subtle mb-2">Role</p>
+              <ChangeRoleSection profile={profile} accentColor={primaryColor || "#1A1A2E"} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(view === "notifications" || view === "connected-apps") && (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-sm text-muted-foreground">
+              Push notification preferences coming soon.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

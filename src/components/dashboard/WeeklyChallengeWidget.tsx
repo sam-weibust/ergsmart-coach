@@ -51,7 +51,7 @@ const WeeklyChallengeWidget = ({ onNavigate }: Props) => {
 
   return (
     <Card
-      className="border-primary/30 bg-gradient-to-r from-primary/5 to-secondary/5 cursor-pointer hover:border-primary/50 transition-all"
+      className="border-primary/30 bg-surface-2 cursor-pointer hover:border-primary/50 transition-all"
       onClick={() => onNavigate("challenges")}
     >
       <CardContent className="p-4 flex items-center gap-3">

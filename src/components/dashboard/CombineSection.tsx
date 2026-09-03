@@ -141,21 +141,21 @@ const CombineSection = () => {
 
       {myEntry && myScore !== null && (
         <div className="grid grid-cols-3 gap-4">
-          <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/30">
+          <Card className="bg-primary/10 border-primary/30">
             <CardContent className="p-4 text-center">
               <Award className="h-7 w-7 text-primary mx-auto mb-1" />
               <div className="text-3xl font-bold text-primary">{myScore.toFixed(1)}</div>
               <div className="text-xs text-muted-foreground">Combine Score</div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-secondary/10 to-secondary/5 border-secondary/30">
+          <Card className="bg-surface-2 border-border">
             <CardContent className="p-4 text-center">
               <Trophy className="h-7 w-7 text-secondary mx-auto mb-1" />
               <div className="text-3xl font-bold text-secondary">#{myRank}</div>
               <div className="text-xs text-muted-foreground">National Rank</div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/30">
+          <Card className="bg-surface-3 border-border">
             <CardContent className="p-4 text-center">
               <ChevronUp className="h-7 w-7 text-accent mx-auto mb-1" />
               <div className="text-3xl font-bold text-accent">{myPercentile}th</div>

@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Users, Trophy, TrendingUp, ArrowUp, ArrowDown, Minus, Eye, EyeOff } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from '@/lib/getUser';
 
 interface ComparisonSectionProps {
@@ -272,8 +271,8 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
 
           {isLoading && (
             <div className="space-y-4">
-              <Skeleton className="h-48 w-full" />
-              <Skeleton className="h-64 w-full" />
+              <div className="h-48 w-full rounded-md border border-border" />
+              <div className="h-64 w-full rounded-md border border-border" />
             </div>
           )}
 
@@ -362,14 +361,14 @@ export const ComparisonSection = ({ profile }: ComparisonSectionProps) => {
                       <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}km`} className="text-xs" />
                       <Tooltip
                         formatter={(value: number) => [`${(value / 1000).toFixed(1)}km`, ""]}
-                        contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
+                        contentStyle={{ backgroundColor: "rgb(var(--card))", border: "1px solid var(--border)" }}
                       />
                       <Legend />
                       {comparisonData.users.map((u, idx) => (
                         <Bar
                           key={u.id}
                           dataKey={u.name}
-                          fill={idx === 0 ? "hsl(var(--primary))" : `hsl(${idx * 60}, 70%, 50%)`}
+                          fill={idx === 0 ? "rgb(var(--primary))" : `hsl(${idx * 60}, 70%, 50%)`}
                         />
                       ))}
                     </BarChart>

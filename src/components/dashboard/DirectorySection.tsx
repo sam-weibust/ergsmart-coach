@@ -145,7 +145,7 @@ export default function DirectorySection() {
 function ProgramCard({ program, featured }: { program: any; featured?: boolean }) {
   return (
     <Card className={`relative overflow-hidden transition-all hover:shadow-card-hover ${
-      featured ? "border-primary/30 bg-gradient-to-br from-primary/5 to-transparent" : ""
+      featured ? "border-primary/30 bg-primary/5" : ""
     }`}>
       {featured && (
         <div className="absolute top-3 right-3">

@@ -1,10 +1,15 @@
-import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // No theme toggle exists in the app and it is dark-only (see App.tsx's
+  // ThemeProvider comment). Hardcoded rather than read from next-themes'
+  // useTheme(), which is still forced to "light" — deliberately NOT changed
+  // to forcedTheme="dark" globally, since that would add a `dark` class to
+  // <html> and activate 50+ untouched components' leftover `dark:` variants
+  // from a prior, different dark theme. This is the narrow, contained fix.
+  const theme = "dark";
 
   return (
     <Sonner

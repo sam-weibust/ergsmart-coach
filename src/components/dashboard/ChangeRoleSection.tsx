@@ -54,7 +54,7 @@ const ROLE_LABEL: Record<string, string> = {
  */
 export default function ChangeRoleSection({
   profile,
-  accentColor = "hsl(var(--primary))",
+  accentColor = "rgb(var(--primary))",
 }: {
   profile: any;
   accentColor?: string;

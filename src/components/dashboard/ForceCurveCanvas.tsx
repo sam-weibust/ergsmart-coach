@@ -241,7 +241,7 @@ export default function ForceCurveCanvas({
           </div>
           <div className="px-3 py-2.5 text-center" style={{ background: "#FFFFFF" }}>
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoothness</p>
-            <p className={`text-sm font-bold font-mono ${stats.smoothness >= 7 ? "text-[hsl(var(--success))]" : stats.smoothness >= 5 ? "text-[hsl(var(--warning))]" : "text-destructive"}`}>
+            <p className={`text-sm font-bold font-mono ${stats.smoothness >= 7 ? "text-[rgb(var(--success))]" : stats.smoothness >= 5 ? "text-[rgb(var(--warning))]" : "text-destructive"}`}>
               {stats.smoothness}/10
             </p>
           </div>
@@ -252,7 +252,7 @@ export default function ForceCurveCanvas({
                 SLIP
               </span>
             ) : (
-              <p className="text-sm font-bold text-[hsl(var(--success))] font-mono">OK</p>
+              <p className="text-sm font-bold text-[rgb(var(--success))] font-mono">OK</p>
             )}
           </div>
         </div>
