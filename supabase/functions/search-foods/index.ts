@@ -86,12 +86,47 @@ serve(async (req) => {
     url.searchParams.set("query", query.trim());
     url.searchParams.set("api_key", apiKey);
     url.searchParams.set("pageSize", "25");
-    url.searchParams.set("dataType", "Branded,SR Legacy,Survey (FNDDS),Foundation");
-
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(`USDA API error: ${response.status}`);
+    // dataType MUST be sent as repeated params, not one comma-joined value.
+    // "Survey (FNDDS)" contains parentheses; inside a comma-joined value they
+    // produced a URL that the CDN in front of api.nal.usda.gov rejected with a
+    // bare nginx "400 Bad Request" before it ever reached the USDA app — so
+    // every food search 500'd. Verified live: comma-joined -> 400; the same
+    // four values appended individually -> 200 with all four echoed back in
+    // foodSearchCriteria.dataType.
+    for (const dt of ["Branded", "SR Legacy", "Survey (FNDDS)", "Foundation"]) {
+      url.searchParams.append("dataType", dt);
     }
+
+    // api.data.gov's edge intermittently rejects otherwise-valid requests with
+    // a bare nginx 400 (observed live: the same URL returned 200, 400, 200 on
+    // three consecutive attempts, and roughly 1 in 8 calls failed). This is
+    // upstream flakiness, NOT a bad key — USDA_API_KEY is set, and the same
+    // requests succeed on retry. A single blip used to surface to the user as
+    // a hard 500 with no results, so retry before giving up.
+    const MAX_ATTEMPTS = 3;
+    let response: Response | null = null;
+    let lastDetail = "";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      response = await fetch(url.toString());
+      if (response.ok) break;
+      lastDetail = await response.text().catch(() => "");
+      console.warn(
+        `[search-foods] USDA attempt ${attempt}/${MAX_ATTEMPTS} failed: ${response.status} ${lastDetail.slice(0, 120)}`,
+      );
+      response = null;
+      if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 300 * attempt));
+    }
+
+    if (!response) {
+      // Degrade to an empty result set rather than a 500: the food search box
+      // should come back empty-handed, not break the page around it.
+      console.error(`[search-foods] all ${MAX_ATTEMPTS} USDA attempts failed for "${normalizedQuery}"`);
+      return new Response(
+        JSON.stringify({ results: [], source: "unavailable", warning: "Food database temporarily unavailable" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const data = await response.json();
     const results = (data.foods ?? []).map(parseFood);
 
